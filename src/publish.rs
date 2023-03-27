@@ -68,7 +68,7 @@ pub struct PcapFilter {
     pub dst_addr: IpAddr,
     pub dst_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
 }
 
 /// Sends the stream request to giganto's publish module.
@@ -540,7 +540,7 @@ mod tests {
             resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             resp_port: 80,
             proto: 6,
-            duration: 1000,
+            last_time: 1000,
             service: "-".to_string(),
             orig_bytes: 77,
             resp_bytes: 295,
@@ -625,7 +625,7 @@ mod tests {
             dst_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             dst_port: 80,
             proto: 6,
-            duration: 1000,
+            last_time: 1000,
         };
         let send_filter = p_filter.clone();
 

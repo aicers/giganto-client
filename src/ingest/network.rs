@@ -14,7 +14,7 @@ pub struct Conn {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub service: String,
     pub orig_bytes: u64,
     pub resp_bytes: u64,
@@ -32,7 +32,7 @@ impl Display for Conn {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             self.service,
             self.orig_bytes,
             self.resp_bytes,
@@ -58,7 +58,7 @@ pub struct Dns {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub query: String,
     pub answer: Vec<String>,
     pub trans_id: u16,
@@ -204,7 +204,7 @@ impl Display for Dns {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             self.query,
             answer,
             self.trans_id,
@@ -236,7 +236,7 @@ pub struct Http {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub method: String,
     pub host: String,
     pub uri: String,
@@ -265,7 +265,7 @@ impl Display for Http {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             if self.method.is_empty() {
                 "-"
             } else {
@@ -349,7 +349,7 @@ pub struct Rdp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub cookie: String,
 }
 
@@ -363,7 +363,7 @@ impl Display for Rdp {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             self.cookie
         )
     }
@@ -384,7 +384,7 @@ pub struct Smtp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub mailfrom: String,
     pub date: String,
     pub from: String,
@@ -403,7 +403,7 @@ impl Display for Smtp {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             if self.mailfrom.is_empty() {
                 "-"
             } else {
@@ -449,7 +449,7 @@ pub struct Ntlm {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub username: String,
     pub hostname: String,
     pub domainname: String,
@@ -469,7 +469,7 @@ impl Display for Ntlm {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             if self.username.is_empty() {
                 "-"
             } else {
@@ -524,7 +524,7 @@ pub struct Kerberos {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub request_type: String,
     pub client: String,
     pub service: String,
@@ -549,7 +549,7 @@ impl Display for Kerberos {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             if self.request_type.is_empty() {
                 "-"
             } else {
@@ -621,7 +621,7 @@ pub struct Ssh {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub version: i64,
     pub auth_success: String,
     pub auth_attempts: i64,
@@ -646,7 +646,7 @@ impl Display for Ssh {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             self.version,
             if self.auth_success.is_empty() {
                 "-"
@@ -718,7 +718,7 @@ pub struct DceRpc {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
-    pub duration: i64,
+    pub last_time: i64,
     pub rtt: i64,
     pub named_pipe: String,
     pub endpoint: String,
@@ -735,7 +735,7 @@ impl Display for DceRpc {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            convert_time_format(self.duration),
+            convert_time_format(self.last_time),
             self.rtt,
             if self.named_pipe.is_empty() {
                 "-"
