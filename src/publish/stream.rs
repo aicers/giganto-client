@@ -94,6 +94,6 @@ pub struct RequestCrusherStream {
     pub start: i64,
     pub id: String,
     pub src_ip: Option<IpAddr>,
-    pub des_ip: Option<IpAddr>,
+    pub dst_ip: Option<IpAddr>,
     pub source: Option<String>,
 }

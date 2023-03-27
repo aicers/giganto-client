@@ -492,7 +492,7 @@ mod tests {
             start: 0,
             id: "1".to_string(),
             src_ip: Some("192.168.4.76".parse::<IpAddr>().unwrap()),
-            des_ip: Some("31.3.245.133".parse::<IpAddr>().unwrap()),
+            dst_ip: Some("31.3.245.133".parse::<IpAddr>().unwrap()),
             source: Some("world".to_string()),
         };
         super::send_stream_request(
