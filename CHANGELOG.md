@@ -10,6 +10,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Change field name `duration` to `last_time`.
+- Renamed variable `des_ip` to `dst_ip` for consistency with the naming
+  convention of `src_ip`.
 
 ## [0.1.0] - 2023-03-27
 
