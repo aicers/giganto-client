@@ -468,7 +468,7 @@ mod tests {
         // send/recv hog stream request
         let hog_req = RequestHogStream {
             start: 0,
-            source: Some("hello".to_string()),
+            source: Some(vec!["hello".to_string(), "world".to_string()]),
         };
         super::send_stream_request(
             &mut channel.client.send,
