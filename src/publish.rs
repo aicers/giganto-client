@@ -540,7 +540,7 @@ mod tests {
             resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             resp_port: 80,
             proto: 6,
-            last_time: 1000,
+            duration: 1000,
             service: "-".to_string(),
             orig_bytes: 77,
             resp_bytes: 295,
