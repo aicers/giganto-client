@@ -9,6 +9,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Change the field type of `RequestHogStream` to `Option<Vec<String>>` to
+  support multiple sources.
 - Change field name `duration` to `last_time`.
 - Renamed variable `des_ip` to `dst_ip` for consistency with the naming
   convention of `src_ip`.

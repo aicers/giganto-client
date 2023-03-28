@@ -85,7 +85,7 @@ impl RequestStreamRecord {
 #[allow(clippy::module_name_repetitions)]
 pub struct RequestHogStream {
     pub start: i64,
-    pub source: Option<String>,
+    pub source: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
