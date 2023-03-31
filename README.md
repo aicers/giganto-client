@@ -1,6 +1,10 @@
-# Giganto-client
+# giganto-client: Client library for Giganto's QUIC API
 
-Giganto-client library.
+giganto-client is an easy-to-use Rust crate that provides an interface for
+communicating with Giganto, a high-performance raw-event storage system
+designed for AICE. By leveraging Giganto's QUIC API, giganto-client enables
+developers to efficiently interact with Giganto and harness its capabilities
+for data processing and high-speed data transfer.
 
 ## License
 
