@@ -16,8 +16,8 @@ impl Display for PeriodicTimeSeries {
 }
 
 impl ResponseRangeData for PeriodicTimeSeries {
-    fn response_data(&self, timestamp: i64, _source: &str) -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize(&Some((timestamp, &self.data)))
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&Some((timestamp, source, &self.data)))
     }
     fn response_done() -> Result<Vec<u8>, bincode::Error> {
         bincode::serialize::<Option<(i64, Vec<f64>)>>(&None)

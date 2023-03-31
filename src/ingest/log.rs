@@ -16,8 +16,8 @@ impl Display for Log {
 }
 
 impl ResponseRangeData for Log {
-    fn response_data(&self, timestamp: i64, _source: &str) -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize(&Some((timestamp, &self.log)))
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&Some((timestamp, source, &self.log)))
     }
 }
 
