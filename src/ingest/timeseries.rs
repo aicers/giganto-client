@@ -20,6 +20,6 @@ impl ResponseRangeData for PeriodicTimeSeries {
         bincode::serialize(&Some((timestamp, source, &self.data)))
     }
     fn response_done() -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize::<Option<(i64, Vec<f64>)>>(&None)
+        bincode::serialize::<Option<(i64, String, Vec<f64>)>>(&None)
     }
 }

@@ -12,7 +12,7 @@ pub trait ResponseRangeData {
     ///
     /// Will return `Err` if serialize faild.
     fn response_done() -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize::<Option<(i64, Vec<u8>)>>(&None)
+        bincode::serialize::<Option<(i64, String, Vec<u8>)>>(&None)
     }
 }
 
