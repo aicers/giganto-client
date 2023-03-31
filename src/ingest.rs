@@ -27,6 +27,7 @@ pub enum RecordType {
     Statistics = 11,
     Oplog = 12,
     Packet = 13,
+    Ftp = 14,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

@@ -763,3 +763,88 @@ impl ResponseRangeData for DceRpc {
         bincode::serialize(&Some((timestamp, source, &dce_rpc_csv.as_bytes())))
     }
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Ftp {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u16,
+    pub last_time: i64,
+    pub user: String,
+    pub password: String,
+    pub command: String,
+    pub reply_code: String,
+    pub reply_msg: String,
+    pub data_passive: bool,
+    pub data_orig_addr: IpAddr,
+    pub data_resp_addr: IpAddr,
+    pub data_resp_port: u16,
+    pub file: String,
+    pub file_size: u64,
+    pub file_id: String,
+}
+
+impl Display for Ftp {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+            if self.user.is_empty() {
+                "-"
+            } else {
+                &self.user
+            },
+            if self.password.is_empty() {
+                "-"
+            } else {
+                &self.password
+            },
+            if self.command.is_empty() {
+                "-"
+            } else {
+                &self.command
+            },
+            if self.reply_code.is_empty() {
+                "-"
+            } else {
+                &self.reply_code
+            },
+            if self.reply_msg.is_empty() {
+                "-"
+            } else {
+                &self.reply_msg
+            },
+            self.data_passive,
+            self.data_orig_addr,
+            self.data_resp_addr,
+            self.data_resp_port,
+            if self.file.is_empty() {
+                "-"
+            } else {
+                &self.file
+            },
+            self.file_size,
+            if self.file_id.is_empty() {
+                "-"
+            } else {
+                &self.file_id
+            },
+        )
+    }
+}
+
+impl ResponseRangeData for Ftp {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let ftp_csv = format!("{}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &ftp_csv.as_bytes())))
+    }
+}

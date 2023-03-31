@@ -10,6 +10,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Add response data message's source to network event's TSV-formatted value.
+- Supports the FTP protocol.
 
 ## [0.3.1] - 2023-04-17
 

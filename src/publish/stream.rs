@@ -40,6 +40,7 @@ pub enum RequestStreamRecord {
     Ssh = 8,
     DceRpc = 9,
     Pcap = 10,
+    Ftp = 11,
 }
 
 impl RequestStreamRecord {
@@ -57,6 +58,7 @@ impl RequestStreamRecord {
             RequestStreamRecord::Ssh => "ssh",
             RequestStreamRecord::DceRpc => "dce rpc",
             RequestStreamRecord::Pcap => "pcap",
+            RequestStreamRecord::Ftp => "ftp",
         }
     }
 
@@ -76,6 +78,7 @@ impl RequestStreamRecord {
             "ssh" => Ok(RequestStreamRecord::Ssh),
             "dce rpc" => Ok(RequestStreamRecord::DceRpc),
             "pcap" => Ok(RequestStreamRecord::Pcap),
+            "ftp" => Ok(RequestStreamRecord::Ftp),
             _ => Err(anyhow!("invalid protocol type")),
         }
     }

@@ -39,6 +39,7 @@ pub enum REconvergeKindType {
     Kerberos,
     Ssh,
     DceRpc,
+    Ftp,
 }
 
 impl REconvergeKindType {
@@ -54,6 +55,7 @@ impl REconvergeKindType {
             "kerberos" => REconvergeKindType::Kerberos,
             "ssh" => REconvergeKindType::Ssh,
             "dce rpc" => REconvergeKindType::DceRpc,
+            "ftp" => REconvergeKindType::Ftp,
             _ => REconvergeKindType::Log,
         }
     }
