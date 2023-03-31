@@ -608,11 +608,12 @@ mod tests {
         )
         .await
         .unwrap();
-        let data = super::receive_range_data::<Option<(i64, Vec<u8>)>>(&mut channel.client.recv)
-            .await
-            .unwrap();
+        let data =
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
+                .await
+                .unwrap();
         assert_eq!(
-            bincode::serialize::<Option<(i64, Vec<u8>)>>(&data).unwrap(),
+            bincode::serialize::<Option<(i64, String, Vec<u8>)>>(&data).unwrap(),
             conn.response_data(33333, "world").unwrap()
         );
 
