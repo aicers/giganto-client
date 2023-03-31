@@ -6,6 +6,8 @@ designed for AICE. By leveraging Giganto's QUIC API, giganto-client enables
 developers to efficiently interact with Giganto and harness its capabilities
 for data processing and high-speed data transfer.
 
+[![Coverage Status](https://codecov.io/gh/aicers/giganto-client/branch/main/graphs/badge.svg)](https://codecov.io/gh/aicers/giganto-client)
+
 ## License
 
 Copyright 2022 EINSIS, Inc.
