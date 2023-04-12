@@ -5,6 +5,14 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add `MessageCode::RawData = 3`
+- Add struct `RequestRawData`
+- Add `send_raw_events`, `receive_raw_events` to publish api
+
 ## [0.3.0] - 2023-03-31
 
 ### Changed
@@ -29,6 +37,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.3.0...main
 [0.3.0]: https://github.com/aicers/giganto-client/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/aicers/giganto-client/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/aicers/giganto-client/tree/0.1.0

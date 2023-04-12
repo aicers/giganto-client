@@ -24,6 +24,7 @@ pub enum MessageCode {
     Log = 0,
     PeriodicTimeSeries = 1,
     Pcap = 2,
+    RawData = 3,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -66,6 +67,12 @@ pub struct RequestRange {
     pub start: i64,
     pub end: i64,
     pub count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RequestRawData {
+    pub kind: String,
+    pub input: Vec<(String, Vec<i64>)>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

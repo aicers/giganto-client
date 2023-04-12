@@ -199,6 +199,22 @@ where
     Ok(())
 }
 
+/// Sends the data `Vec<(source, raw_events)>` from giganto's publish module.
+///
+/// # Errors
+///
+/// * `PublishError::SerialDeserialFailure`: if the data could not be serialized
+/// * `PublishError::MessageTooLarge`: if the data is too large
+/// * `PublishError::WriteError`: if the data could not be written
+pub async fn send_raw_events(
+    send: &mut SendStream,
+    raw_events: Vec<(String, Vec<u8>)>,
+) -> Result<(), PublishError> {
+    let mut buf = Vec::new();
+    frame::send(send, &mut buf, &raw_events).await?;
+    Ok(())
+}
+
 /// Receives the stream request sent to giganto's publish module.
 ///
 /// # Errors
@@ -337,6 +353,20 @@ where
     Ok(frame::recv::<T>(recv, &mut buf).await?)
 }
 
+/// Receives the data `Vec<(source, raw_events)>` sent from giganto's publish module.
+///
+/// # Errors
+///
+/// * `PublishError::SerialDeserialFailure`: if the data could not be
+///   deserialized
+/// * `PublishError::ReadError`: if the data could not be read
+pub async fn receive_raw_events(
+    recv: &mut RecvStream,
+) -> Result<Vec<(String, Vec<u8>)>, PublishError> {
+    let mut buf = Vec::new();
+    Ok(frame::recv::<Vec<(String, Vec<u8>)>>(recv, &mut buf).await?)
+}
+
 /// Sends pcap extract request to piglet and  Receives request acknowledge from piglet
 ///
 /// # Errors
@@ -448,19 +478,19 @@ pub async fn recv_ack_response(recv: &mut RecvStream) -> Result<(), PublishError
 
 #[cfg(test)]
 mod tests {
+    use crate::ingest::network::Conn;
+    use crate::publish::{recv_ack_response, PublishError};
     use crate::test::{channel, TOKEN};
+    use std::net::IpAddr;
 
     #[tokio::test]
     async fn publish_send_recv() {
         use crate::frame::send_bytes;
-        use crate::ingest::network::Conn;
         use crate::publish::{
             range::ResponseRangeData,
             stream::{RequestCrusherStream, RequestHogStream},
             PcapFilter,
         };
-        use crate::test::{channel, TOKEN};
-        use std::net::IpAddr;
 
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
@@ -644,7 +674,6 @@ mod tests {
 
     #[tokio::test]
     async fn send_ok() {
-        use crate::publish::recv_ack_response;
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -659,7 +688,6 @@ mod tests {
 
     #[tokio::test]
     async fn send_err() {
-        use crate::publish::{recv_ack_response, PublishError};
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -675,5 +703,77 @@ mod tests {
             resp.to_string(),
             PublishError::PcapRequestFail("hello".to_string()).to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn send_recv_raw_events() {
+        use crate::publish::range::{MessageCode, REconvergeKindType, RequestRawData};
+        use crate::publish::{receive_raw_events, send_raw_events};
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let msg_code = MessageCode::RawData;
+
+        let conn = Conn {
+            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            orig_port: 46378,
+            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            resp_port: 80,
+            proto: 6,
+            duration: 1000,
+            service: "-".to_string(),
+            orig_bytes: 77,
+            resp_bytes: 295,
+            orig_pkts: 397,
+            resp_pkts: 511,
+        };
+        let raw_event = bincode::serialize(&conn).unwrap();
+
+        let source1 = "src 1";
+        let source2 = "src 2";
+
+        let ts1 = 1i64;
+        let ts2 = 2i64;
+        let ts3 = 3i64;
+
+        let req_msg = vec![
+            (source1.to_string(), vec![ts1, ts2]),
+            (source2.to_string(), vec![ts1, ts3]),
+        ];
+        let req_raw = RequestRawData {
+            kind: "conn".to_string(),
+            input: req_msg,
+        };
+
+        super::send_range_data_request(&mut channel.client.send, msg_code, req_raw.clone())
+            .await
+            .unwrap();
+
+        let (msg_code, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+
+        let recv_request = bincode::deserialize::<RequestRawData>(&data).unwrap();
+        assert_eq!(msg_code, MessageCode::RawData);
+        assert_eq!(
+            REconvergeKindType::convert_type(&recv_request.kind),
+            REconvergeKindType::Conn
+        );
+
+        // example data from giganto
+        let value_with_sources = vec![
+            (source1.to_string(), raw_event.clone()),
+            (source1.to_string(), raw_event.clone()),
+            (source2.to_string(), raw_event.clone()),
+            (source2.to_string(), raw_event),
+        ];
+
+        send_raw_events(&mut channel.server.send, value_with_sources)
+            .await
+            .unwrap();
+
+        let recv_data = receive_raw_events(&mut channel.client.recv).await.unwrap();
+
+        assert_eq!(recv_data.len(), 4);
     }
 }
