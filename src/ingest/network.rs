@@ -44,7 +44,7 @@ impl Display for Conn {
 
 impl ResponseRangeData for Conn {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let conn_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let conn_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &conn_csv.as_bytes())))
     }
@@ -223,7 +223,7 @@ impl Display for Dns {
 
 impl ResponseRangeData for Dns {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let dns_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let dns_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &dns_csv.as_bytes())))
     }
@@ -336,7 +336,7 @@ impl Display for Http {
 
 impl ResponseRangeData for Http {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let http_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let http_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &http_csv.as_bytes())))
     }
@@ -371,7 +371,7 @@ impl Display for Rdp {
 
 impl ResponseRangeData for Rdp {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let rdp_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let rdp_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &rdp_csv.as_bytes())))
     }
@@ -436,7 +436,7 @@ impl Display for Smtp {
 
 impl ResponseRangeData for Smtp {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let smtp_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let smtp_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &smtp_csv.as_bytes())))
     }
@@ -511,7 +511,7 @@ impl Display for Ntlm {
 
 impl ResponseRangeData for Ntlm {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let ntlm_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let ntlm_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &ntlm_csv.as_bytes())))
     }
@@ -608,7 +608,7 @@ impl Display for Kerberos {
 
 impl ResponseRangeData for Kerberos {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let kerberos_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let kerberos_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &kerberos_csv.as_bytes())))
     }
@@ -705,7 +705,7 @@ impl Display for Ssh {
 
 impl ResponseRangeData for Ssh {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let ssh_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let ssh_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &ssh_csv.as_bytes())))
     }
@@ -758,7 +758,7 @@ impl Display for DceRpc {
 
 impl ResponseRangeData for DceRpc {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let dce_rpc_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let dce_rpc_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &dce_rpc_csv.as_bytes())))
     }
