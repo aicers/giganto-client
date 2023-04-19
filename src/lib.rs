@@ -1,6 +1,7 @@
 pub mod connection;
 pub mod frame;
 pub mod ingest;
+pub mod peer;
 pub mod publish;
 #[cfg(test)]
 mod test;

@@ -11,14 +11,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Add response data message's source to network event's TSV-formatted value.
 - Supports the FTP protocol.
+- Add a module for managing giganto peers.
 
 ## [0.3.1] - 2023-04-17
 
 ### Added
 
-- Add `MessageCode::RawData = 3`
-- Add struct `RequestRawData`
-- Add `send_raw_events`, `receive_raw_events` to publish api
+- Add `MessageCode::RawData = 3`.
+- Add struct `RequestRawData`.
+- Add `send_raw_events`, `receive_raw_events` to publish api.
 
 ## [0.3.0] - 2023-03-31
 
