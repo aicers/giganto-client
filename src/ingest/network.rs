@@ -266,70 +266,22 @@ impl Display for Http {
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
-            if self.method.is_empty() {
-                "-"
-            } else {
-                &self.method
-            },
-            if self.host.is_empty() {
-                "-"
-            } else {
-                &self.host
-            },
-            if self.uri.is_empty() { "-" } else { &self.uri },
-            if self.referrer.is_empty() {
-                "-"
-            } else {
-                &self.referrer
-            },
-            if self.version.is_empty() {
-                "-"
-            } else {
-                &self.version
-            },
-            if self.user_agent.is_empty() {
-                "-"
-            } else {
-                &self.user_agent
-            },
+            as_str_or_default(&self.method),
+            as_str_or_default(&self.host),
+            as_str_or_default(&self.uri),
+            as_str_or_default(&self.referrer),
+            as_str_or_default(&self.version),
+            as_str_or_default(&self.user_agent),
             self.request_len,
             self.response_len,
             self.status_code,
-            if self.status_msg.is_empty() {
-                "-"
-            } else {
-                &self.status_msg
-            },
-            if self.username.is_empty() {
-                "-"
-            } else {
-                &self.username
-            },
-            if self.password.is_empty() {
-                "-"
-            } else {
-                &self.password
-            },
-            if self.cookie.is_empty() {
-                "-"
-            } else {
-                &self.cookie
-            },
-            if self.content_encoding.is_empty() {
-                "-"
-            } else {
-                &self.content_encoding
-            },
-            if self.content_type.is_empty() {
-                "-"
-            } else {
-                &self.content_type
-            },
-            if self.cache_control.is_empty() {
-                "-"
-            } else {
-                &self.cache_control
-            },
+            as_str_or_default(&self.status_msg),
+            as_str_or_default(&self.username),
+            as_str_or_default(&self.password),
+            as_str_or_default(&self.cookie),
+            as_str_or_default(&self.content_encoding),
+            as_str_or_default(&self.content_type),
+            as_str_or_default(&self.cache_control),
         )
     }
 }
@@ -404,32 +356,12 @@ impl Display for Smtp {
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
-            if self.mailfrom.is_empty() {
-                "-"
-            } else {
-                &self.mailfrom
-            },
-            if self.date.is_empty() {
-                "-"
-            } else {
-                &self.date
-            },
-            if self.from.is_empty() {
-                "-"
-            } else {
-                &self.from
-            },
-            if self.to.is_empty() { "-" } else { &self.to },
-            if self.subject.is_empty() {
-                "-"
-            } else {
-                &self.subject
-            },
-            if self.agent.is_empty() {
-                "-"
-            } else {
-                &self.agent
-            },
+            as_str_or_default(&self.mailfrom),
+            as_str_or_default(&self.date),
+            as_str_or_default(&self.from),
+            as_str_or_default(&self.to),
+            as_str_or_default(&self.subject),
+            as_str_or_default(&self.agent),
         )
     }
 }
@@ -470,41 +402,13 @@ impl Display for Ntlm {
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
-            if self.username.is_empty() {
-                "-"
-            } else {
-                &self.username
-            },
-            if self.hostname.is_empty() {
-                "-"
-            } else {
-                &self.hostname
-            },
-            if self.domainname.is_empty() {
-                "-"
-            } else {
-                &self.domainname
-            },
-            if self.server_nb_computer_name.is_empty() {
-                "-"
-            } else {
-                &self.server_nb_computer_name
-            },
-            if self.server_dns_computer_name.is_empty() {
-                "-"
-            } else {
-                &self.server_dns_computer_name
-            },
-            if self.server_tree_name.is_empty() {
-                "-"
-            } else {
-                &self.server_tree_name
-            },
-            if self.success.is_empty() {
-                "-"
-            } else {
-                &self.success
-            },
+            as_str_or_default(&self.username),
+            as_str_or_default(&self.hostname),
+            as_str_or_default(&self.domainname),
+            as_str_or_default(&self.server_nb_computer_name),
+            as_str_or_default(&self.server_dns_computer_name),
+            as_str_or_default(&self.server_tree_name),
+            as_str_or_default(&self.success),
         )
     }
 }
@@ -550,58 +454,18 @@ impl Display for Kerberos {
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
-            if self.request_type.is_empty() {
-                "-"
-            } else {
-                &self.request_type
-            },
-            if self.client.is_empty() {
-                "-"
-            } else {
-                &self.client
-            },
-            if self.service.is_empty() {
-                "-"
-            } else {
-                &self.service
-            },
-            if self.success.is_empty() {
-                "-"
-            } else {
-                &self.success
-            },
-            if self.error_msg.is_empty() {
-                "-"
-            } else {
-                &self.error_msg
-            },
+            as_str_or_default(&self.request_type),
+            as_str_or_default(&self.client),
+            as_str_or_default(&self.service),
+            as_str_or_default(&self.success),
+            as_str_or_default(&self.error_msg),
             self.from,
             self.till,
-            if self.cipher.is_empty() {
-                "-"
-            } else {
-                &self.cipher
-            },
-            if self.forwardable.is_empty() {
-                "-"
-            } else {
-                &self.forwardable
-            },
-            if self.renewable.is_empty() {
-                "-"
-            } else {
-                &self.renewable
-            },
-            if self.client_cert_subject.is_empty() {
-                "-"
-            } else {
-                &self.client_cert_subject
-            },
-            if self.server_cert_subject.is_empty() {
-                "-"
-            } else {
-                &self.server_cert_subject
-            },
+            as_str_or_default(&self.cipher),
+            as_str_or_default(&self.forwardable),
+            as_str_or_default(&self.renewable),
+            as_str_or_default(&self.client_cert_subject),
+            as_str_or_default(&self.server_cert_subject),
         )
     }
 }
@@ -648,57 +512,17 @@ impl Display for Ssh {
             self.proto,
             convert_time_format(self.last_time),
             self.version,
-            if self.auth_success.is_empty() {
-                "-"
-            } else {
-                &self.auth_success
-            },
+            as_str_or_default(&self.auth_success),
             self.auth_attempts,
-            if self.direction.is_empty() {
-                "-"
-            } else {
-                &self.direction
-            },
-            if self.client.is_empty() {
-                "-"
-            } else {
-                &self.client
-            },
-            if self.server.is_empty() {
-                "-"
-            } else {
-                &self.server
-            },
-            if self.cipher_alg.is_empty() {
-                "-"
-            } else {
-                &self.cipher_alg
-            },
-            if self.mac_alg.is_empty() {
-                "-"
-            } else {
-                &self.mac_alg
-            },
-            if self.compression_alg.is_empty() {
-                "-"
-            } else {
-                &self.compression_alg
-            },
-            if self.kex_alg.is_empty() {
-                "-"
-            } else {
-                &self.kex_alg
-            },
-            if self.host_key_alg.is_empty() {
-                "-"
-            } else {
-                &self.host_key_alg
-            },
-            if self.host_key.is_empty() {
-                "-"
-            } else {
-                &self.host_key
-            },
+            as_str_or_default(&self.direction),
+            as_str_or_default(&self.client),
+            as_str_or_default(&self.server),
+            as_str_or_default(&self.cipher_alg),
+            as_str_or_default(&self.mac_alg),
+            as_str_or_default(&self.compression_alg),
+            as_str_or_default(&self.kex_alg),
+            as_str_or_default(&self.host_key_alg),
+            as_str_or_default(&self.host_key),
         )
     }
 }
@@ -737,21 +561,9 @@ impl Display for DceRpc {
             self.proto,
             convert_time_format(self.last_time),
             self.rtt,
-            if self.named_pipe.is_empty() {
-                "-"
-            } else {
-                &self.named_pipe
-            },
-            if self.endpoint.is_empty() {
-                "-"
-            } else {
-                &self.endpoint
-            },
-            if self.operation.is_empty() {
-                "-"
-            } else {
-                &self.operation
-            },
+            as_str_or_default(&self.named_pipe),
+            as_str_or_default(&self.endpoint),
+            as_str_or_default(&self.operation),
         )
     }
 }
@@ -797,46 +609,18 @@ impl Display for Ftp {
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
-            if self.user.is_empty() {
-                "-"
-            } else {
-                &self.user
-            },
-            if self.password.is_empty() {
-                "-"
-            } else {
-                &self.password
-            },
-            if self.command.is_empty() {
-                "-"
-            } else {
-                &self.command
-            },
-            if self.reply_code.is_empty() {
-                "-"
-            } else {
-                &self.reply_code
-            },
-            if self.reply_msg.is_empty() {
-                "-"
-            } else {
-                &self.reply_msg
-            },
+            as_str_or_default(&self.user),
+            as_str_or_default(&self.password),
+            as_str_or_default(&self.command),
+            as_str_or_default(&self.reply_code),
+            as_str_or_default(&self.reply_msg),
             self.data_passive,
             self.data_orig_addr,
             self.data_resp_addr,
             self.data_resp_port,
-            if self.file.is_empty() {
-                "-"
-            } else {
-                &self.file
-            },
+            as_str_or_default(&self.file),
             self.file_size,
-            if self.file_id.is_empty() {
-                "-"
-            } else {
-                &self.file_id
-            },
+            as_str_or_default(&self.file_id),
         )
     }
 }
@@ -846,5 +630,13 @@ impl ResponseRangeData for Ftp {
         let ftp_csv = format!("{}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &ftp_csv.as_bytes())))
+    }
+}
+
+fn as_str_or_default(s: &str) -> &str {
+    if s.is_empty() {
+        "-"
+    } else {
+        s
     }
 }
