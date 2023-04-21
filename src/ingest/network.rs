@@ -627,7 +627,7 @@ impl Display for Ftp {
 
 impl ResponseRangeData for Ftp {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let ftp_csv = format!("{}\t{self}", convert_time_format(timestamp));
+        let ftp_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &ftp_csv.as_bytes())))
     }
