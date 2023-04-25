@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
     Clone, Copy, Debug, Hash, Deserialize, Eq, IntoPrimitive, PartialEq, Serialize, TryFromPrimitive,
 )]
 #[repr(u32)]
+#[non_exhaustive]
 pub enum RecordType {
     Conn = 0,
     Dns = 1,

@@ -9,7 +9,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Add `source` to ftp's csv field.
+- Added the source field to the CSV record of an FTP connection. This
+  additional field makes the FTP record compatible with other CSV records.
+- `RecordType` became `#[non_exhaustive]`. This change ensures that adding new
+  record types in the future will not result in breaking changes for downstream
+  users who have exhaustively matched on the `RecordType` variants. This makes
+  it easier for both the library maintainers and users to evolve the codebase
+  and adapt to new requirements without introducing breaking changes.
 
 ## [0.4.0] - 2023-04-21
 
