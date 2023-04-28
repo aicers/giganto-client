@@ -6,22 +6,12 @@ pub mod publish;
 mod test;
 
 use anyhow::{bail, Result};
-use chrono::NaiveDateTime;
 use std::{fs::File, path::Path};
 use tracing::metadata::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
     fmt, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer,
 };
-
-/// Convert the value of timestamp nanosecond(i64) to zeek's timestamp format.
-#[must_use]
-pub fn convert_time_format(timestamp: i64) -> String {
-    const A_BILLION: i64 = 1_000_000_000;
-    let nsecs = u32::try_from(timestamp % A_BILLION).unwrap_or_default();
-    NaiveDateTime::from_timestamp_opt(timestamp / A_BILLION, nsecs)
-        .map_or("-".to_string(), |s| s.format("%s%.9f").to_string())
-}
 
 /// Init operation log with tracing
 ///

@@ -1,5 +1,6 @@
-use crate::{convert_time_format, publish::range::ResponseRangeData};
+use crate::publish::range::ResponseRangeData;
 use anyhow::Result;
+use chrono::NaiveDateTime;
 use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -639,4 +640,13 @@ fn as_str_or_default(s: &str) -> &str {
     } else {
         s
     }
+}
+
+/// Converts a timestamp to a string in the format of "%s%.9f", which is the format used by Zeek.
+#[must_use]
+fn convert_time_format(timestamp: i64) -> String {
+    const A_BILLION: i64 = 1_000_000_000;
+    let nsecs = u32::try_from(timestamp % A_BILLION).unwrap_or_default();
+    NaiveDateTime::from_timestamp_opt(timestamp / A_BILLION, nsecs)
+        .map_or("-".to_string(), |s| s.format("%s%.9f").to_string())
 }
