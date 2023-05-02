@@ -29,6 +29,7 @@ pub enum RecordType {
     Oplog = 12,
     Packet = 13,
     Ftp = 14,
+    Mqtt = 15,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

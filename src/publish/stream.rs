@@ -41,6 +41,7 @@ pub enum RequestStreamRecord {
     DceRpc = 9,
     Pcap = 10,
     Ftp = 11,
+    Mqtt = 12,
 }
 
 impl RequestStreamRecord {
@@ -59,6 +60,7 @@ impl RequestStreamRecord {
             RequestStreamRecord::DceRpc => "dce rpc",
             RequestStreamRecord::Pcap => "pcap",
             RequestStreamRecord::Ftp => "ftp",
+            RequestStreamRecord::Mqtt => "mqtt",
         }
     }
 
@@ -79,6 +81,7 @@ impl RequestStreamRecord {
             "dce rpc" => Ok(RequestStreamRecord::DceRpc),
             "pcap" => Ok(RequestStreamRecord::Pcap),
             "ftp" => Ok(RequestStreamRecord::Ftp),
+            "mqtt" => Ok(RequestStreamRecord::Mqtt),
             _ => Err(anyhow!("invalid protocol type")),
         }
     }

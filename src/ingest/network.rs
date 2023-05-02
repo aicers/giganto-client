@@ -634,6 +634,69 @@ impl ResponseRangeData for Ftp {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Mqtt {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u16,
+    pub last_time: i64,
+    pub protocol: String,
+    pub version: u8,
+    pub client_id: String,
+    pub connack_reason: u8,
+    pub subscribe: Vec<String>,
+    pub suback_reason: Vec<u8>,
+}
+
+impl Display for Mqtt {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let subscribe = if self.subscribe.is_empty() {
+            "-".to_string()
+        } else {
+            self.subscribe
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        let suback = if self.suback_reason.is_empty() {
+            "-".to_string()
+        } else {
+            self.suback_reason
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+            as_str_or_default(&self.protocol),
+            self.version,
+            as_str_or_default(&self.client_id),
+            self.connack_reason,
+            subscribe,
+            suback,
+        )
+    }
+}
+
+impl ResponseRangeData for Mqtt {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let mqtt_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &mqtt_csv.as_bytes())))
+    }
+}
+
 fn as_str_or_default(s: &str) -> &str {
     if s.is_empty() {
         "-"

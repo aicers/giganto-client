@@ -40,6 +40,7 @@ pub enum REconvergeKindType {
     Ssh,
     DceRpc,
     Ftp,
+    Mqtt,
 }
 
 impl REconvergeKindType {
@@ -56,6 +57,7 @@ impl REconvergeKindType {
             "ssh" => REconvergeKindType::Ssh,
             "dce rpc" => REconvergeKindType::DceRpc,
             "ftp" => REconvergeKindType::Ftp,
+            "mqtt" => REconvergeKindType::Mqtt,
             _ => REconvergeKindType::Log,
         }
     }
