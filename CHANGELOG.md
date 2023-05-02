@@ -5,6 +5,14 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- `convert_time_format` function is no longer available as a public function in
+  the API. It has been made private to avoid exposing the internal protocol
+  format used for network transmission.
+
 ## [0.5.0] - 2023-04-26
 
 ### Changed
@@ -56,6 +64,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.5.0...main
 [0.5.0]: https://github.com/aicers/giganto-client/compare/0.4.0...0.5.0
 [0.4.0]: https://github.com/aicers/giganto-client/compare/0.3.1...0.4.0
 [0.3.1]: https://github.com/aicers/giganto-client/compare/0.3.0...0.3.1
