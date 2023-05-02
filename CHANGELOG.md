@@ -7,6 +7,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Supports the MQTT protocol.
+
 ### Removed
 
 - `convert_time_format` function is no longer available as a public function in
