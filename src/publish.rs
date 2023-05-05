@@ -1,3 +1,5 @@
+//! A protocol implementation for fetching raw events from the Giganto server.
+
 pub mod range;
 pub mod stream;
 

@@ -1,3 +1,5 @@
+//! A protocol implementation for sending raw events to the Giganto server.
+
 pub mod log;
 pub mod network;
 pub mod statistics;
