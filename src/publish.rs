@@ -117,41 +117,6 @@ pub async fn send_hog_stream_start_message(
     Ok(())
 }
 
-/// Sends the crusher stream start message from giganto's publish module.
-///
-/// # Errors
-///
-/// * `PublishError::MessageTooLarge`: if the crusher's stream start message is too large
-/// * `PublishError::WriteError`: if the crusher's stream start message could not be written
-pub async fn send_crusher_stream_start_message(
-    send: &mut SendStream,
-    start_msg: String,
-) -> Result<(), PublishError> {
-    send_raw(send, start_msg.as_bytes()).await?;
-    Ok(())
-}
-
-/// Sends the record data. (timestamp /record structure)
-///
-/// # Errors
-///
-/// * `PublishError::SerialDeserialFailure`: if the stream record data could not be serialized
-/// * `PublishError::MessageTooLarge`: if the  stream record data is too large
-/// * `PublishError::WriteError`: if the stream record data could not be written
-pub async fn send_crusher_data<T>(
-    send: &mut SendStream,
-    timestamp: i64,
-    record_data: T,
-) -> Result<(), PublishError>
-where
-    T: Serialize,
-{
-    frame::send_bytes(send, &timestamp.to_le_bytes()).await?;
-    let mut buf = Vec::new();
-    frame::send(send, &mut buf, record_data).await?;
-    Ok(())
-}
-
 /// Sends the range data request to giganto's publish module.
 ///
 /// # Errors
@@ -480,6 +445,7 @@ pub async fn recv_ack_response(recv: &mut RecvStream) -> Result<(), PublishError
 
 #[cfg(test)]
 mod tests {
+    use crate::frame;
     use crate::ingest::network::Conn;
     use crate::publish::{recv_ack_response, PublishError};
     use crate::test::{channel, TOKEN};
@@ -556,10 +522,11 @@ mod tests {
             .unwrap();
         assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
 
-        // send/recv crusher stream start message
-        super::send_crusher_stream_start_message(&mut channel.server.send, "1".to_string())
+        // recv crusher stream start message
+        frame::send_raw(&mut channel.server.send, "1".to_string().as_bytes())
             .await
             .unwrap();
+
         let policy_id = super::receive_crusher_stream_start_message(&mut channel.client.recv)
             .await
             .unwrap();
@@ -602,8 +569,12 @@ mod tests {
         result_buf.extend_from_slice(&raw_event);
         assert_eq!(data, result_buf);
 
-        // send/recv crusher stream data with crusher
-        super::send_crusher_data(&mut channel.server.send, 7777, conn.clone())
+        // recv crusher stream data with crusher
+        frame::send_bytes(&mut channel.server.send, &7777_i64.to_le_bytes())
+            .await
+            .unwrap();
+        let mut data_buf = Vec::new();
+        frame::send(&mut channel.server.send, &mut data_buf, conn.clone())
             .await
             .unwrap();
         let (data, timestamp) = super::receive_crusher_data(&mut channel.client.recv)
