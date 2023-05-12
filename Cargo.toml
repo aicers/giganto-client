@@ -10,8 +10,8 @@ anyhow = "1.0"
 bincode = "1"
 chrono = { version = "0.4", features = ["serde"] }
 num_enum = "0.6"
-oinq = { git = "https://github.com/petabi/oinq.git", tag = "0.6.0" }
-quinn = "0.9"
+oinq = { git = "https://github.com/petabi/oinq.git", tag = "0.7.0" }
+quinn = "0.10"
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
@@ -28,5 +28,5 @@ tracing-subscriber = { version = "0.3", features = [
 futures = "0.3"
 lazy_static = "1"
 rcgen = "0.10"
-rustls = "0.20"
+rustls = "0.21"
 tokio = { version = "1", features = ["macros", "rt", "sync"] }

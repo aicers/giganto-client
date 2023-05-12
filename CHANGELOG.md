@@ -7,6 +7,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Updated quinn from 0.9 to 0.10, and rustls from 0.20 to 0.21. As
+  giganto-client exposes quinn's structs in its public API, it is important to
+  make sure you update your direct dependencies on both quinn and rustls to the
+  same versions as required by giganto-client.
+
 ### Removed
 
 - Moved `send_crusher_stream_start_message` and `send_crusher_data` to Giganto.
@@ -74,6 +81,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.6.0...main
 [0.6.0]: https://github.com/aicers/giganto-client/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/aicers/giganto-client/compare/0.4.0...0.5.0
 [0.4.0]: https://github.com/aicers/giganto-client/compare/0.3.1...0.4.0
