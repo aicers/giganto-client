@@ -87,7 +87,7 @@ pub async fn client_handshake(
 pub async fn server_handshake(
     conn: &Connection,
     std_version: &str,
-) -> Result<(SendStream, RecvStream, bool), HandshakeError> {
+) -> Result<(SendStream, RecvStream), HandshakeError> {
     let (mut send, mut recv) = conn
         .accept_bi()
         .await
@@ -103,12 +103,11 @@ pub async fn server_handshake(
     let protocol_version = Version::parse(&recv_version)
         .map_err(|_| HandshakeError::IncompatibleProtocol(recv_version))?;
     if version_req.matches(&protocol_version) {
-        let is_reproduce = protocol_version.to_string().ends_with("reproduce");
         let resp_data = bincode::serialize::<Option<&str>>(&Some(std_version))?;
         send_handshake(&mut send, &resp_data)
             .await
             .map_err(HandshakeError::from)?;
-        return Ok((send, recv, is_reproduce));
+        return Ok((send, recv));
     }
     let resp_data = bincode::serialize::<Option<&str>>(&None)?;
     send_handshake(&mut send, &resp_data)
