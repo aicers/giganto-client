@@ -21,8 +21,7 @@ pub trait ResponseRangeData {
 )]
 #[repr(u32)]
 pub enum MessageCode {
-    Log = 0,
-    PeriodicTimeSeries = 1,
+    ReqRange = 1,
     Pcap = 2,
     RawData = 3,
 }
@@ -42,6 +41,7 @@ pub enum REconvergeKindType {
     Ftp,
     Mqtt,
     Ldap,
+    Timeseries,
 }
 
 impl REconvergeKindType {
@@ -60,6 +60,7 @@ impl REconvergeKindType {
             "ftp" => REconvergeKindType::Ftp,
             "mqtt" => REconvergeKindType::Mqtt,
             "ldap" => REconvergeKindType::Ldap,
+            "timeseries" => REconvergeKindType::Timeseries,
             _ => REconvergeKindType::Log,
         }
     }
@@ -68,7 +69,7 @@ impl REconvergeKindType {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct RequestRange {
-    pub source: String, //certification name
+    pub source: String, //network event: certification name, time_series: sampling policy id
     pub kind: String,
     pub start: i64,
     pub end: i64,
@@ -79,13 +80,4 @@ pub struct RequestRange {
 pub struct RequestRawData {
     pub kind: String,
     pub input: Vec<(String, Vec<i64>)>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[allow(clippy::module_name_repetitions)]
-pub struct RequestTimeSeriesRange {
-    pub source: String, //sampling policy id
-    pub start: i64,
-    pub end: i64,
-    pub count: usize,
 }

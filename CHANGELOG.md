@@ -5,6 +5,20 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Change `Log`, `PeriodicTimeSeries` to `ReqRange` in enum `MessageCode`.
+  So when requesting data for analysis, `REconverge` use `MessageCode::ReqRange`.
+- Change the data types that `send_raw_events` and `receive_raw_events` send and
+  receive to `Vec<(i64, String, Vec<u8>)>`.
+
+### Removed
+
+- remove `RequestTimeSeriesRange` structure. So when requesting data for analysis,
+  `REconverge` use `RequestRange` structure.
+
 ## [0.8.0] - 2023-06-12
 
 ### Added
@@ -23,6 +37,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 
 - Moved `send_ack_timestamp` to Giganto.
+- remove `RequestTimeSeriesRange` structure. So when requesting data for analysis,
+  `REconverge` use `RequestRange` structure.
 
 ## [0.7.0] - 2023-05-12
 
