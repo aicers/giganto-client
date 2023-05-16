@@ -136,7 +136,7 @@ where
     let msg_code: u32 = msg.into();
     send_bytes(send, &msg_code.to_le_bytes()).await?;
 
-    //send RequestRange/RequestTimeSeriesRange
+    //send RequestRange
     let mut buf = Vec::new();
     frame::send(send, &mut buf, request).await?;
     Ok(())
@@ -166,7 +166,7 @@ where
     Ok(())
 }
 
-/// Sends the data `Vec<(source, raw_events)>` from giganto's publish module.
+/// Sends the data `Vec<(timestamp, source, raw_events)>` from giganto's publish module.
 ///
 /// # Errors
 ///
@@ -175,7 +175,7 @@ where
 /// * `PublishError::WriteError`: if the data could not be written
 pub async fn send_raw_events(
     send: &mut SendStream,
-    raw_events: Vec<(String, Vec<u8>)>,
+    raw_events: Vec<(i64, String, Vec<u8>)>,
 ) -> Result<(), PublishError> {
     let mut buf = Vec::new();
     frame::send(send, &mut buf, &raw_events).await?;
@@ -320,7 +320,7 @@ where
     Ok(frame::recv::<T>(recv, &mut buf).await?)
 }
 
-/// Receives the data `Vec<(source, raw_events)>` sent from giganto's publish module.
+/// Receives the data `Vec<(timestamp, source, raw_events)>` sent from giganto's publish module.
 ///
 /// # Errors
 ///
@@ -329,9 +329,9 @@ where
 /// * `PublishError::ReadError`: if the data could not be read
 pub async fn receive_raw_events(
     recv: &mut RecvStream,
-) -> Result<Vec<(String, Vec<u8>)>, PublishError> {
+) -> Result<Vec<(i64, String, Vec<u8>)>, PublishError> {
     let mut buf = Vec::new();
-    Ok(frame::recv::<Vec<(String, Vec<u8>)>>(recv, &mut buf).await?)
+    Ok(frame::recv::<Vec<(i64, String, Vec<u8>)>>(recv, &mut buf).await?)
 }
 
 /// Sends pcap extract request to piglet and  Receives request acknowledge from piglet
@@ -593,7 +593,7 @@ mod tests {
         };
         super::send_range_data_request(
             &mut channel.client.send,
-            super::range::MessageCode::Log,
+            super::range::MessageCode::ReqRange,
             req_range.clone(),
         )
         .await
@@ -601,7 +601,7 @@ mod tests {
         let (msg_code, data) = super::receive_range_data_request(&mut channel.server.recv)
             .await
             .unwrap();
-        assert_eq!(msg_code, super::range::MessageCode::Log);
+        assert_eq!(msg_code, super::range::MessageCode::ReqRange);
         assert_eq!(data, bincode::serialize(&req_range).unwrap());
 
         // send/recv range data
@@ -735,10 +735,10 @@ mod tests {
 
         // example data from giganto
         let value_with_sources = vec![
-            (source1.to_string(), raw_event.clone()),
-            (source1.to_string(), raw_event.clone()),
-            (source2.to_string(), raw_event.clone()),
-            (source2.to_string(), raw_event),
+            (ts1, source1.to_string(), raw_event.clone()),
+            (ts1, source1.to_string(), raw_event.clone()),
+            (ts1, source2.to_string(), raw_event.clone()),
+            (ts1, source2.to_string(), raw_event),
         ];
 
         send_raw_events(&mut channel.server.send, value_with_sources)
