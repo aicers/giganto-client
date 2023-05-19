@@ -74,16 +74,6 @@ where
     Ok(())
 }
 
-/// Sends the ack timestamp. (big-endian)
-///
-/// # Errors
-///
-/// * `SendError::WriteError` if the ack timestamp data could not be written
-pub async fn send_ack_timestamp(send: &mut SendStream, timestamp: i64) -> Result<(), SendError> {
-    frame::send_bytes(send, &timestamp.to_be_bytes()).await?;
-    Ok(())
-}
-
 /// Receives the record type. (`RecordType`)
 ///
 /// # Errors
@@ -166,8 +156,8 @@ mod tests {
         assert_eq!(timestamp, 9999);
         assert_eq!(data, bincode::serialize(&conn).unwrap());
 
-        // send/recv ack timestamp
-        super::send_ack_timestamp(&mut channel.client.send, 8888)
+        // recv ack timestamp
+        crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes())
             .await
             .unwrap();
         let timestamp = super::receive_ack_timestamp(&mut channel.server.recv)
