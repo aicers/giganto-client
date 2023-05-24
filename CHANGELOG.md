@@ -7,6 +7,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Supports the LDAP protocol.
+
 ### Removed
 
 - Moved `send_ack_timestamp` to Giganto.

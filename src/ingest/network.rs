@@ -175,28 +175,6 @@ impl Display for Qtype {
 
 impl Display for Dns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let answer = if self.answer.is_empty() {
-            "-".to_string()
-        } else {
-            self.answer
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        let ttl = if self.ttl.is_empty() {
-            "-".to_string()
-        } else {
-            self.ttl
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-
-        let qclass = Qclass::from(self.qclass).to_string();
-        let qtype = Qtype::from(self.qtype).to_string();
-
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -207,17 +185,17 @@ impl Display for Dns {
             self.proto,
             convert_time_format(self.last_time),
             self.query,
-            answer,
+            vec_to_string_or_default(&self.answer),
             self.trans_id,
             self.rtt,
-            qclass,
-            qtype,
+            Qclass::from(self.qclass),
+            Qtype::from(self.qtype),
             self.rcode,
             self.aa_flag,
             self.tc_flag,
             self.rd_flag,
             self.ra_flag,
-            ttl,
+            vec_to_string_or_default(&self.ttl),
         )
     }
 }
@@ -652,24 +630,6 @@ pub struct Mqtt {
 
 impl Display for Mqtt {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        let subscribe = if self.subscribe.is_empty() {
-            "-".to_string()
-        } else {
-            self.subscribe
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        };
-        let suback = if self.suback_reason.is_empty() {
-            "-".to_string()
-        } else {
-            self.suback_reason
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(",")
-        };
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -683,8 +643,8 @@ impl Display for Mqtt {
             self.version,
             as_str_or_default(&self.client_id),
             self.connack_reason,
-            subscribe,
-            suback,
+            vec_to_string_or_default(&self.subscribe),
+            vec_to_string_or_default(&self.suback_reason),
         )
     }
 }
@@ -697,11 +657,72 @@ impl ResponseRangeData for Mqtt {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Ldap {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u16,
+    pub last_time: i64,
+    pub message_id: u32,
+    pub version: u8,
+    pub opcode: Vec<String>,
+    pub result: Vec<String>,
+    pub diagnostic_message: Vec<String>,
+    pub object: Vec<String>,
+    pub argument: Vec<String>,
+}
+
+impl Display for Ldap {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+            self.message_id,
+            self.version,
+            vec_to_string_or_default(&self.opcode),
+            vec_to_string_or_default(&self.result),
+            vec_to_string_or_default(&self.diagnostic_message),
+            vec_to_string_or_default(&self.object),
+            vec_to_string_or_default(&self.argument),
+        )
+    }
+}
+
+impl ResponseRangeData for Ldap {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let ldap_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &ldap_csv.as_bytes())))
+    }
+}
+
 fn as_str_or_default(s: &str) -> &str {
     if s.is_empty() {
         "-"
     } else {
         s
+    }
+}
+
+fn vec_to_string_or_default<T>(vec: &Vec<T>) -> String
+where
+    T: Display,
+{
+    if vec.is_empty() {
+        "-".to_string()
+    } else {
+        vec.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
     }
 }
 

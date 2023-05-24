@@ -32,6 +32,7 @@ pub enum RecordType {
     Packet = 13,
     Ftp = 14,
     Mqtt = 15,
+    Ldap = 16,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
