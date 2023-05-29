@@ -232,13 +232,17 @@ pub struct Http {
     pub content_encoding: String,
     pub content_type: String,
     pub cache_control: String,
+    pub orig_filenames: Vec<String>,
+    pub orig_mime_types: Vec<String>,
+    pub resp_filenames: Vec<String>,
+    pub resp_mime_types: Vec<String>,
 }
 
 impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -261,6 +265,10 @@ impl Display for Http {
             as_str_or_default(&self.content_encoding),
             as_str_or_default(&self.content_type),
             as_str_or_default(&self.cache_control),
+            vec_to_string_or_default(&self.orig_filenames),
+            vec_to_string_or_default(&self.orig_mime_types),
+            vec_to_string_or_default(&self.resp_filenames),
+            vec_to_string_or_default(&self.resp_mime_types),
         )
     }
 }
