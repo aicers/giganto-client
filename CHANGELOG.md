@@ -11,6 +11,14 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Supports the LDAP protocol.
 
+### Changed
+
+- Expanded `struct Http` in the ingest protocol to improve file handling capabilities:
+  - `orig_filenames: Vec<String>`
+  - `orig_mime_types: Vec<String>`
+  - `resp_filenames: Vec<String>`
+  - `resp_mime_types: Vec<String>`
+
 ### Removed
 
 - Moved `send_ack_timestamp` to Giganto.
