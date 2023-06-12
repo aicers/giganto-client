@@ -18,6 +18,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   - `orig_mime_types: Vec<String>`
   - `resp_filenames: Vec<String>`
   - `resp_mime_types: Vec<String>`
+- Modify `Ftp`, `Mqtt`'s `proto` type to u8 from u16.
 
 ### Removed
 
