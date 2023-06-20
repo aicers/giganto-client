@@ -5,6 +5,12 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Supports the TLS protocol.
+
 ## [0.9.0] - 2023-06-20
 
 ### Changed
@@ -24,7 +30,6 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Supports the LDAP protocol.
-- Supports the TLS protocol.
 
 ### Changed
 
