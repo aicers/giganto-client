@@ -24,6 +24,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Supports the LDAP protocol.
+- Supports the TLS protocol.
 
 ### Changed
 
