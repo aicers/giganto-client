@@ -712,6 +712,75 @@ impl ResponseRangeData for Ldap {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Tls {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u16,
+    pub last_time: i64,
+    pub server_name: String,
+    pub alpn_protocol: String,
+    pub ja3: String,
+    pub version: String,
+    pub cipher: u16,
+    pub ja3s: String,
+    pub serial: String,
+    pub subject_country: String,
+    pub subject_org_name: String,
+    pub subject_common_name: String,
+    pub validity_not_before: i64,
+    pub validity_not_after: i64,
+    pub subject_alt_name: String,
+    pub issuer_country: String,
+    pub issuer_org_name: String,
+    pub issuer_org_unit_name: String,
+    pub issuer_common_name: String,
+    pub last_alert: u8,
+}
+
+impl Display for Tls {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+            as_str_or_default(&self.server_name),
+            as_str_or_default(&self.alpn_protocol),
+            as_str_or_default(&self.ja3),
+            as_str_or_default(&self.version),
+            self.cipher,
+            as_str_or_default(&self.ja3s),
+            as_str_or_default(&self.serial),
+            as_str_or_default(&self.subject_country),
+            as_str_or_default(&self.subject_org_name),
+            as_str_or_default(&self.subject_common_name),
+            convert_time_format(self.validity_not_before),
+            convert_time_format(self.validity_not_after),
+            as_str_or_default(&self.subject_alt_name),
+            as_str_or_default(&self.issuer_country),
+            as_str_or_default(&self.issuer_org_name),
+            as_str_or_default(&self.issuer_org_unit_name),
+            as_str_or_default(&self.issuer_common_name),
+            self.last_alert,
+        )
+    }
+}
+
+impl ResponseRangeData for Tls {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let tls_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &tls_csv.as_bytes())))
+    }
+}
+
 fn as_str_or_default(s: &str) -> &str {
     if s.is_empty() {
         "-"
