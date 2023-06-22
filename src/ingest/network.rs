@@ -718,7 +718,7 @@ pub struct Tls {
     pub orig_port: u16,
     pub resp_addr: IpAddr,
     pub resp_port: u16,
-    pub proto: u16,
+    pub proto: u8,
     pub last_time: i64,
     pub server_name: String,
     pub alpn_protocol: String,
