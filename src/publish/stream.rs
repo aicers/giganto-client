@@ -44,6 +44,7 @@ pub enum RequestStreamRecord {
     Mqtt = 12,
     Ldap = 13,
     Tls = 14,
+    Smb = 15,
 }
 
 impl RequestStreamRecord {
@@ -65,6 +66,7 @@ impl RequestStreamRecord {
             RequestStreamRecord::Mqtt => "mqtt",
             RequestStreamRecord::Ldap => "ldap",
             RequestStreamRecord::Tls => "tls",
+            RequestStreamRecord::Smb => "smb",
         }
     }
 
@@ -88,6 +90,7 @@ impl RequestStreamRecord {
             "mqtt" => Ok(RequestStreamRecord::Mqtt),
             "ldap" => Ok(RequestStreamRecord::Ldap),
             "tls" => Ok(RequestStreamRecord::Tls),
+            "smb" => Ok(RequestStreamRecord::Smb),
             _ => Err(anyhow!("invalid protocol type")),
         }
     }

@@ -34,6 +34,7 @@ pub enum RecordType {
     Mqtt = 15,
     Ldap = 16,
     Tls = 17,
+    Smb = 18,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

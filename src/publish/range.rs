@@ -43,6 +43,7 @@ pub enum REconvergeKindType {
     Ldap,
     Timeseries,
     Tls,
+    Smb,
 }
 
 impl REconvergeKindType {
@@ -63,6 +64,7 @@ impl REconvergeKindType {
             "ldap" => REconvergeKindType::Ldap,
             "timeseries" => REconvergeKindType::Timeseries,
             "tls" => REconvergeKindType::Tls,
+            "smb" => REconvergeKindType::Smb,
             _ => REconvergeKindType::Log,
         }
     }
