@@ -789,19 +789,23 @@ pub struct Smb {
     pub resp_port: u16,
     pub proto: u8,
     pub last_time: i64,
+    pub path: String,
+    pub service: String,
 }
 
 impl Display for Smb {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
+            as_str_or_default(&self.path),
+            as_str_or_default(&self.service),
         )
     }
 }
