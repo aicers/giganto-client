@@ -44,6 +44,7 @@ pub enum REconvergeKindType {
     Timeseries,
     Tls,
     Smb,
+    Nfs,
 }
 
 impl REconvergeKindType {
@@ -65,6 +66,7 @@ impl REconvergeKindType {
             "timeseries" => REconvergeKindType::Timeseries,
             "tls" => REconvergeKindType::Tls,
             "smb" => REconvergeKindType::Smb,
+            "nfs" => REconvergeKindType::Nfs,
             _ => REconvergeKindType::Log,
         }
     }

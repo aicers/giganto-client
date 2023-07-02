@@ -35,6 +35,7 @@ pub enum RecordType {
     Ldap = 16,
     Tls = 17,
     Smb = 18,
+    Nfs = 19,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
