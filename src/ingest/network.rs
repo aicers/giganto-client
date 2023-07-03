@@ -845,19 +845,23 @@ pub struct Nfs {
     pub resp_port: u16,
     pub proto: u8,
     pub last_time: i64,
+    pub read_files: Vec<String>,
+    pub write_files: Vec<String>,
 }
 
 impl Display for Nfs {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
+            vec_to_string_or_default(&self.read_files),
+            vec_to_string_or_default(&self.write_files),
         )
     }
 }
