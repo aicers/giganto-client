@@ -18,6 +18,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Supports the TLS protocol.
 
+### Changed
+
+- Changed the type of Tls::proto field from u16 to u8. (The `proto` field type for
+  all protocols in `giganto-client` must be `u8`).
+
 ## [0.9.0] - 2023-06-20
 
 ### Changed
