@@ -837,6 +837,43 @@ impl ResponseRangeData for Smb {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Nfs {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub last_time: i64,
+    pub read_files: Vec<String>,
+    pub write_files: Vec<String>,
+}
+
+impl Display for Nfs {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+            vec_to_string_or_default(&self.read_files),
+            vec_to_string_or_default(&self.write_files),
+        )
+    }
+}
+
+impl ResponseRangeData for Nfs {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let nfs_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &nfs_csv.as_bytes())))
+    }
+}
+
 fn as_str_or_default(s: &str) -> &str {
     if s.is_empty() {
         "-"

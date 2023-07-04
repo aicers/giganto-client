@@ -10,6 +10,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Supports the SMB protocol.
+- Supports the NFS protocol.
 
 ## [0.10.0] - 2023-06-22
 
