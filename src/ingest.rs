@@ -3,6 +3,7 @@
 pub mod log;
 pub mod network;
 pub mod statistics;
+pub mod sysmon;
 pub mod timeseries;
 
 use crate::frame::{self, RecvError, SendError};
@@ -36,6 +37,22 @@ pub enum RecordType {
     Tls = 17,
     Smb = 18,
     Nfs = 19,
+
+    // Windows Sysmon
+    ProcessCreate = 31,
+    FileCreateTime = 32,
+    NetworkConnect = 33,
+    ProcessTerminate = 35,
+    ImageLoad = 37,
+    FileCreate = 41,
+    RegistryValueSet = 43,
+    RegistryKeyRename = 44,
+    FileCreateStreamHash = 45,
+    PipeEvent = 47,
+    DnsQuery = 52,
+    FileDelete = 53,
+    ProcessTamper = 55,
+    FileDeleteDetected = 56,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
