@@ -11,6 +11,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Added sysmon event structs.
 
+### Changed
+
+- Add `core` field to statistics structure. `core` value can be used to
+  identify statistics value from different core of same machine.
+
 ## [0.11.0] - 2023-07-04
 
 ### Added
