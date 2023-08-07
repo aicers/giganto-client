@@ -5,6 +5,14 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- The default features of chrono that might cause SEGFAULT were turned off. See
+  [RUSTSEC-2020-0071](https://rustsec.org/advisories/RUSTSEC-2020-0071) for
+  details.
+
 ## [0.11.1] - 2023-07-26
 
 ### Added
@@ -146,6 +154,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.11.1...main
 [0.11.1]: https://github.com/aicers/giganto-client/compare/0.11.0...0.11.1
 [0.11.0]: https://github.com/aicers/giganto-client/compare/0.10.0...0.11.0
 [0.10.0]: https://github.com/aicers/giganto-client/compare/0.9.0...0.10.0
