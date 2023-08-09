@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProcessCreate {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -30,6 +32,8 @@ pub struct ProcessCreate {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileCreationTimeChanged {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -41,6 +45,8 @@ pub struct FileCreationTimeChanged {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct NetworkConnection {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -61,6 +67,8 @@ pub struct NetworkConnection {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProcessTerminated {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -69,6 +77,8 @@ pub struct ProcessTerminated {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ImageLoaded {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -87,6 +97,8 @@ pub struct ImageLoaded {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileCreate {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -97,6 +109,8 @@ pub struct FileCreate {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RegistryValueSet {
+    pub agent_name: String,
+    pub agent_id: String,
     pub event_type: String,
     pub process_guid: String,
     pub process_id: u32,
@@ -108,6 +122,8 @@ pub struct RegistryValueSet {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RegistryKeyValueRename {
+    pub agent_name: String,
+    pub agent_id: String,
     pub event_type: String,
     pub process_guid: String,
     pub process_id: u32,
@@ -119,6 +135,8 @@ pub struct RegistryKeyValueRename {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileCreateStreamHash {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -131,6 +149,8 @@ pub struct FileCreateStreamHash {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PipeEvent {
+    pub agent_name: String,
+    pub agent_id: String,
     pub event_type: String,
     pub process_guid: String,
     pub process_id: u32,
@@ -141,6 +161,8 @@ pub struct PipeEvent {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DnsEvent {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub query_name: String,
@@ -152,6 +174,8 @@ pub struct DnsEvent {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileDelete {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub user: String,
@@ -164,6 +188,8 @@ pub struct FileDelete {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProcessTampering {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub image: String,
@@ -173,6 +199,8 @@ pub struct ProcessTampering {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct FileDeleteDetected {
+    pub agent_name: String,
+    pub agent_id: String,
     pub process_guid: String,
     pub process_id: u32,
     pub user: String,
