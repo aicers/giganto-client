@@ -1,7 +1,5 @@
-use std::net::IpAddr;
-
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::net::IpAddr;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ProcessCreate {
@@ -38,8 +36,8 @@ pub struct FileCreationTimeChanged {
     pub process_id: u32,
     pub image: String,
     pub target_filename: String,
-    pub creation_utc_time: DateTime<Utc>,
-    pub previous_creation_utc_time: DateTime<Utc>,
+    pub creation_utc_time: i64,
+    pub previous_creation_utc_time: i64,
     pub user: String,
 }
 
@@ -103,7 +101,7 @@ pub struct FileCreate {
     pub process_id: u32,
     pub image: String,
     pub target_filename: String,
-    pub creation_utc_time: DateTime<Utc>,
+    pub creation_utc_time: i64,
     pub user: String,
 }
 
@@ -141,7 +139,7 @@ pub struct FileCreateStreamHash {
     pub process_id: u32,
     pub image: String,
     pub target_filename: String,
-    pub creation_utc_time: DateTime<Utc>,
+    pub creation_utc_time: i64,
     pub hash: Vec<String>,
     pub contents: String,
     pub user: String,

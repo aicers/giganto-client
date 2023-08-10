@@ -7,9 +7,11 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+### Changed
 
-- Added `agent_name`, `agent_id` field to sysmon events for use as a key.
+- Changed Sysmon events.
+  - Added `agent_name`, `agent_id` field to sysmon events for use as a key.
+  - Modified `DateTime<Utc>` to `i64` timestamp.
 
 ## [0.11.1] - 2023-07-26
 
