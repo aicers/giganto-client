@@ -1,6 +1,5 @@
 use crate::publish::range::ResponseRangeData;
 use anyhow::Result;
-use chrono::NaiveDateTime;
 use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -900,7 +899,34 @@ where
 #[must_use]
 fn convert_time_format(timestamp: i64) -> String {
     const A_BILLION: i64 = 1_000_000_000;
-    let nsecs = u32::try_from(timestamp % A_BILLION).unwrap_or_default();
-    NaiveDateTime::from_timestamp_opt(timestamp / A_BILLION, nsecs)
-        .map_or("-".to_string(), |s| s.format("%s%.9f").to_string())
+
+    if timestamp > 0 {
+        format!("{}.{:09}", timestamp / A_BILLION, timestamp % A_BILLION)
+    } else {
+        format!("{}.{:09}", timestamp / A_BILLION, -timestamp % A_BILLION)
+    }
+}
+
+mod test {
+
+    #[test]
+    fn convert_time_format() {
+        use chrono::NaiveDateTime;
+
+        let sec = 2;
+        let nsec = 123;
+        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
+
+        let ts = ndt.timestamp_nanos();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "2.000000123");
+
+        let sec = -1;
+        let nsec = 0;
+        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
+
+        let ts = ndt.timestamp_nanos();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "-1.000000000");
+    }
 }

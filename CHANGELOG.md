@@ -7,6 +7,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- The default features of chrono that might cause SEGFAULT were turned off. See
+  [RUSTSEC-2020-0071](https://rustsec.org/advisories/RUSTSEC-2020-0071) for
+  details.
+
 ### Changed
 
 - Changed Sysmon events.
@@ -154,6 +160,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.11.1...main
 [0.11.1]: https://github.com/aicers/giganto-client/compare/0.11.0...0.11.1
 [0.11.0]: https://github.com/aicers/giganto-client/compare/0.10.0...0.11.0
 [0.10.0]: https://github.com/aicers/giganto-client/compare/0.9.0...0.10.0
