@@ -13,6 +13,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   [RUSTSEC-2020-0071](https://rustsec.org/advisories/RUSTSEC-2020-0071) for
   details.
 
+### Changed
+
+- Changed Sysmon events.
+  - Added `agent_name`, `agent_id` field to sysmon events for use as a key.
+  - Modified `DateTime<Utc>` to `i64` timestamp.
+
 ## [0.11.1] - 2023-07-26
 
 ### Added
