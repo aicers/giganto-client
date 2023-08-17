@@ -1,4 +1,7 @@
-use crate::publish::range::ResponseRangeData;
+use crate::{
+    ingest::{as_str_or_default, convert_time_format, vec_to_string_or_default},
+    publish::range::ResponseRangeData,
+};
 use anyhow::Result;
 use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
@@ -870,63 +873,5 @@ impl ResponseRangeData for Nfs {
         let nfs_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, source, &nfs_csv.as_bytes())))
-    }
-}
-
-fn as_str_or_default(s: &str) -> &str {
-    if s.is_empty() {
-        "-"
-    } else {
-        s
-    }
-}
-
-fn vec_to_string_or_default<T>(vec: &Vec<T>) -> String
-where
-    T: Display,
-{
-    if vec.is_empty() {
-        "-".to_string()
-    } else {
-        vec.iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-            .join(",")
-    }
-}
-
-/// Converts a timestamp to a string in the format of "%s%.9f", which is the format used by Zeek.
-#[must_use]
-fn convert_time_format(timestamp: i64) -> String {
-    const A_BILLION: i64 = 1_000_000_000;
-
-    if timestamp > 0 {
-        format!("{}.{:09}", timestamp / A_BILLION, timestamp % A_BILLION)
-    } else {
-        format!("{}.{:09}", timestamp / A_BILLION, -timestamp % A_BILLION)
-    }
-}
-
-mod test {
-
-    #[test]
-    fn convert_time_format() {
-        use chrono::NaiveDateTime;
-
-        let sec = 2;
-        let nsec = 123;
-        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
-
-        let ts = ndt.timestamp_nanos();
-        let ts_fmt = super::convert_time_format(ts);
-        assert_eq!(ts_fmt, "2.000000123");
-
-        let sec = -1;
-        let nsec = 0;
-        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
-
-        let ts = ndt.timestamp_nanos();
-        let ts_fmt = super::convert_time_format(ts);
-        assert_eq!(ts_fmt, "-1.000000000");
     }
 }

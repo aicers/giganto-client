@@ -10,6 +10,7 @@ use crate::frame::{self, RecvError, SendError};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(
     Clone, Copy, Debug, Hash, Deserialize, Eq, IntoPrimitive, PartialEq, Serialize, TryFromPrimitive,
@@ -132,6 +133,40 @@ pub async fn receive_ack_timestamp(recv: &mut RecvStream) -> Result<i64, RecvErr
     Ok(timestamp)
 }
 
+/// Converts a timestamp to a string in the format of "%s%.9f", which is the format used by Zeek.
+#[must_use]
+fn convert_time_format(timestamp: i64) -> String {
+    const A_BILLION: i64 = 1_000_000_000;
+
+    if timestamp > 0 {
+        format!("{}.{:09}", timestamp / A_BILLION, timestamp % A_BILLION)
+    } else {
+        format!("{}.{:09}", timestamp / A_BILLION, -timestamp % A_BILLION)
+    }
+}
+
+fn as_str_or_default(s: &str) -> &str {
+    if s.is_empty() {
+        "-"
+    } else {
+        s
+    }
+}
+
+fn vec_to_string_or_default<T>(vec: &Vec<T>) -> String
+where
+    T: Display,
+{
+    if vec.is_empty() {
+        "-".to_string()
+    } else {
+        vec.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[tokio::test]
@@ -185,5 +220,26 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(timestamp, 8888);
+    }
+
+    #[test]
+    fn convert_time_format() {
+        use chrono::NaiveDateTime;
+
+        let sec = 2;
+        let nsec = 123;
+        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
+
+        let ts = ndt.timestamp_nanos();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "2.000000123");
+
+        let sec = -1;
+        let nsec = 0;
+        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
+
+        let ts = ndt.timestamp_nanos();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "-1.000000000");
     }
 }
