@@ -5,6 +5,12 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added sysmon events to publish range data.
+
 ## [0.12.0] - 2023-08-14
 
 ### Security
@@ -160,6 +166,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.12.0...main
 [0.12.0]: https://github.com/aicers/giganto-client/compare/0.11.1...0.12.0
 [0.11.1]: https://github.com/aicers/giganto-client/compare/0.11.0...0.11.1
 [0.11.0]: https://github.com/aicers/giganto-client/compare/0.10.0...0.11.0
