@@ -46,6 +46,10 @@ pub enum RequestStreamRecord {
     Tls = 14,
     Smb = 15,
     Nfs = 16,
+
+    // sysmon
+    FileCreate = 31,
+    FileDelete = 32,
 }
 
 impl RequestStreamRecord {
@@ -69,6 +73,8 @@ impl RequestStreamRecord {
             RequestStreamRecord::Tls => "tls",
             RequestStreamRecord::Smb => "smb",
             RequestStreamRecord::Nfs => "nfs",
+            RequestStreamRecord::FileCreate => "file_create",
+            RequestStreamRecord::FileDelete => "file_delete",
         }
     }
 
@@ -94,6 +100,8 @@ impl RequestStreamRecord {
             "tls" => Ok(RequestStreamRecord::Tls),
             "smb" => Ok(RequestStreamRecord::Smb),
             "nfs" => Ok(RequestStreamRecord::Nfs),
+            "file_create" => Ok(RequestStreamRecord::FileCreate),
+            "file_delete" => Ok(RequestStreamRecord::FileDelete),
             _ => Err(anyhow!("invalid protocol type")),
         }
     }
