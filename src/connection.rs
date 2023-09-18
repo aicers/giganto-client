@@ -84,6 +84,7 @@ pub async fn client_handshake(
 /// # Errors
 ///
 /// Returns `HandshakeError` if the handshake failed.
+#[allow(clippy::missing_panics_doc)]
 pub async fn server_handshake(
     conn: &Connection,
     std_version: &str,
