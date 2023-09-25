@@ -39,6 +39,7 @@ pub enum RecordType {
     Tls = 17,
     Smb = 18,
     Nfs = 19,
+    Seclog = 20,
 
     // Windows Sysmon
     ProcessCreate = 31,

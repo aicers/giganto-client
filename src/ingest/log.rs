@@ -1,7 +1,10 @@
 use crate::publish::range::ResponseRangeData;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{Display, Formatter},
+    net::IpAddr,
+};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Log {
@@ -42,6 +45,37 @@ impl Display for Oplog {
             f,
             "{}\t{:?}\t{}",
             self.agent_name, self.log_level, self.contents
+        )
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Seclog {
+    pub kind: String,
+    pub log_type: String,
+    pub version: String,
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub contents: String,
+}
+
+impl Display for Seclog {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.kind,
+            self.log_type,
+            self.version,
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            self.contents
         )
     }
 }
