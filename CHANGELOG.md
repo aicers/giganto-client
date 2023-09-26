@@ -5,7 +5,7 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.13.0] - 2023-09-26
 
 ### Changed
 
@@ -178,6 +178,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[0.13.0]: https://github.com/aicers/giganto-client/compare/0.12.2...0.13.0
 [0.12.2]: https://github.com/aicers/giganto-client/compare/0.12.1...0.12.2
 [0.12.1]: https://github.com/aicers/giganto-client/compare/0.12.0...0.12.1
 [0.12.0]: https://github.com/aicers/giganto-client/compare/0.11.1...0.12.0
