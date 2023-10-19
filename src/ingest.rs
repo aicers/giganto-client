@@ -1,6 +1,7 @@
 //! A protocol implementation for sending raw events to the Giganto server.
 
 pub mod log;
+pub mod netflow;
 pub mod network;
 pub mod statistics;
 pub mod sysmon;
@@ -54,6 +55,9 @@ pub enum RecordType {
     FileDelete = 53,
     ProcessTamper = 55,
     FileDeleteDetected = 56,
+
+    Netflow5 = 60,
+    Netflow9 = 61,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
