@@ -59,6 +59,8 @@ pub enum REconvergeKindType {
     FileDelete,
     ProcessTamper,
     FileDeleteDetected,
+    Netflow5,
+    Netflow9,
 }
 
 impl REconvergeKindType {
@@ -95,6 +97,8 @@ impl REconvergeKindType {
             "file_delete" => REconvergeKindType::FileDelete,
             "process_tamper" => REconvergeKindType::ProcessTamper,
             "file_delete_detected" => REconvergeKindType::FileDeleteDetected,
+            "netflow5" => REconvergeKindType::Netflow5,
+            "netflow9" => REconvergeKindType::Netflow9,
             _ => REconvergeKindType::Log,
         }
     }

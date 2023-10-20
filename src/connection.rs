@@ -69,7 +69,7 @@ pub async fn client_handshake(
         Err(RecvError::MessageTooLarge(_)) => {
             return Err(HandshakeError::MessageTooLarge);
         }
-        Ok(_) | Err(_) => {}
+        Ok(()) | Err(_) => {}
     }
 
     bincode::deserialize::<Option<&str>>(&buf)
