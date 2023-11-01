@@ -39,7 +39,7 @@ pub enum RecordType {
     Tls = 17,
     Smb = 18,
     Nfs = 19,
-    Seclog = 20,
+    Seculog = 20,
 
     // Windows Sysmon
     ProcessCreate = 31,
@@ -169,6 +169,13 @@ where
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(",")
+    }
+}
+
+fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
+    match option {
+        Some(val) => val.to_string(),
+        None => "-".to_string(),
     }
 }
 
