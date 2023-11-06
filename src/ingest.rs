@@ -7,59 +7,12 @@ pub mod statistics;
 pub mod sysmon;
 pub mod timeseries;
 
-use crate::frame::{self, RecvError, SendError};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
-use quinn::{RecvStream, SendStream};
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(
-    Clone, Copy, Debug, Hash, Deserialize, Eq, IntoPrimitive, PartialEq, Serialize, TryFromPrimitive,
-)]
-#[repr(u32)]
-#[non_exhaustive]
-pub enum RecordType {
-    Conn = 0,
-    Dns = 1,
-    Log = 2,
-    Http = 3,
-    Rdp = 4,
-    PeriodicTimeSeries = 5,
-    Smtp = 6,
-    Ntlm = 7,
-    Kerberos = 8,
-    Ssh = 9,
-    DceRpc = 10,
-    Statistics = 11,
-    Oplog = 12,
-    Packet = 13,
-    Ftp = 14,
-    Mqtt = 15,
-    Ldap = 16,
-    Tls = 17,
-    Smb = 18,
-    Nfs = 19,
-    Seculog = 20,
-
-    // Windows Sysmon
-    ProcessCreate = 31,
-    FileCreateTime = 32,
-    NetworkConnect = 33,
-    ProcessTerminate = 35,
-    ImageLoad = 37,
-    FileCreate = 41,
-    RegistryValueSet = 43,
-    RegistryKeyRename = 44,
-    FileCreateStreamHash = 45,
-    PipeEvent = 47,
-    DnsQuery = 52,
-    FileDelete = 53,
-    ProcessTamper = 55,
-    FileDeleteDetected = 56,
-
-    Netflow5 = 60,
-    Netflow9 = 61,
-}
+use crate::frame::{self, RecvError, SendError};
+use crate::RawEventKind;
+use quinn::{RecvStream, SendStream};
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Packet {
@@ -67,14 +20,14 @@ pub struct Packet {
     pub packet: Vec<u8>,
 }
 
-/// Sends the record type. (`RecordType`)
+/// Sends the record type. (`RawEventKind`)
 ///
 /// # Errors
 ///
 /// * `SendError::WriteError` if the record header could not be written
 pub async fn send_record_header(
     send: &mut SendStream,
-    record_type: RecordType,
+    record_type: RawEventKind,
 ) -> Result<(), SendError> {
     frame::send_bytes(send, &u32::from(record_type).to_le_bytes()).await?;
     Ok(())
@@ -101,7 +54,7 @@ where
     Ok(())
 }
 
-/// Receives the record type. (`RecordType`)
+/// Receives the record type. (`RawEventKind`)
 ///
 /// # Errors
 ///
@@ -190,7 +143,7 @@ mod tests {
         let mut channel = channel().await;
 
         // send/recv event type
-        super::send_record_header(&mut channel.client.send, super::RecordType::Conn)
+        super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn)
             .await
             .unwrap();
 
@@ -199,7 +152,7 @@ mod tests {
         super::receive_record_header(&mut channel.server.recv, &mut buf)
             .await
             .unwrap();
-        assert_eq!(buf, u32::from(super::RecordType::Conn).to_le_bytes());
+        assert_eq!(buf, u32::from(super::RawEventKind::Conn).to_le_bytes());
 
         // send/recv event data
         let conn = super::network::Conn {
