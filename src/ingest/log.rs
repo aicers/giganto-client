@@ -24,8 +24,9 @@ impl ResponseRangeData for Log {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Oplog {
+pub struct OpLog {
     pub agent_name: String,
     pub log_level: OpLogLevel,
     pub contents: String,
@@ -39,7 +40,7 @@ pub enum OpLogLevel {
     Error,
 }
 
-impl Display for Oplog {
+impl Display for OpLog {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
@@ -49,8 +50,9 @@ impl Display for Oplog {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Seculog {
+pub struct SecuLog {
     pub kind: String,
     pub log_type: String,
     pub version: String,
@@ -62,7 +64,7 @@ pub struct Seculog {
     pub contents: String,
 }
 
-impl Display for Seculog {
+impl Display for SecuLog {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
