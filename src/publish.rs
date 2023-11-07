@@ -450,6 +450,7 @@ mod tests {
     use crate::publish::{recv_ack_response, PublishError};
     use crate::test::{channel, TOKEN};
     use std::net::IpAddr;
+    use std::str::FromStr;
 
     #[tokio::test]
     async fn publish_send_recv() {
@@ -680,8 +681,9 @@ mod tests {
 
     #[tokio::test]
     async fn send_recv_raw_events() {
-        use crate::publish::range::{MessageCode, REconvergeKindType, RequestRawData};
+        use crate::publish::range::{MessageCode, RequestRawData};
         use crate::publish::{receive_raw_events, send_raw_events};
+        use crate::RawEventKind;
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -729,8 +731,8 @@ mod tests {
         let recv_request = bincode::deserialize::<RequestRawData>(&data).unwrap();
         assert_eq!(msg_code, MessageCode::RawData);
         assert_eq!(
-            REconvergeKindType::convert_type(&recv_request.kind),
-            REconvergeKindType::Conn
+            RawEventKind::from_str(recv_request.kind.as_str()).unwrap(),
+            RawEventKind::Conn
         );
 
         // example data from giganto

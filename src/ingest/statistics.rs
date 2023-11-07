@@ -1,4 +1,4 @@
-use super::RecordType;
+use super::RawEventKind;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 pub struct Statistics {
     pub core: u32,
     pub period: u16,
-    pub stats: Vec<(RecordType, u64, u64)>, // protocol, packet count, packet size
+    pub stats: Vec<(RawEventKind, u64, u64)>, // protocol, packet count, packet size
 }
 
 impl Display for Statistics {
