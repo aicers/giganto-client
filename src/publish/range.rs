@@ -24,6 +24,7 @@ pub enum MessageCode {
     ReqRange = 1,
     Pcap = 2,
     RawData = 3,
+    StringRawData = 4,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
