@@ -53,6 +53,7 @@ impl Display for OpLog {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SecuLog {
+    pub source: String,
     pub kind: String,
     pub log_type: String,
     pub version: String,
@@ -68,7 +69,8 @@ impl Display for SecuLog {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.source,
             self.kind,
             self.log_type,
             self.version,
