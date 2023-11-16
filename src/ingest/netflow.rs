@@ -8,17 +8,18 @@ use std::{
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct Netflow5 {
-    pub srcaddr: IpAddr,
-    pub dstaddr: IpAddr,
-    pub nexthop: IpAddr,
+    pub source: String,
+    pub src_addr: IpAddr,
+    pub dst_addr: IpAddr,
+    pub next_hop: IpAddr,
     pub input: u16,
     pub output: u16,
-    pub dpkts: u32,
-    pub doctets: u32,
+    pub d_pkts: u32,
+    pub d_octets: u32,
     pub first: u32, // milliseconds
     pub last: u32,  // milliseconds
-    pub srcport: u16,
-    pub dstport: u16,
+    pub src_port: u16,
+    pub dst_port: u16,
     pub tcp_flags: u8,
     pub prot: u8,
     pub tos: u8, // Hex
@@ -37,18 +38,19 @@ impl Display for Netflow5 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}",
-            self.srcaddr,
-            self.dstaddr,
-            self.nexthop,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}",
+            self.source,
+            self.src_addr,
+            self.dst_addr,
+            self.next_hop,
             self.input,
             self.output,
-            self.dpkts,
-            self.doctets,
-            milli_to_secs(self.first),
-            milli_to_secs(self.last),
-            self.srcport,
-            self.dstport,
+            self.d_pkts,
+            self.d_octets,
+            millis_to_secs(self.first),
+            millis_to_secs(self.last),
+            self.src_port,
+            self.dst_port,
             tcp_flags(self.tcp_flags),
             self.prot,
             self.tos,
@@ -67,7 +69,7 @@ impl Display for Netflow5 {
 
 impl ResponseRangeData for Netflow5 {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+        let csv = format!("{}\t{self}", convert_time_format(timestamp));
         bincode::serialize(&Some((timestamp, source, &csv.as_bytes())))
     }
 }
@@ -75,6 +77,7 @@ impl ResponseRangeData for Netflow5 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct Netflow9 {
+    pub source: String,
     pub sequence: u32,
     pub source_id: u32,
     pub template_id: u16,
@@ -90,7 +93,8 @@ impl Display for Netflow9 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.source,
             self.sequence,
             self.source_id,
             self.template_id,
@@ -106,7 +110,7 @@ impl Display for Netflow9 {
 
 impl ResponseRangeData for Netflow9 {
     fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        let csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+        let csv = format!("{}\t{self}", convert_time_format(timestamp));
         bincode::serialize(&Some((timestamp, source, &csv.as_bytes())))
     }
 }
@@ -140,6 +144,6 @@ fn tcp_flags(b: u8) -> String {
     res
 }
 
-fn milli_to_secs(millis: u32) -> String {
+fn millis_to_secs(millis: u32) -> String {
     format!("{}.{}", millis / 1000, millis - (millis / 1000) * 1000)
 }
