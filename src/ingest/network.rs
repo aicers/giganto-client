@@ -238,6 +238,7 @@ pub struct Http {
     pub orig_mime_types: Vec<String>,
     pub resp_filenames: Vec<String>,
     pub resp_mime_types: Vec<String>,
+    pub post_body: Vec<u8>,
 }
 
 impl Display for Http {
@@ -271,6 +272,7 @@ impl Display for Http {
             vec_to_string_or_default(&self.orig_mime_types),
             vec_to_string_or_default(&self.resp_filenames),
             vec_to_string_or_default(&self.resp_mime_types),
+            // post_body is not displayed
         )
     }
 }
