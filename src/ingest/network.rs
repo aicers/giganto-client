@@ -377,6 +377,7 @@ pub struct Ntlm {
     pub resp_port: u16,
     pub proto: u8,
     pub last_time: i64,
+    pub protocol: String,
     pub username: String,
     pub hostname: String,
     pub domainname: String,
@@ -390,13 +391,14 @@ impl Display for Ntlm {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
+            as_str_or_default(&self.protocol),
             as_str_or_default(&self.username),
             as_str_or_default(&self.hostname),
             as_str_or_default(&self.domainname),
