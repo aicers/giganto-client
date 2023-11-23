@@ -275,7 +275,7 @@ impl Display for Http {
             if self.post_body.is_empty() {
                 String::from("-")
             } else {
-                std::str::from_utf8(self.post_body.as_slice()).unwrap_or_default().replace("\t", " ")
+                std::str::from_utf8(self.post_body.as_slice()).unwrap_or_default().replace('\t', " ")
             }
         )
     }
