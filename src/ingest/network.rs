@@ -245,7 +245,7 @@ impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -272,7 +272,11 @@ impl Display for Http {
             vec_to_string_or_default(&self.orig_mime_types),
             vec_to_string_or_default(&self.resp_filenames),
             vec_to_string_or_default(&self.resp_mime_types),
-            // post_body is not displayed
+            if self.post_body.is_empty() {
+                String::from("-")
+            } else {
+                std::str::from_utf8(self.post_body.as_slice()).unwrap_or_default().replace("\t", " ")
+            }
         )
     }
 }
