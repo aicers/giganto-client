@@ -195,7 +195,7 @@ mod tests {
         let nsec = 123;
         let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
 
-        let ts = ndt.timestamp_nanos_opt().unwrap();
+        let ts = ndt.timestamp_nanos();
         let ts_fmt = super::convert_time_format(ts);
         assert_eq!(ts_fmt, "2.000000123");
 
@@ -203,7 +203,7 @@ mod tests {
         let nsec = 0;
         let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
 
-        let ts = ndt.timestamp_nanos_opt().unwrap();
+        let ts = ndt.timestamp_nanos();
         let ts_fmt = super::convert_time_format(ts);
         assert_eq!(ts_fmt, "-1.000000000");
     }
