@@ -5,6 +5,14 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Add `NodeType` and `RequestUrlCollectorStream` to url-collector.
+- Add `send_url_collector_stream_start_message()`, `receive_url_collector_stream_start_message()`,
+  `receive_url_collector_data()` and testcode.
+
 ## [0.17.0] - 2024-05-16
 
 ### Added
@@ -241,6 +249,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.17.0...0.17.0+tis.0.0.1
 [0.17.0]: https://github.com/aicers/giganto-client/compare/0.16.0...0.17.0
 [0.16.0]: https://github.com/aicers/giganto-client/compare/0.15.2...0.16.0
 [0.15.2]: https://github.com/aicers/giganto-client/compare/0.15.1...0.15.2
