@@ -10,6 +10,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Add `NodeType` and `RequestUrlCollectorStream` to url-collector.
+- Add `send_url_collector_stream_start_message()`, `receive_url_collector_stream_start_message()`,
+  `receive_url_collector_data()` and testcode.
 
 ## [0.15.2] - 2023-11-16
 
