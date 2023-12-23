@@ -381,9 +381,6 @@ pub struct Ntlm {
     pub username: String,
     pub hostname: String,
     pub domainname: String,
-    pub server_nb_computer_name: String,
-    pub server_dns_computer_name: String,
-    pub server_tree_name: String,
     pub success: String,
 }
 
@@ -391,7 +388,7 @@ impl Display for Ntlm {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -402,9 +399,6 @@ impl Display for Ntlm {
             as_str_or_default(&self.username),
             as_str_or_default(&self.hostname),
             as_str_or_default(&self.domainname),
-            as_str_or_default(&self.server_nb_computer_name),
-            as_str_or_default(&self.server_dns_computer_name),
-            as_str_or_default(&self.server_tree_name),
             as_str_or_default(&self.success),
         )
     }
