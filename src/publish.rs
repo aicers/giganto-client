@@ -561,7 +561,10 @@ mod tests {
         assert_eq!(req_data, bincode::serialize(&crusher_req).unwrap());
 
         // send/recv url collector stream request
-        let url_collector_req = RequestUrlCollectorStream { start: 0 };
+        let url_collector_req = RequestUrlCollectorStream {
+            start: 0,
+            source: Some("hello".to_string()),
+        };
         super::send_stream_request(
             &mut channel.client.send,
             super::stream::RequestStreamRecord::Http,
