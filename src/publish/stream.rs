@@ -130,4 +130,5 @@ pub struct RequestCrusherStream {
 #[allow(clippy::module_name_repetitions)]
 pub struct RequestUrlCollectorStream {
     pub start: i64,
+    pub source: Option<String>,
 }
