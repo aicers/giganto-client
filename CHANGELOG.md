@@ -5,7 +5,7 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.15.2+tis.0.0.1] - 2024-01-08
 
 ### Added
 
@@ -224,6 +224,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[0.15.2+tis.0.0.1]: https://github.com/aicers/giganto-client/compare/0.15.1...0.15.2+tis.0.0.1
 [0.15.2]: https://github.com/aicers/giganto-client/compare/0.15.1...0.15.2
 [0.15.1]: https://github.com/aicers/giganto-client/compare/0.15.0...0.15.1
 [0.15.0]: https://github.com/aicers/giganto-client/compare/0.14.0...0.15.0
