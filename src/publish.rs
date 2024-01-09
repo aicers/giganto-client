@@ -700,7 +700,6 @@ mod tests {
             orig_mime_types: Vec::new(),
             resp_filenames: Vec::new(),
             resp_mime_types: Vec::new(),
-            post_body: Vec::new(),
         };
         let raw_event = bincode::serialize(&http).unwrap();
         let source = bincode::serialize(&"hello").unwrap();
