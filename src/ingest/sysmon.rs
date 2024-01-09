@@ -626,3 +626,30 @@ impl ResponseRangeData for FileDeleteDetected {
         )))
     }
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct PEFile {
+    pub agent_name: String,
+    pub agent_id: String,
+    pub file_name: String,
+    pub file_hash: String,
+    pub data: Vec<u8>,
+}
+
+impl Display for PEFile {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{:?}",
+            self.agent_name, self.agent_id, self.file_name, self.file_hash, self.data,
+        )
+    }
+}
+
+impl ResponseRangeData for PEFile {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let pe_file_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &pe_file_csv.as_bytes())))
+    }
+}
