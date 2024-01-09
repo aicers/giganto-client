@@ -10,6 +10,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Modified event structure to store NTLM error information.
+- Modified connection event structure to report connection state.
 
 ## [0.15.2] - 2023-11-16
 

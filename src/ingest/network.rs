@@ -17,6 +17,7 @@ pub struct Conn {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub conn_state: String,
     pub duration: i64,
     pub service: String,
     pub orig_bytes: u64,
@@ -29,12 +30,13 @@ impl Display for Conn {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            as_str_or_default(&self.conn_state),
             convert_time_format(self.duration),
             self.service,
             self.orig_bytes,
