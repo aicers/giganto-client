@@ -5,13 +5,7 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-
-- Remove `post_body` field in `Http`
-
-## [0.15.2+tis.0.0.1] - 2024-01-08
+## [0.15.2+tis.0.0.1] - 2024-01-09
 
 ### Added
 
@@ -230,8 +224,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
-[Unreleased]: https://github.com/aicers/giganto-client/compare/0.15.2+tis.0.0.1...tis
-[0.15.2+tis.0.0.1]: https://github.com/aicers/giganto-client/compare/0.15.1...0.15.2+tis.0.0.1
+[0.15.2+tis.0.0.1]: https://github.com/aicers/giganto-client/compare/0.15.2...0.15.2+tis.0.0.1
 [0.15.2]: https://github.com/aicers/giganto-client/compare/0.15.1...0.15.2
 [0.15.1]: https://github.com/aicers/giganto-client/compare/0.15.0...0.15.1
 [0.15.0]: https://github.com/aicers/giganto-client/compare/0.14.0...0.15.0
