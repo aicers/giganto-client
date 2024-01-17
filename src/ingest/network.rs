@@ -241,13 +241,14 @@ pub struct Http {
     pub resp_filenames: Vec<String>,
     pub resp_mime_types: Vec<String>,
     pub post_body: Vec<u8>,
+    pub state: String,
 }
 
 impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -278,7 +279,8 @@ impl Display for Http {
                 String::from("-")
             } else {
                 std::str::from_utf8(self.post_body.as_slice()).unwrap_or_default().replace('\t', " ")
-            }
+            },
+            as_str_or_default(&self.state),
         )
     }
 }
@@ -340,13 +342,14 @@ pub struct Smtp {
     pub to: String,
     pub subject: String,
     pub agent: String,
+    pub state: String,
 }
 
 impl Display for Smtp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -359,6 +362,7 @@ impl Display for Smtp {
             as_str_or_default(&self.to),
             as_str_or_default(&self.subject),
             as_str_or_default(&self.agent),
+            as_str_or_default(&self.state),
         )
     }
 }
