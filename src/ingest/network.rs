@@ -485,7 +485,9 @@ pub struct Ssh {
     pub kex_alg: String,
     pub host_key_alg: String,
     pub hassh_algorithms: String,
+    pub hassh: String,
     pub hassh_server_algorithms: String,
+    pub hassh_server: String,
     pub client_shka: String,
     pub server_shka: String,
     pub client_encrypt_len: u64,
@@ -496,7 +498,7 @@ impl Display for Ssh {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -511,7 +513,9 @@ impl Display for Ssh {
             as_str_or_default(&self.kex_alg),
             as_str_or_default(&self.host_key_alg),
             as_str_or_default(&self.hassh_algorithms),
+            as_str_or_default(&self.hassh),
             as_str_or_default(&self.hassh_server_algorithms),
+            as_str_or_default(&self.hassh_server),
             as_str_or_default(&self.client_shka),
             as_str_or_default(&self.server_shka),
             self.client_encrypt_len,
