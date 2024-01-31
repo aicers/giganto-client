@@ -477,10 +477,6 @@ pub struct Ssh {
     pub resp_port: u16,
     pub proto: u8,
     pub last_time: i64,
-    pub version: i64,
-    pub auth_success: String,
-    pub auth_attempts: i64,
-    pub direction: String,
     pub client: String,
     pub server: String,
     pub cipher_alg: String,
@@ -488,24 +484,25 @@ pub struct Ssh {
     pub compression_alg: String,
     pub kex_alg: String,
     pub host_key_alg: String,
-    pub host_key: String,
+    pub hassh_algorithms: String,
+    pub hassh: String,
+    pub hassh_server_algorithms: String,
+    pub hassh_server: String,
+    pub client_shka: String,
+    pub server_shka: String,
 }
 
 impl Display for Ssh {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.last_time),
-            self.version,
-            as_str_or_default(&self.auth_success),
-            self.auth_attempts,
-            as_str_or_default(&self.direction),
             as_str_or_default(&self.client),
             as_str_or_default(&self.server),
             as_str_or_default(&self.cipher_alg),
@@ -513,7 +510,12 @@ impl Display for Ssh {
             as_str_or_default(&self.compression_alg),
             as_str_or_default(&self.kex_alg),
             as_str_or_default(&self.host_key_alg),
-            as_str_or_default(&self.host_key),
+            as_str_or_default(&self.hassh_algorithms),
+            as_str_or_default(&self.hassh),
+            as_str_or_default(&self.hassh_server_algorithms),
+            as_str_or_default(&self.hassh_server),
+            as_str_or_default(&self.client_shka),
+            as_str_or_default(&self.server_shka),
         )
     }
 }
