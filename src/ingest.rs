@@ -111,7 +111,7 @@ fn as_str_or_default(s: &str) -> &str {
     }
 }
 
-fn vec_to_string_or_default<T>(vec: &Vec<T>) -> String
+fn vec_to_string_or_default<T>(vec: &[T]) -> String
 where
     T: Display,
 {
