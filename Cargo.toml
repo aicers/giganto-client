@@ -8,7 +8,9 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 bincode = "1"
-chrono = { version = "0.4", default-features = false, features = ["serde"] }
+chrono = { version = ">=0.4.35", default_features = false, features = [
+  "serde",
+] }
 num_enum = "0.7"
 quinn = "0.10"
 semver = "1"
