@@ -190,11 +190,11 @@ mod tests {
 
     #[test]
     fn convert_time_format() {
-        use chrono::NaiveDateTime;
+        use chrono::DateTime;
 
         let sec = 2;
         let nsec = 123;
-        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
+        let ndt = DateTime::from_timestamp(sec, nsec).unwrap();
 
         let ts = ndt.timestamp_nanos_opt().unwrap();
         let ts_fmt = super::convert_time_format(ts);
@@ -202,7 +202,7 @@ mod tests {
 
         let sec = -1;
         let nsec = 0;
-        let ndt = NaiveDateTime::from_timestamp_opt(sec, nsec).unwrap();
+        let ndt = DateTime::from_timestamp(sec, nsec).unwrap();
 
         let ts = ndt.timestamp_nanos_opt().unwrap();
         let ts_fmt = super::convert_time_format(ts);
