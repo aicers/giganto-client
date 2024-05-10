@@ -10,7 +10,7 @@ for data processing and high-speed data transfer.
 
 ## License
 
-Copyright 2022-2023 ClumL Inc.
+Copyright 2022-2024 ClumL Inc.
 
 Licensed under [Apache License, Version 2.0][apache-license] (the "License");
 you may not use this crate except in compliance with the License.

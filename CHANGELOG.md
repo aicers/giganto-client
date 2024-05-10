@@ -7,10 +7,19 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `CloseStreamError` to `PublishError` to handle error types added by `quinn`
+  version update.
+
 ### Changed
 
 - Modified tls event structure to store: `client_cipher_suites`, `client_extensions`,
 `extensions`
+- Bump dependencies.
+  - Update quinn to version 0.11.
+  - Update rustls to version 0.23.
+  - Update rcgen to version 0.13.
 
 ## [0.16.0] - 2024-02-16
 
