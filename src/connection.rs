@@ -59,7 +59,7 @@ pub async fn client_handshake(
 
     match frame::recv_handshake(&mut recv, &mut buf).await {
         Err(RecvError::ReadError(error)) => match error {
-            quinn::ReadExactError::FinishedEarly => {
+            quinn::ReadExactError::FinishedEarly(_) => {
                 return Err(HandshakeError::ConnectionClosed);
             }
             quinn::ReadExactError::ReadError(e) => {
@@ -114,7 +114,7 @@ pub async fn server_handshake(
     send_handshake(&mut send, &resp_data)
         .await
         .map_err(HandshakeError::from)?;
-    send.finish().await.ok();
+    send.finish().ok();
     Err(HandshakeError::IncompatibleProtocol(
         protocol_version.to_string(),
     ))

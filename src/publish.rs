@@ -26,6 +26,8 @@ pub enum PublishError {
     ReadError(#[from] quinn::ReadError),
     #[error("Cannot send a publish message")]
     WriteError(#[from] quinn::WriteError),
+    #[error("Cannot call close request redundantly")]
+    CloseStreamError(#[from] quinn::ClosedStream),
     #[error("Cannot serialize/deserialize a publish message")]
     SerialDeserialFailure(#[from] bincode::Error),
     #[error("Message is too large, so type casting failed")]
@@ -43,7 +45,7 @@ impl From<frame::RecvError> for PublishError {
         match e {
             RecvError::DeserializationFailure(e) => PublishError::SerialDeserialFailure(e),
             RecvError::ReadError(e) => match e {
-                quinn::ReadExactError::FinishedEarly => PublishError::ConnectionClosed,
+                quinn::ReadExactError::FinishedEarly(_) => PublishError::ConnectionClosed,
                 quinn::ReadExactError::ReadError(e) => PublishError::ReadError(e),
             },
             RecvError::MessageTooLarge(_) => PublishError::MessageTooLarge,
@@ -344,6 +346,7 @@ pub async fn receive_raw_events(
 /// * `PublishError::ReadError`: if the extract request ack data could not be read
 /// * `PublishError::SerialDeserialFailure`: if the extract request ack data could not be deserialized
 /// * `PublishError::RequestFail`: if the extract request ack data is Err
+/// * `PublishError::CloseStreamError`: if duplicate stream close calls are requested.
 pub async fn pcap_extract_request(
     conn: &Connection,
     pcap_filter: &PcapFilter,
@@ -356,7 +359,7 @@ pub async fn pcap_extract_request(
 
     // send pacp extract request to piglet
     send_raw(&mut send, &filter).await?;
-    send.finish().await?;
+    send.finish()?;
 
     // receive pcap extract acknowledge from piglet
     recv_ack_response(&mut recv).await?;
