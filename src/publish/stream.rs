@@ -12,6 +12,7 @@ pub const STREAM_REQUEST_ALL_SOURCE: &str = "all";
 pub enum NodeType {
     Hog = 0,
     Crusher = 1,
+    UrlCollector = 2,
 }
 
 impl NodeType {
@@ -20,6 +21,7 @@ impl NodeType {
         match self {
             NodeType::Hog => "hog",
             NodeType::Crusher => "crusher",
+            NodeType::UrlCollector => "url_collector",
         }
     }
 }
@@ -121,5 +123,12 @@ pub struct RequestCrusherStream {
     pub id: String,
     pub src_ip: Option<IpAddr>,
     pub dst_ip: Option<IpAddr>,
+    pub source: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[allow(clippy::module_name_repetitions)]
+pub struct RequestUrlCollectorStream {
+    pub start: i64,
     pub source: Option<String>,
 }
