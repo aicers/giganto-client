@@ -168,6 +168,8 @@ mod tests {
             resp_bytes: 295,
             orig_pkts: 397,
             resp_pkts: 511,
+            orig_l2_bytes: 21515,
+            resp_l2_bytes: 27889,
         };
         super::send_event(&mut channel.client.send, 9999, conn.clone())
             .await

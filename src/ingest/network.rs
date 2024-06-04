@@ -24,13 +24,15 @@ pub struct Conn {
     pub resp_bytes: u64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
+    pub orig_l2_bytes: u64,
+    pub resp_l2_bytes: u64,
 }
 
 impl Display for Conn {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -42,7 +44,9 @@ impl Display for Conn {
             self.orig_bytes,
             self.resp_bytes,
             self.orig_pkts,
-            self.resp_pkts
+            self.resp_pkts,
+            self.orig_l2_bytes,
+            self.resp_l2_bytes
         )
     }
 }

@@ -550,6 +550,8 @@ mod tests {
             resp_bytes: 295,
             orig_pkts: 397,
             resp_pkts: 511,
+            orig_l2_bytes: 21515,
+            resp_l2_bytes: 27889,
         };
         let raw_event = bincode::serialize(&conn).unwrap();
         let source = bincode::serialize(&"hello").unwrap();
@@ -706,6 +708,8 @@ mod tests {
             resp_bytes: 295,
             orig_pkts: 397,
             resp_pkts: 511,
+            orig_l2_bytes: 21515,
+            resp_l2_bytes: 27889,
         };
         let raw_event = bincode::serialize(&conn).unwrap();
 
