@@ -1,7 +1,8 @@
+use std::net::IpAddr;
+
 use anyhow::{anyhow, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
 
 pub const STREAM_REQUEST_ALL_SOURCE: &str = "all";
 

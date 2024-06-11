@@ -10,6 +10,12 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Modified connection log structure to include total L2 frame length of a session.
+- Apply rustfmt's option `group_imports=StdExternalCrate`.
+  - Modify the code with the command `cargo fmt -- --config group_imports=StdExternalCrate`.
+    This command must be applied automatically or manually before all future pull
+    requests are submitted.
+  - Add `--config group_imports=StdExternalCrate` to the CI process like:
+    - `cargo fmt -- --check --config group_imports=StdExternalCrate`
 
 ## [0.17.0] - 2024-05-16
 

@@ -1,10 +1,12 @@
-use crate::{ingest::to_string_or_empty, publish::range::ResponseRangeData};
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use std::{
     fmt::{Display, Formatter},
     net::IpAddr,
 };
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::{ingest::to_string_or_empty, publish::range::ResponseRangeData};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Log {
