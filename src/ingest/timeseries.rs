@@ -1,7 +1,9 @@
-use crate::publish::range::ResponseRangeData;
+use std::fmt::{Display, Formatter};
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
+
+use crate::publish::range::ResponseRangeData;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PeriodicTimeSeries {

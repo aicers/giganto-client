@@ -9,10 +9,11 @@ pub mod timeseries;
 
 use std::fmt::Display;
 
-use crate::frame::{self, RecvError, SendError};
-use crate::RawEventKind;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
+
+use crate::frame::{self, RecvError, SendError};
+use crate::RawEventKind;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Packet {
@@ -136,8 +137,9 @@ fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
 mod tests {
     #[tokio::test]
     async fn ingest_send_recv() {
-        use crate::test::{channel, TOKEN};
         use std::{mem, net::IpAddr};
+
+        use crate::test::{channel, TOKEN};
 
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;

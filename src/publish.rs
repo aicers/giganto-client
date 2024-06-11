@@ -3,16 +3,18 @@
 pub mod range;
 pub mod stream;
 
+use std::{mem, net::IpAddr};
+
+use anyhow::Result;
+use quinn::{Connection, ConnectionError, RecvStream, SendStream};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use thiserror::Error;
+
 use self::{
     range::{MessageCode, ResponseRangeData},
     stream::{NodeType, RequestStreamRecord},
 };
 use crate::frame::{self, recv_bytes, recv_raw, send_bytes, send_raw, RecvError, SendError};
-use anyhow::Result;
-use quinn::{Connection, ConnectionError, RecvStream, SendStream};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use std::{mem, net::IpAddr};
-use thiserror::Error;
 
 /// The error type for a publish failure.
 #[allow(clippy::module_name_repetitions)]
@@ -448,12 +450,13 @@ pub async fn recv_ack_response(recv: &mut RecvStream) -> Result<(), PublishError
 
 #[cfg(test)]
 mod tests {
+    use std::net::IpAddr;
+    use std::str::FromStr;
+
     use crate::frame;
     use crate::ingest::network::Conn;
     use crate::publish::{recv_ack_response, PublishError};
     use crate::test::{channel, TOKEN};
-    use std::net::IpAddr;
-    use std::str::FromStr;
 
     #[tokio::test]
     async fn publish_send_recv() {

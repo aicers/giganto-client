@@ -1,9 +1,10 @@
 //! Functions and errors for handling messages.
 
-use crate::frame::{self, recv_handshake, send_handshake, RecvError, SendError};
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use semver::{Version, VersionReq};
 use thiserror::Error;
+
+use crate::frame::{self, recv_handshake, send_handshake, RecvError, SendError};
 
 /// The error type for a handshake failure.
 #[derive(Debug, Error)]
