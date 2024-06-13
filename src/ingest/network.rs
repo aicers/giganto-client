@@ -891,3 +891,58 @@ impl ResponseRangeData for Nfs {
         bincode::serialize(&Some((timestamp, source, &nfs_csv.as_bytes())))
     }
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Bootp {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub last_time: i64,
+    pub op: u8,
+    pub htype: u8,
+    pub hops: u8,
+    pub xid: u32,
+    pub ciaddr: IpAddr,
+    pub yiaddr: IpAddr,
+    pub siaddr: IpAddr,
+    pub giaddr: IpAddr,
+    pub chwaddr: Vec<u8>,
+    pub sname: String,
+    pub file: String,
+}
+
+impl Display for Bootp {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+            self.op,
+            self.htype,
+            self.hops,
+            self.xid,
+            self.ciaddr,
+            self.yiaddr,
+            self.siaddr,
+            self.giaddr,
+            vec_to_string_or_default(&self.chwaddr),
+            as_str_or_default(&self.sname),
+            as_str_or_default(&self.file),
+        )
+    }
+}
+
+impl ResponseRangeData for Bootp {
+    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+        let bootp_csv = format!("{}\t{source}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, source, &bootp_csv.as_bytes())))
+    }
+}

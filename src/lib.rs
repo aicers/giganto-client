@@ -62,6 +62,7 @@ pub enum RawEventKind {
     Smb = 18,
     Nfs = 19,
     SecuLog = 20,
+    Bootp = 21,
 
     // Windows Sysmon
     ProcessCreate = 31,
