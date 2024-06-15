@@ -7,6 +7,10 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `Bootp` and `Dhcp` event structures.
+
 ### Changed
 
 - Modified connection log structure to include total L2 frame length of a session.
