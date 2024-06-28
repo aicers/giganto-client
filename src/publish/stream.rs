@@ -1,34 +1,46 @@
 use std::net::IpAddr;
 
-use anyhow::{anyhow, Result};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString};
 
 pub const STREAM_REQUEST_ALL_SOURCE: &str = "all";
 
 #[derive(
-    Clone, Copy, Debug, Deserialize, Eq, IntoPrimitive, PartialEq, Serialize, TryFromPrimitive,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    IntoPrimitive,
+    PartialEq,
+    Serialize,
+    TryFromPrimitive,
+    EnumString,
+    Display,
 )]
 #[repr(u8)]
+#[strum(serialize_all = "snake_case")]
 pub enum NodeType {
     Hog = 0,
     Crusher = 1,
 }
 
-impl NodeType {
-    #[must_use]
-    pub fn convert_to_str(&self) -> &str {
-        match self {
-            NodeType::Hog => "hog",
-            NodeType::Crusher => "crusher",
-        }
-    }
-}
-
 #[derive(
-    Clone, Copy, Debug, Deserialize, Eq, IntoPrimitive, PartialEq, Serialize, TryFromPrimitive,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    IntoPrimitive,
+    PartialEq,
+    Serialize,
+    TryFromPrimitive,
+    EnumString,
+    Display,
 )]
 #[repr(u32)]
+#[strum(serialize_all = "snake_case")]
 pub enum RequestStreamRecord {
     Conn = 0,
     Dns = 1,
@@ -39,6 +51,7 @@ pub enum RequestStreamRecord {
     Ntlm = 6,
     Kerberos = 7,
     Ssh = 8,
+    #[strum(serialize = "dce rpc")]
     DceRpc = 9,
     Pcap = 10,
     Ftp = 11,
@@ -47,65 +60,12 @@ pub enum RequestStreamRecord {
     Tls = 14,
     Smb = 15,
     Nfs = 16,
+    Bootp = 17,
+    Dhcp = 18,
 
     // sysmon
     FileCreate = 31,
     FileDelete = 32,
-}
-
-impl RequestStreamRecord {
-    #[must_use]
-    pub fn convert_to_str(&self) -> &str {
-        match self {
-            RequestStreamRecord::Conn => "conn",
-            RequestStreamRecord::Dns => "dns",
-            RequestStreamRecord::Rdp => "rdp",
-            RequestStreamRecord::Http => "http",
-            RequestStreamRecord::Log => "log",
-            RequestStreamRecord::Smtp => "smtp",
-            RequestStreamRecord::Ntlm => "ntlm",
-            RequestStreamRecord::Kerberos => "kerberos",
-            RequestStreamRecord::Ssh => "ssh",
-            RequestStreamRecord::DceRpc => "dce rpc",
-            RequestStreamRecord::Pcap => "pcap",
-            RequestStreamRecord::Ftp => "ftp",
-            RequestStreamRecord::Mqtt => "mqtt",
-            RequestStreamRecord::Ldap => "ldap",
-            RequestStreamRecord::Tls => "tls",
-            RequestStreamRecord::Smb => "smb",
-            RequestStreamRecord::Nfs => "nfs",
-            RequestStreamRecord::FileCreate => "file_create",
-            RequestStreamRecord::FileDelete => "file_delete",
-        }
-    }
-
-    /// # Errors
-    ///
-    /// Will return `Err` if `input` does not match protocol string
-    pub fn convert_type(input: &str) -> Result<RequestStreamRecord> {
-        match input {
-            "conn" => Ok(RequestStreamRecord::Conn),
-            "dns" => Ok(RequestStreamRecord::Dns),
-            "rdp" => Ok(RequestStreamRecord::Rdp),
-            "http" => Ok(RequestStreamRecord::Http),
-            "log" => Ok(RequestStreamRecord::Log),
-            "smtp" => Ok(RequestStreamRecord::Smtp),
-            "ntlm" => Ok(RequestStreamRecord::Ntlm),
-            "kerberos" => Ok(RequestStreamRecord::Kerberos),
-            "ssh" => Ok(RequestStreamRecord::Ssh),
-            "dce rpc" => Ok(RequestStreamRecord::DceRpc),
-            "pcap" => Ok(RequestStreamRecord::Pcap),
-            "ftp" => Ok(RequestStreamRecord::Ftp),
-            "mqtt" => Ok(RequestStreamRecord::Mqtt),
-            "ldap" => Ok(RequestStreamRecord::Ldap),
-            "tls" => Ok(RequestStreamRecord::Tls),
-            "smb" => Ok(RequestStreamRecord::Smb),
-            "nfs" => Ok(RequestStreamRecord::Nfs),
-            "file_create" => Ok(RequestStreamRecord::FileCreate),
-            "file_delete" => Ok(RequestStreamRecord::FileDelete),
-            _ => Err(anyhow!("invalid protocol type")),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -123,4 +83,143 @@ pub struct RequestCrusherStream {
     pub src_ip: Option<IpAddr>,
     pub dst_ip: Option<IpAddr>,
     pub source: Option<String>,
+}
+
+#[test]
+fn test_node_stream_record_type() {
+    use std::str::FromStr;
+
+    // test NodeType
+    assert_eq!(NodeType::Hog, NodeType::from_str("hog").unwrap());
+    assert_eq!(NodeType::Hog.to_string(), "hog");
+
+    assert_eq!(NodeType::Crusher, NodeType::from_str("crusher").unwrap());
+    assert_eq!(NodeType::Crusher.to_string(), "crusher");
+
+    // test RequestStreamRecord
+    assert_eq!(
+        RequestStreamRecord::Conn,
+        RequestStreamRecord::from_str("conn").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Conn.to_string(), "conn");
+
+    assert_eq!(
+        RequestStreamRecord::Dns,
+        RequestStreamRecord::from_str("dns").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Dns.to_string(), "dns");
+
+    assert_eq!(
+        RequestStreamRecord::Rdp,
+        RequestStreamRecord::from_str("rdp").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Rdp.to_string(), "rdp");
+
+    assert_eq!(
+        RequestStreamRecord::Http,
+        RequestStreamRecord::from_str("http").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Http.to_string(), "http");
+
+    assert_eq!(
+        RequestStreamRecord::Log,
+        RequestStreamRecord::from_str("log").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Log.to_string(), "log");
+
+    assert_eq!(
+        RequestStreamRecord::Smtp,
+        RequestStreamRecord::from_str("smtp").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Smtp.to_string(), "smtp");
+
+    assert_eq!(
+        RequestStreamRecord::Ntlm,
+        RequestStreamRecord::from_str("ntlm").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Ntlm.to_string(), "ntlm");
+
+    assert_eq!(
+        RequestStreamRecord::Kerberos,
+        RequestStreamRecord::from_str("kerberos").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Kerberos.to_string(), "kerberos");
+
+    assert_eq!(
+        RequestStreamRecord::Ssh,
+        RequestStreamRecord::from_str("ssh").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Ssh.to_string(), "ssh");
+
+    assert_eq!(
+        RequestStreamRecord::DceRpc,
+        RequestStreamRecord::from_str("dce rpc").unwrap(),
+    );
+    assert_eq!(RequestStreamRecord::DceRpc.to_string(), "dce rpc");
+
+    assert_eq!(
+        RequestStreamRecord::Pcap,
+        RequestStreamRecord::from_str("pcap").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Pcap.to_string(), "pcap");
+
+    assert_eq!(
+        RequestStreamRecord::Ftp,
+        RequestStreamRecord::from_str("ftp").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Ftp.to_string(), "ftp");
+
+    assert_eq!(
+        RequestStreamRecord::Mqtt,
+        RequestStreamRecord::from_str("mqtt").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Mqtt.to_string(), "mqtt");
+
+    assert_eq!(
+        RequestStreamRecord::Ldap,
+        RequestStreamRecord::from_str("ldap").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Ldap.to_string(), "ldap");
+
+    assert_eq!(
+        RequestStreamRecord::Tls,
+        RequestStreamRecord::from_str("tls").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Tls.to_string(), "tls");
+
+    assert_eq!(
+        RequestStreamRecord::Smb,
+        RequestStreamRecord::from_str("smb").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Smb.to_string(), "smb");
+
+    assert_eq!(
+        RequestStreamRecord::Nfs,
+        RequestStreamRecord::from_str("nfs").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Nfs.to_string(), "nfs");
+
+    assert_eq!(
+        RequestStreamRecord::Bootp,
+        RequestStreamRecord::from_str("bootp").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Bootp.to_string(), "bootp");
+
+    assert_eq!(
+        RequestStreamRecord::Dhcp,
+        RequestStreamRecord::from_str("dhcp").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Dhcp.to_string(), "dhcp");
+
+    assert_eq!(
+        RequestStreamRecord::FileCreate,
+        RequestStreamRecord::from_str("file_create").unwrap(),
+    );
+    assert_eq!(RequestStreamRecord::FileCreate.to_string(), "file_create");
+
+    assert_eq!(
+        RequestStreamRecord::FileDelete,
+        RequestStreamRecord::from_str("file_delete").unwrap(),
+    );
+    assert_eq!(RequestStreamRecord::FileDelete.to_string(), "file_delete");
 }

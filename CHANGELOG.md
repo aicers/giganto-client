@@ -5,6 +5,18 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added `Bootp`,`Dhcp` to the `RequestStreamRecord` to handle requests for new
+  protocols in the giganto publish module.
+
+### Changed
+
+- Fixed `RequestStreamRecord`, `NodeType` to use strum crate for type change
+  between string and enum.
+
 ## [0.18.0] - 2024-06-27
 
 ### Added
@@ -257,6 +269,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.18.0...main
 [0.18.0]: https://github.com/aicers/giganto-client/compare/0.17.0...0.18.0
 [0.17.0]: https://github.com/aicers/giganto-client/compare/0.16.0...0.17.0
 [0.16.0]: https://github.com/aicers/giganto-client/compare/0.15.2...0.16.0
