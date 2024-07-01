@@ -908,7 +908,7 @@ pub struct Bootp {
     pub yiaddr: IpAddr,
     pub siaddr: IpAddr,
     pub giaddr: IpAddr,
-    pub chwaddr: Vec<u8>,
+    pub chaddr: Vec<u8>,
     pub sname: String,
     pub file: String,
 }
@@ -932,7 +932,7 @@ impl Display for Bootp {
             self.yiaddr,
             self.siaddr,
             self.giaddr,
-            vec_to_string_or_default(&self.chwaddr),
+            vec_to_string_or_default(&self.chaddr),
             as_str_or_default(&self.sname),
             as_str_or_default(&self.file),
         )
