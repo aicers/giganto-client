@@ -2,7 +2,8 @@ use std::net::IpAddr;
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
-use strum_macros::{Display, EnumString};
+use strum::IntoEnumIterator;
+use strum_macros::{Display, EnumIter, EnumString};
 
 pub const STREAM_REQUEST_ALL_SOURCE: &str = "all";
 
@@ -38,6 +39,7 @@ pub enum NodeType {
     TryFromPrimitive,
     EnumString,
     Display,
+    EnumIter,
 )]
 #[repr(u32)]
 #[strum(serialize_all = "snake_case")]
@@ -66,6 +68,13 @@ pub enum RequestStreamRecord {
     // sysmon
     FileCreate = 31,
     FileDelete = 32,
+}
+
+impl RequestStreamRecord {
+    #[must_use]
+    pub fn all() -> Vec<RequestStreamRecord> {
+        RequestStreamRecord::iter().collect()
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -222,4 +231,11 @@ fn test_node_stream_record_type() {
         RequestStreamRecord::from_str("file_delete").unwrap(),
     );
     assert_eq!(RequestStreamRecord::FileDelete.to_string(), "file_delete");
+
+    let all_request_stream_records = RequestStreamRecord::all();
+    assert_eq!(all_request_stream_records.len(), 21);
+    assert_eq!(
+        all_request_stream_records.first(),
+        Some(&RequestStreamRecord::Conn)
+    );
 }
