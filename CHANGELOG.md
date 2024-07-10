@@ -10,6 +10,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Rename the `chwaddr` field in `Bootp` to `chaddr`.
+- Add `all()` function to `RequestStreamRecord` for automatic vector generation
+  of all variants.
 
 ## [0.19.0] - 2024-06-28
 
