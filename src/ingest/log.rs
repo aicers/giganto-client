@@ -29,6 +29,7 @@ impl ResponseRangeData for Log {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct OpLog {
+    pub sensor: String,
     pub agent_name: String,
     pub log_level: OpLogLevel,
     pub contents: String,
@@ -46,8 +47,8 @@ impl Display for OpLog {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{:?}\t{}",
-            self.agent_name, self.log_level, self.contents
+            "{}\t{}\t{:?}\t{}",
+            self.sensor, self.agent_name, self.log_level, self.contents
         )
     }
 }
