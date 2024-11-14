@@ -11,6 +11,15 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Added `sensor` field to `OpLog`.
 
+### Changed
+
+- Changed `source` to `sensor`, which is a more appropriate term for the name of
+  the device that sensed/captured the raw event.
+
+### Removed
+
+- Removed the unused `source` within the `Netflow5`, `Netflow9`, `SecuLog`.
+
 ## [0.20.0] - 2024-09-10
 
 ### Changed
@@ -57,7 +66,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Modified tls event structure to store: `client_cipher_suites`, `client_extensions`,
-`extensions`
+  `extensions`
 - Bump dependencies.
   - Update quinn to version 0.11.
   - Update rustls to version 0.23.

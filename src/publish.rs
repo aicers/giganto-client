@@ -68,7 +68,7 @@ impl From<frame::SendError> for PublishError {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PcapFilter {
     pub timestamp: i64,
-    pub source: String,
+    pub sensor: String,
     pub src_addr: IpAddr,
     pub src_port: u16,
     pub dst_addr: IpAddr,
@@ -160,8 +160,8 @@ pub async fn send_range_data<T>(
 where
     T: ResponseRangeData,
 {
-    let send_buf = if let Some((val, timestamp, source)) = data {
-        val.response_data(timestamp, source)
+    let send_buf = if let Some((val, timestamp, sensor)) = data {
+        val.response_data(timestamp, sensor)
             .map_err(PublishError::SerialDeserialFailure)?
     } else {
         T::response_done().map_err(PublishError::SerialDeserialFailure)?
@@ -170,7 +170,7 @@ where
     Ok(())
 }
 
-/// Sends the data `Vec<(timestamp, source, raw_events)>` from giganto's publish module.
+/// Sends the data `Vec<(timestamp, sensor, raw_events)>` from giganto's publish module.
 ///
 /// # Errors
 ///
@@ -263,8 +263,8 @@ pub async fn receive_crusher_data(recv: &mut RecvStream) -> Result<(Vec<u8>, i64
     Ok((record_buf, timestamp))
 }
 
-/// Receives the timestamp/source/record data from giganto's publish module.
-/// If you want to receive record data, source  and timestamp separately,
+/// Receives the timestamp/sensor/record data from giganto's publish module.
+/// If you want to receive record data, sensor and timestamp separately,
 /// use `publish::receive_crusher_data`
 ///
 /// # Errors
@@ -274,15 +274,15 @@ pub async fn receive_hog_data(recv: &mut RecvStream) -> Result<Vec<u8>, PublishE
     let mut ts_buf = [0; std::mem::size_of::<u64>()];
     frame::recv_bytes(recv, &mut ts_buf).await?;
 
-    let mut source_buf = Vec::new();
-    frame::recv_raw(recv, &mut source_buf).await?;
+    let mut sensor_buf = Vec::new();
+    frame::recv_raw(recv, &mut sensor_buf).await?;
 
     let mut record_buf = Vec::new();
     frame::recv_raw(recv, &mut record_buf).await?;
 
     let mut result_buf: Vec<u8> = Vec::new();
     result_buf.extend_from_slice(&ts_buf);
-    result_buf.extend_from_slice(&source_buf);
+    result_buf.extend_from_slice(&sensor_buf);
     result_buf.extend_from_slice(&record_buf);
 
     Ok(result_buf)
@@ -324,7 +324,7 @@ where
     Ok(frame::recv::<T>(recv, &mut buf).await?)
 }
 
-/// Receives the data `Vec<(timestamp, source, raw_events)>` sent from giganto's publish module.
+/// Receives the data `Vec<(timestamp, sensor, raw_events)>` sent from giganto's publish module.
 ///
 /// # Errors
 ///
@@ -353,7 +353,7 @@ pub async fn pcap_extract_request(
     conn: &Connection,
     pcap_filter: &PcapFilter,
 ) -> Result<(), PublishError> {
-    //open target(piglet) source's channel
+    //open target(piglet) sensor's channel
     let (mut send, mut recv) = conn.open_bi().await?;
 
     // serialize pcapfilter data
@@ -473,7 +473,7 @@ mod tests {
         // send/recv hog stream request
         let hog_req = RequestHogStream {
             start: 0,
-            source: Some(vec!["hello".to_string(), "world".to_string()]),
+            sensor: Some(vec!["hello".to_string(), "world".to_string()]),
         };
         super::send_stream_request(
             &mut channel.client.send,
@@ -498,7 +498,7 @@ mod tests {
             id: "1".to_string(),
             src_ip: Some("192.168.4.76".parse::<IpAddr>().unwrap()),
             dst_ip: Some("31.3.245.133".parse::<IpAddr>().unwrap()),
-            source: Some("world".to_string()),
+            sensor: Some("world".to_string()),
         };
         super::send_stream_request(
             &mut channel.client.send,
@@ -557,13 +557,13 @@ mod tests {
             resp_l2_bytes: 27889,
         };
         let raw_event = bincode::serialize(&conn).unwrap();
-        let source = bincode::serialize(&"hello").unwrap();
+        let sensor = bincode::serialize(&"hello").unwrap();
         let raw_len = u32::try_from(raw_event.len()).unwrap().to_le_bytes();
-        let source_len = u32::try_from(source.len()).unwrap().to_le_bytes();
+        let sensor_len = u32::try_from(sensor.len()).unwrap().to_le_bytes();
         let mut send_buf: Vec<u8> = Vec::new();
         send_buf.extend_from_slice(&6666_i64.to_le_bytes());
-        send_buf.extend_from_slice(&source_len);
-        send_buf.extend_from_slice(&source);
+        send_buf.extend_from_slice(&sensor_len);
+        send_buf.extend_from_slice(&sensor);
         send_buf.extend_from_slice(&raw_len);
         send_buf.extend_from_slice(&raw_event);
         send_bytes(&mut channel.server.send, &mut send_buf)
@@ -575,7 +575,7 @@ mod tests {
             .unwrap();
         let mut result_buf: Vec<u8> = Vec::new();
         result_buf.extend_from_slice(&6666_i64.to_le_bytes());
-        result_buf.extend_from_slice(&source);
+        result_buf.extend_from_slice(&sensor);
         result_buf.extend_from_slice(&raw_event);
         assert_eq!(data, result_buf);
 
@@ -595,7 +595,7 @@ mod tests {
 
         // send/recv range data request
         let req_range = super::range::RequestRange {
-            source: String::from("world"),
+            sensor: String::from("world"),
             kind: String::from("conn"),
             start: 11111,
             end: 22222,
@@ -633,7 +633,7 @@ mod tests {
         // send/recv pcap extract request
         let p_filter = PcapFilter {
             timestamp: 12345,
-            source: "hello".to_string(),
+            sensor: "hello".to_string(),
             src_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             src_port: 46378,
             dst_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
@@ -716,16 +716,16 @@ mod tests {
         };
         let raw_event = bincode::serialize(&conn).unwrap();
 
-        let source1 = "src 1";
-        let source2 = "src 2";
+        let sensor1 = "src 1";
+        let sensor2 = "src 2";
 
         let ts1 = 1i64;
         let ts2 = 2i64;
         let ts3 = 3i64;
 
         let req_msg = vec![
-            (source1.to_string(), vec![ts1, ts2]),
-            (source2.to_string(), vec![ts1, ts3]),
+            (sensor1.to_string(), vec![ts1, ts2]),
+            (sensor2.to_string(), vec![ts1, ts3]),
         ];
         let req_raw = RequestRawData {
             kind: "conn".to_string(),
@@ -748,14 +748,14 @@ mod tests {
         );
 
         // example data from giganto
-        let value_with_sources = vec![
-            (ts1, source1.to_string(), raw_event.clone()),
-            (ts1, source1.to_string(), raw_event.clone()),
-            (ts1, source2.to_string(), raw_event.clone()),
-            (ts1, source2.to_string(), raw_event),
+        let value_with_sensors = vec![
+            (ts1, sensor1.to_string(), raw_event.clone()),
+            (ts1, sensor1.to_string(), raw_event.clone()),
+            (ts1, sensor2.to_string(), raw_event.clone()),
+            (ts1, sensor2.to_string(), raw_event),
         ];
 
-        send_raw_events(&mut channel.server.send, value_with_sources)
+        send_raw_events(&mut channel.server.send, value_with_sensors)
             .await
             .unwrap();
 

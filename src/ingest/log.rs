@@ -21,8 +21,8 @@ impl Display for Log {
 }
 
 impl ResponseRangeData for Log {
-    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize(&Some((timestamp, source, &self.log)))
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&Some((timestamp, sensor, &self.log)))
     }
 }
 
@@ -56,7 +56,6 @@ impl Display for OpLog {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct SecuLog {
-    pub source: String,
     pub kind: String,
     pub log_type: String,
     pub version: String,
@@ -72,8 +71,7 @@ impl Display for SecuLog {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.source,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.kind,
             self.log_type,
             self.version,

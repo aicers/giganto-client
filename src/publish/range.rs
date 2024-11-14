@@ -6,7 +6,7 @@ pub trait ResponseRangeData {
     /// # Errors
     ///
     /// Will return `Err` if response data's serialize faild.
-    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error>;
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error>;
 
     /// # Errors
     ///
@@ -29,7 +29,7 @@ pub enum MessageCode {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct RequestRange {
-    pub source: String, //network event: certification name, time_series: sampling policy id
+    pub sensor: String, //network event: certification name, time_series: sampling policy id
     pub kind: String,
     pub start: i64,
     pub end: i64,

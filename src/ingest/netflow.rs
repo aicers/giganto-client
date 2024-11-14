@@ -10,7 +10,6 @@ use crate::{ingest::convert_time_format, publish::range::ResponseRangeData};
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct Netflow5 {
-    pub source: String,
     pub src_addr: IpAddr,
     pub dst_addr: IpAddr,
     pub next_hop: IpAddr,
@@ -40,8 +39,7 @@ impl Display for Netflow5 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}",
-            self.source,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:x}\t{}",
             self.src_addr,
             self.dst_addr,
             self.next_hop,
@@ -70,16 +68,15 @@ impl Display for Netflow5 {
 }
 
 impl ResponseRangeData for Netflow5 {
-    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let csv = format!("{}\t{self}", convert_time_format(timestamp));
-        bincode::serialize(&Some((timestamp, source, &csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &csv.as_bytes())))
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct Netflow9 {
-    pub source: String,
     pub sequence: u32,
     pub source_id: u32,
     pub template_id: u16,
@@ -95,8 +92,7 @@ impl Display for Netflow9 {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.source,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.sequence,
             self.source_id,
             self.template_id,
@@ -111,9 +107,9 @@ impl Display for Netflow9 {
 }
 
 impl ResponseRangeData for Netflow9 {
-    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let csv = format!("{}\t{self}", convert_time_format(timestamp));
-        bincode::serialize(&Some((timestamp, source, &csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &csv.as_bytes())))
     }
 }
 
