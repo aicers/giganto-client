@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
 
-pub const STREAM_REQUEST_ALL_SOURCE: &str = "all";
+pub const STREAM_REQUEST_ALL_SENSOR: &str = "all";
 
 #[derive(
     Clone,
@@ -81,7 +81,7 @@ impl RequestStreamRecord {
 #[allow(clippy::module_name_repetitions)]
 pub struct RequestHogStream {
     pub start: i64,
-    pub source: Option<Vec<String>>,
+    pub sensor: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -91,7 +91,7 @@ pub struct RequestCrusherStream {
     pub id: String,
     pub src_ip: Option<IpAddr>,
     pub dst_ip: Option<IpAddr>,
-    pub source: Option<String>,
+    pub sensor: Option<String>,
 }
 
 #[test]

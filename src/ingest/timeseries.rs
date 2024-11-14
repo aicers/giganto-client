@@ -18,8 +18,8 @@ impl Display for PeriodicTimeSeries {
 }
 
 impl ResponseRangeData for PeriodicTimeSeries {
-    fn response_data(&self, timestamp: i64, source: &str) -> Result<Vec<u8>, bincode::Error> {
-        bincode::serialize(&Some((timestamp, source, &self.data)))
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&Some((timestamp, sensor, &self.data)))
     }
     fn response_done() -> Result<Vec<u8>, bincode::Error> {
         bincode::serialize::<Option<(i64, String, Vec<f64>)>>(&None)
