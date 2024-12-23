@@ -132,12 +132,12 @@ mod tests {
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
-        let (mut server, client) = (channel.server, channel.client);
+        let (server, client) = (channel.server, channel.client);
 
         let handle =
             tokio::spawn(async move { super::client_handshake(&client.conn, VERSION_STD).await });
 
-        super::server_handshake(&mut server.conn, VERSION_REQ)
+        super::server_handshake(&server.conn, VERSION_REQ)
             .await
             .unwrap();
 
@@ -152,12 +152,12 @@ mod tests {
 
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
-        let (mut server, client) = (channel.server, channel.client);
+        let (server, client) = (channel.server, channel.client);
 
         let handle =
             tokio::spawn(async move { super::client_handshake(&client.conn, VERSION_STD).await });
 
-        let res = super::server_handshake(&mut server.conn, VERSION_REQ).await;
+        let res = super::server_handshake(&server.conn, VERSION_REQ).await;
         assert!(res.is_err());
 
         let res = tokio::join!(handle).0.unwrap();

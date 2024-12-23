@@ -95,6 +95,7 @@ pub struct RequestCrusherStream {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn test_node_stream_record_type() {
     use std::str::FromStr;
 
