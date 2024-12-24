@@ -46,9 +46,8 @@ pub(crate) async fn channel() -> Channel {
                     if e.kind() == tokio::io::ErrorKind::AddrInUse {
                         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
                         continue;
-                    } else {
-                        panic!("{}", e);
                     }
+                    panic!("{}", e);
                 }
             };
         }

@@ -459,6 +459,7 @@ mod tests {
     use crate::test::{channel, TOKEN};
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn publish_send_recv() {
         use crate::frame::send_bytes;
         use crate::publish::{
@@ -566,7 +567,7 @@ mod tests {
         send_buf.extend_from_slice(&sensor);
         send_buf.extend_from_slice(&raw_len);
         send_buf.extend_from_slice(&raw_event);
-        send_bytes(&mut channel.server.send, &mut send_buf)
+        send_bytes(&mut channel.server.send, &send_buf)
             .await
             .unwrap();
 

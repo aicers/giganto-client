@@ -149,8 +149,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut buf = Vec::new();
-        buf.resize(mem::size_of::<u32>(), 0);
+        let mut buf = vec![0; mem::size_of::<u32>()];
         super::receive_record_header(&mut channel.server.recv, &mut buf)
             .await
             .unwrap();
