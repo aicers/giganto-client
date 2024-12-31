@@ -5,6 +5,24 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Renamed identifiers referencing the semi-supervised engine. Updated identifers
+  include:
+  - `NodeType::SemiSupervised`
+  - `RequestSemiSupervisedStream`
+  - `send_semi_supervised_stream_start_message`
+  - `receive_semi_supervised_stream_start_message`
+  - `receive_semi_supervised_data`
+- Renamed `Crusher` to `TimeSeriesGenerator` for consistency with the
+  review-database. Updated identifers include:
+  - `NodeType::TimeSeriesGenerator`
+  - `RequestTimeSeriesGeneratorStream`
+  - `receive_time_series_generator_stream_start_message`
+  - `receive_time_series_generator_data`
+
 ## [0.21.0] - 2024-11-21
 
 ### Added
@@ -292,6 +310,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.21.0...main
 [0.21.0]: https://github.com/aicers/giganto-client/compare/0.20.0...0.21.0
 [0.20.0]: https://github.com/aicers/giganto-client/compare/0.19.0...0.20.0
 [0.19.0]: https://github.com/aicers/giganto-client/compare/0.18.0...0.19.0
