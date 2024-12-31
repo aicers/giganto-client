@@ -23,8 +23,8 @@ pub const STREAM_REQUEST_ALL_SENSOR: &str = "all";
 #[repr(u8)]
 #[strum(serialize_all = "snake_case")]
 pub enum NodeType {
-    Hog = 0,
-    Crusher = 1,
+    SemiSupervised = 0,
+    TimeSeriesGenerator = 1,
 }
 
 #[derive(
@@ -79,14 +79,14 @@ impl RequestStreamRecord {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
-pub struct RequestHogStream {
+pub struct RequestSemiSupervisedStream {
     pub start: i64,
     pub sensor: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
-pub struct RequestCrusherStream {
+pub struct RequestTimeSeriesGeneratorStream {
     pub start: i64,
     pub id: String,
     pub src_ip: Option<IpAddr>,
@@ -100,11 +100,20 @@ fn test_node_stream_record_type() {
     use std::str::FromStr;
 
     // test NodeType
-    assert_eq!(NodeType::Hog, NodeType::from_str("hog").unwrap());
-    assert_eq!(NodeType::Hog.to_string(), "hog");
+    assert_eq!(
+        NodeType::SemiSupervised,
+        NodeType::from_str("semi_supervised").unwrap()
+    );
+    assert_eq!(NodeType::SemiSupervised.to_string(), "semi_supervised");
 
-    assert_eq!(NodeType::Crusher, NodeType::from_str("crusher").unwrap());
-    assert_eq!(NodeType::Crusher.to_string(), "crusher");
+    assert_eq!(
+        NodeType::TimeSeriesGenerator,
+        NodeType::from_str("time_series_generator").unwrap()
+    );
+    assert_eq!(
+        NodeType::TimeSeriesGenerator.to_string(),
+        "time_series_generator"
+    );
 
     // test RequestStreamRecord
     assert_eq!(
