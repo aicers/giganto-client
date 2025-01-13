@@ -51,7 +51,7 @@ where
 /// # Errors
 ///
 /// * `RecvError::ReadError`: if the message could not be read
-pub async fn recv_raw<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Result<(), RecvError> {
+pub async fn recv_raw(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Result<(), RecvError> {
     let mut len_buf = [0; mem::size_of::<u32>()];
     recv.read_exact(&mut len_buf).await?;
     let len = u32::from_le_bytes(len_buf) as usize;
@@ -69,7 +69,7 @@ pub async fn recv_raw<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Result<()
 ///
 /// * `RecvError::ReadError`: if the message could not be read
 /// * `RecvError::MessageTooLarge`: if the message is too large
-pub async fn recv_handshake<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Result<(), RecvError> {
+pub async fn recv_handshake(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Result<(), RecvError> {
     let mut len_buf = [0; mem::size_of::<u64>()];
     recv.read_exact(&mut len_buf).await?;
     let len: usize = u64::from_le_bytes(len_buf).try_into()?;
@@ -83,7 +83,7 @@ pub async fn recv_handshake<'b>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Res
 /// # Errors
 ///
 /// * `RecvError::ReadError`: if the message could not be read
-pub async fn recv_bytes<'b>(recv: &mut RecvStream, buf: &mut [u8]) -> Result<(), RecvError> {
+pub async fn recv_bytes(recv: &mut RecvStream, buf: &mut [u8]) -> Result<(), RecvError> {
     recv.read_exact(buf).await?;
     Ok(())
 }
