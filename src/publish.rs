@@ -107,12 +107,12 @@ where
     Ok(())
 }
 
-/// Sends the hog stream start message from giganto's publish module.
+/// Sends the semi-supervised stream start message from giganto's publish module.
 ///
 /// # Errors
 ///
-/// * `PublishError::WriteError`: if the hog's stream start message could not be written
-pub async fn send_hog_stream_start_message(
+/// * `PublishError::WriteError`: if the semi-supervised's stream start message could not be written
+pub async fn send_semi_supervised_stream_start_message(
     send: &mut SendStream,
     start_msg: RequestStreamRecord,
 ) -> Result<(), PublishError> {
@@ -214,13 +214,14 @@ pub async fn receive_stream_request(
     Ok((node_type, record_type, buf))
 }
 
-/// Receives the hog stream start message sent from giganto's publish module.
+/// Receives the semi-supervised stream start message sent from giganto's publish module.
 ///
 /// # Errors
 ///
-/// * `PublishError::ReadError`: if the hog's stream start data could not be read
-/// * `PublishError::InvalidMessageType`: if the hog's stream start data could not be converted to valid type
-pub async fn receive_hog_stream_start_message(
+/// * `PublishError::ReadError`: if the semi-supervised's stream start data could not be read
+/// * `PublishError::InvalidMessageType`: if the semi-supervised's stream start data could not be
+///   converted to valid type
+pub async fn receive_semi_supervised_stream_start_message(
     recv: &mut RecvStream,
 ) -> Result<RequestStreamRecord, PublishError> {
     let mut record_buf = [0; mem::size_of::<u32>()];
@@ -230,13 +231,14 @@ pub async fn receive_hog_stream_start_message(
     Ok(start_msg)
 }
 
-/// Receives the crusher stream start message sent from giganto's publish module.
+/// Receives the time series generator stream start message sent from giganto's publish module.
 ///
 /// # Errors
 ///
-/// * `PublishError::ReadError`: if the crusher's stream start data could not be read
-/// * `PublishError::InvalidMessageData`: if the crusher's stream start data could not be converted to valid data
-pub async fn receive_crusher_stream_start_message(
+/// * `PublishError::ReadError`: if the time-series-generator's stream start data could not be read
+/// * `PublishError::InvalidMessageData`: if the time-series-generator's stream start data could not
+///   be converted to valid data
+pub async fn receive_time_series_generator_stream_start_message(
     recv: &mut RecvStream,
 ) -> Result<u32, PublishError> {
     let mut buf = Vec::new();
@@ -253,7 +255,9 @@ pub async fn receive_crusher_stream_start_message(
 /// # Errors
 ///
 /// * `PublishError::ReadError`: if the stream record data could not be read
-pub async fn receive_crusher_data(recv: &mut RecvStream) -> Result<(Vec<u8>, i64), PublishError> {
+pub async fn receive_time_series_generator_data(
+    recv: &mut RecvStream,
+) -> Result<(Vec<u8>, i64), PublishError> {
     let mut ts_buf = [0; std::mem::size_of::<u64>()];
     frame::recv_bytes(recv, &mut ts_buf).await?;
     let timestamp = i64::from_le_bytes(ts_buf);
@@ -265,12 +269,12 @@ pub async fn receive_crusher_data(recv: &mut RecvStream) -> Result<(Vec<u8>, i64
 
 /// Receives the timestamp/sensor/record data from giganto's publish module.
 /// If you want to receive record data, sensor and timestamp separately,
-/// use `publish::receive_crusher_data`
+/// use `publish::receive_time_series_generator_data`
 ///
 /// # Errors
 ///
 /// * `PublishError::ReadError`: if the stream record data could not be read
-pub async fn receive_hog_data(recv: &mut RecvStream) -> Result<Vec<u8>, PublishError> {
+pub async fn receive_semi_supervised_data(recv: &mut RecvStream) -> Result<Vec<u8>, PublishError> {
     let mut ts_buf = [0; std::mem::size_of::<u64>()];
     frame::recv_bytes(recv, &mut ts_buf).await?;
 
@@ -338,7 +342,7 @@ pub async fn receive_raw_events(
     Ok(frame::recv::<Vec<(i64, String, Vec<u8>)>>(recv, &mut buf).await?)
 }
 
-/// Sends pcap extract request to piglet and  Receives request acknowledge from piglet
+/// Sends pcap extract request to sensor and receives request acknowledge from sensor
 ///
 /// # Errors
 ///
@@ -353,22 +357,22 @@ pub async fn pcap_extract_request(
     conn: &Connection,
     pcap_filter: &PcapFilter,
 ) -> Result<(), PublishError> {
-    //open target(piglet) sensor's channel
+    //open target sensor's channel
     let (mut send, mut recv) = conn.open_bi().await?;
 
     // serialize pcapfilter data
     let filter = bincode::serialize(pcap_filter)?;
 
-    // send pacp extract request to piglet
+    // send pacp extract request to sensor
     send_raw(&mut send, &filter).await?;
     send.finish()?;
 
-    // receive pcap extract acknowledge from piglet
+    // receive pcap extract acknowledge from sensor
     recv_ack_response(&mut recv).await?;
     Ok(())
 }
 
-/// Receives pcap extract request from giganto and  Sends request acknowledge to giganto
+/// Receives pcap extract request from giganto and sends request acknowledge to giganto
 ///
 /// # Errors
 ///
@@ -464,23 +468,23 @@ mod tests {
         use crate::frame::send_bytes;
         use crate::publish::{
             range::ResponseRangeData,
-            stream::{RequestCrusherStream, RequestHogStream},
+            stream::{RequestSemiSupervisedStream, RequestTimeSeriesGeneratorStream},
             PcapFilter,
         };
 
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        // send/recv hog stream request
-        let hog_req = RequestHogStream {
+        // send/recv semi-supervised stream request
+        let semi_supervised_req = RequestSemiSupervisedStream {
             start: 0,
             sensor: Some(vec!["hello".to_string(), "world".to_string()]),
         };
         super::send_stream_request(
             &mut channel.client.send,
             super::stream::RequestStreamRecord::Conn,
-            super::stream::NodeType::Hog,
-            hog_req.clone(),
+            super::stream::NodeType::SemiSupervised,
+            semi_supervised_req.clone(),
         )
         .await
         .unwrap();
@@ -489,12 +493,12 @@ mod tests {
             super::receive_stream_request(&mut channel.server.recv)
                 .await
                 .unwrap();
-        assert_eq!(node_type, super::stream::NodeType::Hog);
+        assert_eq!(node_type, super::stream::NodeType::SemiSupervised);
         assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
-        assert_eq!(req_data, bincode::serialize(&hog_req).unwrap());
+        assert_eq!(req_data, bincode::serialize(&semi_supervised_req).unwrap());
 
-        // send/recv crusher stream request
-        let crusher_req = RequestCrusherStream {
+        // send/recv time series generator stream request
+        let time_series_generator_req = RequestTimeSeriesGeneratorStream {
             start: 0,
             id: "1".to_string(),
             src_ip: Some("192.168.4.76".parse::<IpAddr>().unwrap()),
@@ -504,8 +508,8 @@ mod tests {
         super::send_stream_request(
             &mut channel.client.send,
             super::stream::RequestStreamRecord::Conn,
-            super::stream::NodeType::Crusher,
-            crusher_req.clone(),
+            super::stream::NodeType::TimeSeriesGenerator,
+            time_series_generator_req.clone(),
         )
         .await
         .unwrap();
@@ -514,33 +518,39 @@ mod tests {
             super::receive_stream_request(&mut channel.server.recv)
                 .await
                 .unwrap();
-        assert_eq!(node_type, super::stream::NodeType::Crusher);
+        assert_eq!(node_type, super::stream::NodeType::TimeSeriesGenerator);
         assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
-        assert_eq!(req_data, bincode::serialize(&crusher_req).unwrap());
+        assert_eq!(
+            req_data,
+            bincode::serialize(&time_series_generator_req).unwrap()
+        );
 
-        // send/recv hog stream start message
-        super::send_hog_stream_start_message(
+        // send/recv semi_supervised stream start message
+        super::send_semi_supervised_stream_start_message(
             &mut channel.server.send,
             super::stream::RequestStreamRecord::Conn,
         )
         .await
         .unwrap();
-        let req_record = super::receive_hog_stream_start_message(&mut channel.client.recv)
-            .await
-            .unwrap();
+        let req_record =
+            super::receive_semi_supervised_stream_start_message(&mut channel.client.recv)
+                .await
+                .unwrap();
         assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
 
-        // recv crusher stream start message
+        // recv time series generator stream start message
         frame::send_raw(&mut channel.server.send, "1".to_string().as_bytes())
             .await
             .unwrap();
 
-        let policy_id = super::receive_crusher_stream_start_message(&mut channel.client.recv)
-            .await
-            .unwrap();
+        let policy_id =
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
+                .await
+                .unwrap();
         assert_eq!(policy_id, "1".parse::<u32>().unwrap());
 
-        // send/recv stream data with hog (hog's stream data use send_bytes function)
+        // send/recv stream data with semi-supervised (semi-supervised's stream data use send_bytes
+        // function)
         let conn = Conn {
             orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             orig_port: 46378,
@@ -571,7 +581,7 @@ mod tests {
             .await
             .unwrap();
 
-        let data = super::receive_hog_data(&mut channel.client.recv)
+        let data = super::receive_semi_supervised_data(&mut channel.client.recv)
             .await
             .unwrap();
         let mut result_buf: Vec<u8> = Vec::new();
@@ -580,7 +590,7 @@ mod tests {
         result_buf.extend_from_slice(&raw_event);
         assert_eq!(data, result_buf);
 
-        // recv crusher stream data with crusher
+        // recv time series generator stream data
         frame::send_bytes(&mut channel.server.send, &7777_i64.to_le_bytes())
             .await
             .unwrap();
@@ -588,7 +598,7 @@ mod tests {
         frame::send(&mut channel.server.send, &mut data_buf, conn.clone())
             .await
             .unwrap();
-        let (data, timestamp) = super::receive_crusher_data(&mut channel.client.recv)
+        let (data, timestamp) = super::receive_time_series_generator_data(&mut channel.client.recv)
             .await
             .unwrap();
         assert_eq!(timestamp, 7777);
