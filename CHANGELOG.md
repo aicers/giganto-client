@@ -9,19 +9,20 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Renamed identifiers referencing the semi-supervised engine. Updated identifers
-  include:
+- Renamed `Crusher` to `TimeSeriesGenerator` for consistency with the
+  review-database. Updated identifers include:
+  - `NodeType::Crusher` to `NodeType::TimeSeriesGenerator`
+  - `RequestCrusherStream` to `RequestTimeSeriesGeneratorStream`
+  - `receive_crusher_stream_start_message` to
+    `receive_time_series_generator_stream_start_message`
+  - `receive_crusher_data` to `receive_time_series_generator_data`
+- Similarly, identifiers referencing the Semi-supervised Engine has been
+  renamed. Below are the result of the changes:
   - `NodeType::SemiSupervised`
   - `RequestSemiSupervisedStream`
   - `send_semi_supervised_stream_start_message`
   - `receive_semi_supervised_stream_start_message`
   - `receive_semi_supervised_data`
-- Renamed `Crusher` to `TimeSeriesGenerator` for consistency with the
-  review-database. Updated identifers include:
-  - `NodeType::TimeSeriesGenerator`
-  - `RequestTimeSeriesGeneratorStream`
-  - `receive_time_series_generator_stream_start_message`
-  - `receive_time_series_generator_data`
 
 ## [0.21.0] - 2024-11-21
 
