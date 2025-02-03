@@ -16,7 +16,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
   - `receive_crusher_stream_start_message` to
     `receive_time_series_generator_stream_start_message`
   - `receive_crusher_data` to `receive_time_series_generator_data`
-- Similarly, identifiers referencing the Semi-supervised Engine has been
+- Similarly, identifiers referencing semi-supervised learning engines have been
   renamed. Below are the result of the changes:
   - `NodeType::SemiSupervised`
   - `RequestSemiSupervisedStream`
