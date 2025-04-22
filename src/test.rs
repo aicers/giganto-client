@@ -5,22 +5,22 @@ use std::sync::LazyLock;
 use quinn::{Connection, RecvStream, SendStream};
 use tokio::sync::Mutex;
 
-pub(super) struct Channel {
-    pub(super) server: Endpoint,
-    pub(super) client: Endpoint,
+pub(crate) struct Channel {
+    pub(crate) server: Endpoint,
+    pub(crate) client: Endpoint,
 }
 
-pub(super) struct Endpoint {
-    pub(super) conn: Connection,
-    pub(super) send: SendStream,
-    pub(super) recv: RecvStream,
+pub(crate) struct Endpoint {
+    pub(crate) conn: Connection,
+    pub(crate) send: SendStream,
+    pub(crate) recv: RecvStream,
 }
 
-pub(super) static TOKEN: LazyLock<Mutex<u32>> = LazyLock::new(|| Mutex::new(0));
+pub(crate) static TOKEN: LazyLock<Mutex<u32>> = LazyLock::new(|| Mutex::new(0));
 
 /// Creates a bidirectional channel, returning server's send and receive and
 /// client's send and receive streams.
-pub(super) async fn channel() -> Channel {
+pub(crate) async fn channel() -> Channel {
     use std::{
         net::{IpAddr, Ipv6Addr, SocketAddr},
         sync::Arc,
