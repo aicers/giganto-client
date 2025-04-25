@@ -5,6 +5,13 @@ file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic
 Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- Removed `init_tracing` function to align giganto-client's responsibilities as
+  a communication library.
+
 ## [0.22.0] - 2025-01-24
 
 ### Changed
@@ -311,6 +318,7 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.22.0...main
 [0.22.0]: https://github.com/aicers/giganto-client/compare/0.21.0...0.22.0
 [0.21.0]: https://github.com/aicers/giganto-client/compare/0.20.0...0.21.0
 [0.20.0]: https://github.com/aicers/giganto-client/compare/0.19.0...0.20.0
