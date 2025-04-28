@@ -2,8 +2,8 @@
 
 This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
-this project adheres to [Semantic
-Versioning](https://semver.org/spec/v2.0.0.html).
+this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.22.0] - 2025-01-24
 
@@ -67,11 +67,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Modified connection log structure to include total L2 frame length of a session.
+- Modified connection log structure to include total L2 frame length of a
+  session.
 - Apply rustfmt's option `group_imports=StdExternalCrate`.
-  - Modify the code with the command `cargo fmt -- --config group_imports=StdExternalCrate`.
-    This command must be applied automatically or manually before all future pull
-    requests are submitted.
+  - Modify the code with the command
+    `cargo fmt -- --config group_imports=StdExternalCrate`. This command must be
+    applied automatically or manually before all future pull requests are
+    submitted.
   - Add `--config group_imports=StdExternalCrate` to the CI process like:
     - `cargo fmt -- --check --config group_imports=StdExternalCrate`
 
@@ -79,13 +81,13 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Added `CloseStreamError` to `PublishError` to handle error types added by `quinn`
-  version update.
+- Added `CloseStreamError` to `PublishError` to handle error types added by
+  `quinn` version update.
 
 ### Changed
 
-- Modified tls event structure to store: `client_cipher_suites`, `client_extensions`,
-  `extensions`
+- Modified tls event structure to store: `client_cipher_suites`,
+  `client_extensions`, `extensions`
 - Bump dependencies.
   - Update quinn to version 0.11.
   - Update rustls to version 0.23.
@@ -124,7 +126,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Removed REconvergeKindType
 - Moved and renamed crate::ingest::RecordType to crate::RawEventKind
-- Renamed RecordType::Oplog to RawEventKind::OpLog and RecordType::Seculog to RawEventKind::SecuLog
+- Renamed RecordType::Oplog to RawEventKind::OpLog and RecordType::Seculog to
+  RawEventKind::SecuLog
 
 ## [0.13.2] - 2023-11-01
 
@@ -178,8 +181,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Add `core` field to statistics structure. `core` value can be used to
-  identify statistics value from different core of same machine.
+- Add `core` field to statistics structure. `core` value can be used to identify
+  statistics value from different core of same machine.
 
 ## [0.11.0] - 2023-07-04
 
@@ -196,22 +199,22 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Changed the type of Tls::proto field from u16 to u8. (The `proto` field type for
-  all protocols in `giganto-client` must be `u8`).
+- Changed the type of Tls::proto field from u16 to u8. (The `proto` field type
+  for all protocols in `giganto-client` must be `u8`).
 
 ## [0.9.0] - 2023-06-20
 
 ### Changed
 
-- Change `Log`, `PeriodicTimeSeries` to `ReqRange` in enum `MessageCode`.
-  So when requesting data for analysis, `REconverge` use `MessageCode::ReqRange`.
+- Change `Log`, `PeriodicTimeSeries` to `ReqRange` in enum `MessageCode`. So
+  when requesting data for analysis, `REconverge` use `MessageCode::ReqRange`.
 - Change the data types that `send_raw_events` and `receive_raw_events` send and
   receive to `Vec<(i64, String, Vec<u8>)>`.
 
 ### Removed
 
-- remove `RequestTimeSeriesRange` structure. So when requesting data for analysis,
-  `REconverge` use `RequestRange` structure.
+- remove `RequestTimeSeriesRange` structure. So when requesting data for
+  analysis, `REconverge` use `RequestRange` structure.
 
 ## [0.8.0] - 2023-06-12
 
@@ -221,7 +224,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Expanded `struct Http` in the ingest protocol to improve file handling capabilities:
+- Expanded `struct Http` in the ingest protocol to improve file handling
+  capabilities:
   - `orig_filenames: Vec<String>`
   - `orig_mime_types: Vec<String>`
   - `resp_filenames: Vec<String>`
@@ -231,8 +235,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Removed
 
 - Moved `send_ack_timestamp` to Giganto.
-- remove `RequestTimeSeriesRange` structure. So when requesting data for analysis,
-  `REconverge` use `RequestRange` structure.
+- remove `RequestTimeSeriesRange` structure. So when requesting data for
+  analysis, `REconverge` use `RequestRange` structure.
 
 ## [0.7.0] - 2023-05-12
 
@@ -264,8 +268,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Added the source field to the CSV record of an FTP connection. This
-  additional field makes the FTP record compatible with other CSV records.
+- Added the source field to the CSV record of an FTP connection. This additional
+  field makes the FTP record compatible with other CSV records.
 - `RecordType` became `#[non_exhaustive]`. This change ensures that adding new
   record types in the future will not result in breaking changes for downstream
   users who have exhaustively matched on the `RecordType` variants. This makes
@@ -292,8 +296,8 @@ Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Add source values to log and time series response data message.
-- Move the network event's TSV-formatted source value to the response
-  data message.
+- Move the network event's TSV-formatted source value to the response data
+  message.
 
 ## [0.2.0] - 2023-03-29
 
