@@ -7,6 +7,14 @@ this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed `referrer` to `referer` throughout the codebase for consistency with
+  the HTTP header field name.
+  - This change aligns with the official HTTP standard and ensures accurate
+    representation of the `Referer` header in variable names, struct fields, and
+    documentation.
+
 ### Removed
 
 - Removed `init_tracing` function to align giganto-client's responsibilities as
