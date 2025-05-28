@@ -2,8 +2,7 @@
 
 This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
-this project adheres to
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
@@ -11,9 +10,8 @@ this project adheres to
 
 - Renamed `referrer` to `referer` throughout the codebase for consistency with
   the HTTP header field name.
-  - This change aligns with the official HTTP standard and ensures accurate
-    representation of the `Referer` header in variable names, struct fields, and
-    documentation.
+  - This change aligns with the official HTTP standard and ensures accurate representation
+    of the `Referer` header in variable names, struct fields, and documentation.
 
 ### Removed
 
@@ -28,8 +26,7 @@ this project adheres to
   review-database. Updated identifers include:
   - `NodeType::Crusher` to `NodeType::TimeSeriesGenerator`
   - `RequestCrusherStream` to `RequestTimeSeriesGeneratorStream`
-  - `receive_crusher_stream_start_message` to
-    `receive_time_series_generator_stream_start_message`
+  - `receive_crusher_stream_start_message` to `receive_time_series_generator_stream_start_message`
   - `receive_crusher_data` to `receive_time_series_generator_data`
 - Similarly, identifiers referencing semi-supervised learning engines have been
   renamed. Below are the result of the changes:
@@ -82,13 +79,11 @@ this project adheres to
 
 ### Changed
 
-- Modified connection log structure to include total L2 frame length of a
-  session.
+- Modified connection log structure to include total L2 frame length of a session.
 - Apply rustfmt's option `group_imports=StdExternalCrate`.
-  - Modify the code with the command
-    `cargo fmt -- --config group_imports=StdExternalCrate`. This command must be
-    applied automatically or manually before all future pull requests are
-    submitted.
+  - Modify the code with the command `cargo fmt -- --config group_imports=StdExternalCrate`.
+    This command must be applied automatically or manually before all future
+    pull requests are submitted.
   - Add `--config group_imports=StdExternalCrate` to the CI process like:
     - `cargo fmt -- --check --config group_imports=StdExternalCrate`
 
@@ -141,8 +136,7 @@ this project adheres to
 
 - Removed REconvergeKindType
 - Moved and renamed crate::ingest::RecordType to crate::RawEventKind
-- Renamed RecordType::Oplog to RawEventKind::OpLog and RecordType::Seculog to
-  RawEventKind::SecuLog
+- Renamed RecordType::Oplog to RawEventKind::OpLog and RecordType::Seculog to RawEventKind::SecuLog
 
 ## [0.13.2] - 2023-11-01
 
@@ -179,8 +173,7 @@ this project adheres to
 ### Security
 
 - The default features of chrono that might cause SEGFAULT were turned off. See
-  [RUSTSEC-2020-0071](https://rustsec.org/advisories/RUSTSEC-2020-0071) for
-  details.
+  [RUSTSEC-2020-0071](https://rustsec.org/advisories/RUSTSEC-2020-0071) for details.
 
 ### Changed
 
@@ -228,8 +221,8 @@ this project adheres to
 
 ### Removed
 
-- remove `RequestTimeSeriesRange` structure. So when requesting data for
-  analysis, `REconverge` use `RequestRange` structure.
+- remove `RequestTimeSeriesRange` structure. So when requesting data for analysis,
+  `REconverge` use `RequestRange` structure.
 
 ## [0.8.0] - 2023-06-12
 
@@ -239,8 +232,7 @@ this project adheres to
 
 ### Changed
 
-- Expanded `struct Http` in the ingest protocol to improve file handling
-  capabilities:
+- Expanded `struct Http` in the ingest protocol to improve file handling capabilities:
   - `orig_filenames: Vec<String>`
   - `orig_mime_types: Vec<String>`
   - `resp_filenames: Vec<String>`
@@ -250,8 +242,8 @@ this project adheres to
 ### Removed
 
 - Moved `send_ack_timestamp` to Giganto.
-- remove `RequestTimeSeriesRange` structure. So when requesting data for
-  analysis, `REconverge` use `RequestRange` structure.
+- remove `RequestTimeSeriesRange` structure. So when requesting data for analysis,
+  `REconverge` use `RequestRange` structure.
 
 ## [0.7.0] - 2023-05-12
 
@@ -311,8 +303,7 @@ this project adheres to
 ### Changed
 
 - Add source values to log and time series response data message.
-- Move the network event's TSV-formatted source value to the response data
-  message.
+- Move the network event's TSV-formatted source value to the response data message.
 
 ## [0.2.0] - 2023-03-29
 
