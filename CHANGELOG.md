@@ -8,6 +8,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Renamed `last_time` to `end_time` in all network event structures for improved
+  clarity and consistency with future `start_time` field.
+  - This change affects all network event structures: `Dns`, `Http`, `Rdp`, `Smtp`,
+    `Ntlm`, `Kerberos`, `Ssh`, `DceRpc`, `Ftp`, `Mqtt`, `Ldap`, `Tls`, `Smb`, `Nfs`,
+    `Bootp`, `Dhcp`, and `PcapFilter`.
+- Renamed `duration` to `end_time` in the `Conn` raw event structure for consistency
+  with other network event structures.
 - Renamed `referrer` to `referer` throughout the codebase for consistency with
   the HTTP header field name.
   - This change aligns with the official HTTP standard and ensures accurate representation
