@@ -163,7 +163,7 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            duration: 1000,
+            end_time: 1000,
             service: "-".to_string(),
             orig_bytes: 77,
             resp_bytes: 295,
