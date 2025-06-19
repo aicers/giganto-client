@@ -59,6 +59,7 @@ pub enum RawEventKind {
     Bootp = 21,
     Dhcp = 22,
     Radius = 23,
+    MalformedDns = 24,
 
     // Windows Sysmon
     ProcessCreate = 31,

@@ -232,6 +232,39 @@ impl ResponseRangeData for Dns {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MalformedDns {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub last_time: i64,
+}
+
+impl Display for MalformedDns {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.last_time),
+        )
+    }
+}
+
+impl ResponseRangeData for MalformedDns {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        let dns_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, sensor, &dns_csv.as_bytes())))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Http {
     pub orig_addr: IpAddr,
     pub orig_port: u16,
