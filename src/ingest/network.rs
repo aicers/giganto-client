@@ -646,6 +646,7 @@ impl Display for Ftp {
             as_str_or_default(&self.file),
             self.file_size,
             as_str_or_default(&self.file_id),
+            vec_to_string_or_default(&self.commands),
         )
     }
 }
