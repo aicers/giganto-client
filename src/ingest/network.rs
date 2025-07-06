@@ -607,7 +607,7 @@ impl Display for Ftp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -626,6 +626,7 @@ impl Display for Ftp {
             as_str_or_default(&self.file),
             self.file_size,
             as_str_or_default(&self.file_id),
+            vec_to_string_or_default(&self.commands),
         )
     }
 }
