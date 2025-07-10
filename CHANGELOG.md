@@ -4,6 +4,23 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added `start_time` field to all protocol event structures for improved
+  temporal tracking and consistency.
+  - This affects all network event structures: `Conn`, `Dns`, `Http`, `Rdp`,
+    `Smtp`, `Ntlm`, `Kerberos`, `Ssh`, `DceRpc`, `Ftp`, `Mqtt`, `Ldap`, `Tls`,
+    `Smb`, `Nfs`, `Bootp`, and `Dhcp`.
+  - The `start_time` field represents the session start time and complements
+    the existing `end_time` field.
+
+### Changed
+
+- Renamed `timestamp` field to `start_time` in `PcapFilter` struct for consistency
+  with protocol event structures.
+
 ## [0.23.0] - 2025-06-18
 
 ### Changed
