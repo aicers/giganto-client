@@ -20,6 +20,7 @@ pub struct Conn {
     pub resp_port: u16,
     pub proto: u8,
     pub conn_state: String,
+    pub start_time: i64,
     pub end_time: i64,
     pub service: String,
     pub orig_bytes: u64,
@@ -34,13 +35,14 @@ impl Display for Conn {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             as_str_or_default(&self.conn_state),
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.service,
             self.orig_bytes,
@@ -69,6 +71,7 @@ pub struct Dns {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub query: String,
     pub answer: Vec<String>,
@@ -187,12 +190,13 @@ impl Display for Dns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.query,
             vec_to_string_or_default(&self.answer),
@@ -225,6 +229,7 @@ pub struct Http {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub method: String,
     pub host: String,
@@ -252,12 +257,13 @@ impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.method),
             as_str_or_default(&self.host),
@@ -298,6 +304,7 @@ pub struct Rdp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub cookie: String,
 }
@@ -306,12 +313,13 @@ impl Display for Rdp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.cookie
         )
@@ -333,6 +341,7 @@ pub struct Smtp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub mailfrom: String,
     pub date: String,
@@ -347,12 +356,13 @@ impl Display for Smtp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.mailfrom),
             as_str_or_default(&self.date),
@@ -380,6 +390,7 @@ pub struct Ntlm {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub protocol: String,
     pub username: String,
@@ -392,12 +403,13 @@ impl Display for Ntlm {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.protocol),
             as_str_or_default(&self.username),
@@ -423,6 +435,7 @@ pub struct Kerberos {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub client_time: i64,
     pub server_time: i64,
@@ -439,12 +452,13 @@ impl Display for Kerberos {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             convert_time_format(self.client_time),
             convert_time_format(self.server_time),
@@ -474,6 +488,7 @@ pub struct Ssh {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub client: String,
     pub server: String,
@@ -494,12 +509,13 @@ impl Display for Ssh {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.client),
             as_str_or_default(&self.server),
@@ -533,6 +549,7 @@ pub struct DceRpc {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub rtt: i64,
     pub named_pipe: String,
@@ -544,12 +561,13 @@ impl Display for DceRpc {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.rtt,
             as_str_or_default(&self.named_pipe),
@@ -574,6 +592,7 @@ pub struct Ftp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub user: String,
     pub password: String,
@@ -593,12 +612,13 @@ impl Display for Ftp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.user),
             as_str_or_default(&self.password),
@@ -631,6 +651,7 @@ pub struct Mqtt {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub protocol: String,
     pub version: u8,
@@ -644,12 +665,13 @@ impl Display for Mqtt {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.protocol),
             self.version,
@@ -676,6 +698,7 @@ pub struct Ldap {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub message_id: u32,
     pub version: u8,
@@ -690,12 +713,13 @@ impl Display for Ldap {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.message_id,
             self.version,
@@ -723,6 +747,7 @@ pub struct Tls {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub server_name: String,
     pub alpn_protocol: String,
@@ -751,12 +776,13 @@ impl Display for Tls {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             as_str_or_default(&self.server_name),
             as_str_or_default(&self.alpn_protocol),
@@ -798,6 +824,7 @@ pub struct Smb {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub command: u8,
     pub path: String,
@@ -816,12 +843,13 @@ impl Display for Smb {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.command,
             as_str_or_default(&self.path),
@@ -854,6 +882,7 @@ pub struct Nfs {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub read_files: Vec<String>,
     pub write_files: Vec<String>,
@@ -863,12 +892,13 @@ impl Display for Nfs {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             vec_to_string_or_default(&self.read_files),
             vec_to_string_or_default(&self.write_files),
@@ -891,6 +921,7 @@ pub struct Bootp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub op: u8,
     pub htype: u8,
@@ -909,12 +940,13 @@ impl Display for Bootp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.op,
             self.htype,
@@ -946,6 +978,7 @@ pub struct Dhcp {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub msg_type: u8,
     pub ciaddr: IpAddr,
@@ -971,12 +1004,13 @@ impl Display for Dhcp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.msg_type,
             self.ciaddr,
@@ -1022,6 +1056,7 @@ mod tests {
             resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
             resp_port: 443,
             proto: 6,
+            start_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
             end_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
             method: "GET".to_string(),
             host: "example.com".to_string(),
@@ -1051,17 +1086,17 @@ mod tests {
         let fields: Vec<&str> = csv_output.split('\t').collect();
 
         // Verify that user_agent field has special characters replaced with spaces
-        assert_eq!(fields[11], "Mozilla/5.0 (Windows NT 10.0; Win64)");
+        assert_eq!(fields[12], "Mozilla/5.0 (Windows NT 10.0; Win64)");
 
-        // Verify that post_body field has special characters replaced with spaces (at index 26)
-        assert_eq!(fields[24], "username=test password=secret submit=true ");
+        // Verify that post_body field has special characters replaced with spaces (at index 25)
+        assert_eq!(fields[25], "username=test password=secret submit=true ");
 
         // Verify the sanitized fields don't contain special characters
-        assert!(!fields[11].contains('\n'));
-        assert!(!fields[11].contains('\r'));
-        assert!(!fields[24].contains('\t'));
-        assert!(!fields[24].contains('\n'));
-        assert!(!fields[24].contains('\r'));
+        assert!(!fields[12].contains('\n'));
+        assert!(!fields[12].contains('\r'));
+        assert!(!fields[25].contains('\t'));
+        assert!(!fields[25].contains('\n'));
+        assert!(!fields[25].contains('\r'));
     }
 
     #[test]
@@ -1072,6 +1107,7 @@ mod tests {
             resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
             resp_port: 443,
             proto: 6,
+            start_time: 1_000_000_000_000_000_000,
             end_time: 1_000_000_000_000_000_000,
             method: String::new(),
             host: String::new(),
@@ -1099,8 +1135,8 @@ mod tests {
 
         // Verify that empty user_agent and post_body fields are converted to "-"
         let fields: Vec<&str> = csv_output.split('\t').collect();
-        // user_agent is at index 11, post_body is at index 26
-        assert_eq!(fields[11], "-");
-        assert_eq!(fields[24], "-");
+        // user_agent is at index 12, post_body is at index 25
+        assert_eq!(fields[12], "-");
+        assert_eq!(fields[25], "-");
     }
 }
