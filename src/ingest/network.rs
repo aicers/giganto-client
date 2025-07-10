@@ -596,16 +596,6 @@ pub struct Ftp {
     pub end_time: i64,
     pub user: String,
     pub password: String,
-    pub command: String,
-    pub reply_code: String,
-    pub reply_msg: String,
-    pub data_passive: bool,
-    pub data_orig_addr: IpAddr,
-    pub data_resp_addr: IpAddr,
-    pub data_resp_port: u16,
-    pub file: String,
-    pub file_size: u64,
-    pub file_id: String,
     pub commands: Vec<FtpCommand>,
 }
 
@@ -614,6 +604,7 @@ pub struct FtpCommand {
     pub command: String,
     pub reply_code: String,
     pub reply_msg: String,
+    pub data_passive: bool,
     pub data_orig_addr: IpAddr,
     pub data_resp_addr: IpAddr,
     pub data_resp_port: u16,
@@ -626,7 +617,7 @@ impl Display for Ftp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -636,16 +627,6 @@ impl Display for Ftp {
             convert_time_format(self.end_time),
             as_str_or_default(&self.user),
             as_str_or_default(&self.password),
-            as_str_or_default(&self.command),
-            as_str_or_default(&self.reply_code),
-            as_str_or_default(&self.reply_msg),
-            self.data_passive,
-            self.data_orig_addr,
-            self.data_resp_addr,
-            self.data_resp_port,
-            as_str_or_default(&self.file),
-            self.file_size,
-            as_str_or_default(&self.file_id),
             vec_to_string_or_default(&self.commands),
         )
     }
@@ -655,10 +636,11 @@ impl Display for FtpCommand {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "({},{},{},{},{},{},{},{},{})",
+            "({},{},{},{},{},{},{},{},{},{})",
             as_str_or_default(&self.command),
             as_str_or_default(&self.reply_code),
             as_str_or_default(&self.reply_msg),
+            self.data_passive,
             self.data_orig_addr,
             self.data_resp_addr,
             self.data_resp_port,
