@@ -67,7 +67,7 @@ impl From<frame::SendError> for PublishError {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PcapFilter {
-    pub timestamp: i64,
+    pub start_time: i64,
     pub sensor: String,
     pub src_addr: IpAddr,
     pub src_port: u16,
@@ -558,6 +558,7 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
+            start_time: 500,
             end_time: 1000,
             service: "-".to_string(),
             orig_bytes: 77,
@@ -643,7 +644,7 @@ mod tests {
 
         // send/recv pcap extract request
         let p_filter = PcapFilter {
-            timestamp: 12345,
+            start_time: 12345,
             sensor: "hello".to_string(),
             src_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             src_port: 46378,
@@ -716,6 +717,7 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
+            start_time: 500,
             end_time: 1000,
             service: "-".to_string(),
             orig_bytes: 77,
