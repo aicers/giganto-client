@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use self::{
     range::{MessageCode, ResponseRangeData},
-    stream::{NodeType, RequestStreamRecord},
+    stream::{RequestStreamRecord, StreamRequestPayload},
 };
 use crate::frame::{self, recv_bytes, recv_raw, send_bytes, send_raw, RecvError, SendError};
 
@@ -84,26 +84,13 @@ pub struct PcapFilter {
 /// * `PublishError::SerialDeserialFailure`: if the stream-request data could not be serialized
 /// * `PublishError::MessageTooLarge`: if the stream-request data is too large
 /// * `PublishError::WriteError`: if the stream-request data could not be written
-pub async fn send_stream_request<T>(
+pub async fn send_stream_request(
     send: &mut SendStream,
-    record_type: RequestStreamRecord,
-    node_type: NodeType,
-    msg: T,
-) -> Result<(), PublishError>
-where
-    T: Serialize,
-{
-    // send node type
-    let node: u8 = node_type.into();
-    send_bytes(send, &node.to_le_bytes()).await?;
-
-    // send record type
-    let record: u32 = record_type.into();
-    send_bytes(send, &record.to_le_bytes()).await?;
-
-    // send request record info
+    payload: StreamRequestPayload,
+) -> Result<(), PublishError> {
+    // send payload
     let mut buf = Vec::new();
-    frame::send(send, &mut buf, msg).await?;
+    frame::send(send, &mut buf, payload).await?;
     Ok(())
 }
 
@@ -191,27 +178,12 @@ pub async fn send_raw_events(
 /// # Errors
 ///
 /// * `PublishError::ReadError`: if the stream-request data could not be read
-/// * `PublishError::InvalidMessageType`: if the stream-request data could not be converted to valid type
-/// * `PublishError::InvalidMessageData`: if the stream-request data could not be converted to valid data
+/// * `PublishError::SerialDeserialFailure`: if the stream-request data could not be deserialized
 pub async fn receive_stream_request(
     recv: &mut RecvStream,
-) -> Result<(NodeType, RequestStreamRecord, Vec<u8>), PublishError> {
-    // receive node type
-    let mut node_buf = [0; mem::size_of::<u8>()];
-    recv_bytes(recv, &mut node_buf).await?;
-    let node_type = NodeType::try_from(u8::from_le_bytes(node_buf))
-        .map_err(|_| PublishError::InvalidMessageType)?;
-
-    // receive record type
-    let mut record_buf = [0; mem::size_of::<u32>()];
-    recv_bytes(recv, &mut record_buf).await?;
-    let record_type = RequestStreamRecord::try_from(u32::from_le_bytes(record_buf))
-        .map_err(|_| PublishError::InvalidMessageType)?;
-
-    // receive request info
+) -> Result<StreamRequestPayload, PublishError> {
     let mut buf = Vec::new();
-    recv_raw(recv, &mut buf).await?;
-    Ok((node_type, record_type, buf))
+    Ok(frame::recv::<StreamRequestPayload>(recv, &mut buf).await?)
 }
 
 /// Receives the semi-supervised stream start message sent from giganto's publish module.
@@ -468,7 +440,9 @@ mod tests {
         use crate::frame::send_bytes;
         use crate::publish::{
             range::ResponseRangeData,
-            stream::{RequestSemiSupervisedStream, RequestTimeSeriesGeneratorStream},
+            stream::{
+                RequestSemiSupervisedStream, RequestTimeSeriesGeneratorStream, StreamRequestPayload,
+            },
             PcapFilter,
         };
 
@@ -480,22 +454,18 @@ mod tests {
             start: 0,
             sensor: Some(vec!["hello".to_string(), "world".to_string()]),
         };
-        super::send_stream_request(
-            &mut channel.client.send,
+        let payload = StreamRequestPayload::new_semi_supervised(
             super::stream::RequestStreamRecord::Conn,
-            super::stream::NodeType::SemiSupervised,
             semi_supervised_req.clone(),
-        )
-        .await
-        .unwrap();
+        );
+        super::send_stream_request(&mut channel.client.send, payload.clone())
+            .await
+            .unwrap();
 
-        let (node_type, req_record, req_data) =
-            super::receive_stream_request(&mut channel.server.recv)
-                .await
-                .unwrap();
-        assert_eq!(node_type, super::stream::NodeType::SemiSupervised);
-        assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
-        assert_eq!(req_data, bincode::serialize(&semi_supervised_req).unwrap());
+        let received_payload = super::receive_stream_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        assert_eq!(received_payload, payload);
 
         // send/recv time series generator stream request
         let time_series_generator_req = RequestTimeSeriesGeneratorStream {
@@ -505,25 +475,18 @@ mod tests {
             dst_ip: Some("31.3.245.133".parse::<IpAddr>().unwrap()),
             sensor: Some("world".to_string()),
         };
-        super::send_stream_request(
-            &mut channel.client.send,
+        let payload = StreamRequestPayload::new_time_series_generator(
             super::stream::RequestStreamRecord::Conn,
-            super::stream::NodeType::TimeSeriesGenerator,
             time_series_generator_req.clone(),
-        )
-        .await
-        .unwrap();
-
-        let (node_type, req_record, req_data) =
-            super::receive_stream_request(&mut channel.server.recv)
-                .await
-                .unwrap();
-        assert_eq!(node_type, super::stream::NodeType::TimeSeriesGenerator);
-        assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
-        assert_eq!(
-            req_data,
-            bincode::serialize(&time_series_generator_req).unwrap()
         );
+        super::send_stream_request(&mut channel.client.send, payload.clone())
+            .await
+            .unwrap();
+
+        let received_payload = super::receive_stream_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        assert_eq!(received_payload, payload);
 
         // send/recv semi_supervised stream start message
         super::send_semi_supervised_stream_start_message(
