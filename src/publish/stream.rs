@@ -19,26 +19,6 @@ pub const STREAM_REQUEST_ALL_SENSOR: &str = "all";
     TryFromPrimitive,
     EnumString,
     Display,
-)]
-#[repr(u8)]
-#[strum(serialize_all = "snake_case")]
-pub enum NodeType {
-    SemiSupervised = 0,
-    TimeSeriesGenerator = 1,
-}
-
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    IntoPrimitive,
-    PartialEq,
-    Serialize,
-    TryFromPrimitive,
-    EnumString,
-    Display,
     EnumIter,
 )]
 #[repr(u32)]
@@ -94,26 +74,60 @@ pub struct RequestTimeSeriesGeneratorStream {
     pub sensor: Option<String>,
 }
 
+/// A unified payload enum that encapsulates all stream request types.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum StreamRequestPayload {
+    /// Request for semi-supervised stream with record type
+    SemiSupervised {
+        record_type: RequestStreamRecord,
+        request: RequestSemiSupervisedStream,
+    },
+    /// Request for time series generator stream with record type
+    TimeSeriesGenerator {
+        record_type: RequestStreamRecord,
+        request: RequestTimeSeriesGeneratorStream,
+    },
+}
+
+impl StreamRequestPayload {
+    /// Get the record type for this request
+    #[must_use]
+    pub fn record_type(&self) -> RequestStreamRecord {
+        match self {
+            StreamRequestPayload::TimeSeriesGenerator { record_type, .. }
+            | StreamRequestPayload::SemiSupervised { record_type, .. } => *record_type,
+        }
+    }
+
+    /// Create a new semi-supervised stream request
+    #[must_use]
+    pub fn new_semi_supervised(
+        record_type: RequestStreamRecord,
+        request: RequestSemiSupervisedStream,
+    ) -> Self {
+        StreamRequestPayload::SemiSupervised {
+            record_type,
+            request,
+        }
+    }
+
+    /// Create a new time series generator stream request
+    #[must_use]
+    pub fn new_time_series_generator(
+        record_type: RequestStreamRecord,
+        request: RequestTimeSeriesGeneratorStream,
+    ) -> Self {
+        StreamRequestPayload::TimeSeriesGenerator {
+            record_type,
+            request,
+        }
+    }
+}
+
 #[test]
 #[allow(clippy::too_many_lines)]
 fn test_node_stream_record_type() {
     use std::str::FromStr;
-
-    // test NodeType
-    assert_eq!(
-        NodeType::SemiSupervised,
-        NodeType::from_str("semi_supervised").unwrap()
-    );
-    assert_eq!(NodeType::SemiSupervised.to_string(), "semi_supervised");
-
-    assert_eq!(
-        NodeType::TimeSeriesGenerator,
-        NodeType::from_str("time_series_generator").unwrap()
-    );
-    assert_eq!(
-        NodeType::TimeSeriesGenerator.to_string(),
-        "time_series_generator"
-    );
 
     // test RequestStreamRecord
     assert_eq!(
