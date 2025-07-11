@@ -13,6 +13,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (0x0a), and carriage returns (0x0d) by replacing them with spaces to ensure
   proper CSV parsing.
 
+### Changed
+
+- Added `StreamRequestPayload` enum to encapsulate different stream request
+  types (semi-supervised, time series generator, and pcap extraction).
+  - Updated `send_stream_request`, `receive_stream_request` functions to use
+    `StreamRequestPayload` for sending and receiving requests, removing the need
+    for `NodeType` enum.
+
 ## [0.23.0] - 2025-06-18
 
 ### Changed
@@ -337,6 +345,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Move from giganto
 
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.23.0...main
 [0.23.0]: https://github.com/aicers/giganto-client/compare/0.22.0...0.23.0
 [0.22.0]: https://github.com/aicers/giganto-client/compare/0.21.0...0.22.0
 [0.21.0]: https://github.com/aicers/giganto-client/compare/0.20.0...0.21.0
