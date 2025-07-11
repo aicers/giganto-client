@@ -5,27 +5,9 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
 
-pub const STREAM_REQUEST_ALL_SENSOR: &str = "all";
+use crate::publish::PcapFilter;
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    Deserialize,
-    Eq,
-    IntoPrimitive,
-    PartialEq,
-    Serialize,
-    TryFromPrimitive,
-    EnumString,
-    Display,
-)]
-#[repr(u8)]
-#[strum(serialize_all = "snake_case")]
-pub enum NodeType {
-    SemiSupervised = 0,
-    TimeSeriesGenerator = 1,
-}
+pub const STREAM_REQUEST_ALL_SENSOR: &str = "all";
 
 #[derive(
     Clone,
@@ -94,26 +76,70 @@ pub struct RequestTimeSeriesGeneratorStream {
     pub sensor: Option<String>,
 }
 
+/// A unified payload enum that encapsulates all stream request types.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub enum StreamRequestPayload {
+    /// Request for semi-supervised stream with record type
+    SemiSupervised {
+        record_type: RequestStreamRecord,
+        request: RequestSemiSupervisedStream,
+    },
+    /// Request for time series generator stream with record type
+    TimeSeriesGenerator {
+        record_type: RequestStreamRecord,
+        request: RequestTimeSeriesGeneratorStream,
+    },
+    /// Request for pcap extraction
+    PcapExtraction { filter: Vec<PcapFilter> },
+}
+
+impl StreamRequestPayload {
+    /// Get the record type for this request
+    /// Returns `None` for `PcapExtractRequest` as it doesn't have a specific record type
+    #[must_use]
+    pub fn record_type(&self) -> Option<RequestStreamRecord> {
+        match self {
+            StreamRequestPayload::TimeSeriesGenerator { record_type, .. }
+            | StreamRequestPayload::SemiSupervised { record_type, .. } => Some(*record_type),
+            StreamRequestPayload::PcapExtraction { .. } => None,
+        }
+    }
+
+    /// Create a new semi-supervised stream request
+    #[must_use]
+    pub fn new_semi_supervised(
+        record_type: RequestStreamRecord,
+        request: RequestSemiSupervisedStream,
+    ) -> Self {
+        StreamRequestPayload::SemiSupervised {
+            record_type,
+            request,
+        }
+    }
+
+    /// Create a new time series generator stream request
+    #[must_use]
+    pub fn new_time_series_generator(
+        record_type: RequestStreamRecord,
+        request: RequestTimeSeriesGeneratorStream,
+    ) -> Self {
+        StreamRequestPayload::TimeSeriesGenerator {
+            record_type,
+            request,
+        }
+    }
+
+    /// Create a new pcap extract request
+    #[must_use]
+    pub fn new_pcap_extraction(filter: Vec<PcapFilter>) -> Self {
+        StreamRequestPayload::PcapExtraction { filter }
+    }
+}
+
 #[test]
 #[allow(clippy::too_many_lines)]
 fn test_node_stream_record_type() {
     use std::str::FromStr;
-
-    // test NodeType
-    assert_eq!(
-        NodeType::SemiSupervised,
-        NodeType::from_str("semi_supervised").unwrap()
-    );
-    assert_eq!(NodeType::SemiSupervised.to_string(), "semi_supervised");
-
-    assert_eq!(
-        NodeType::TimeSeriesGenerator,
-        NodeType::from_str("time_series_generator").unwrap()
-    );
-    assert_eq!(
-        NodeType::TimeSeriesGenerator.to_string(),
-        "time_series_generator"
-    );
 
     // test RequestStreamRecord
     assert_eq!(
@@ -248,4 +274,47 @@ fn test_node_stream_record_type() {
         all_request_stream_records.first(),
         Some(&RequestStreamRecord::Conn)
     );
+}
+
+#[test]
+fn test_pcap_extract_request_payload() {
+    use std::net::IpAddr;
+
+    let pcap_filters = vec![
+        PcapFilter {
+            timestamp: 1_234_567_890,
+            sensor: "sensor1".to_string(),
+            src_addr: IpAddr::V4([192, 168, 1, 1].into()),
+            src_port: 80,
+            dst_addr: IpAddr::V4([192, 168, 1, 2].into()),
+            dst_port: 443,
+            proto: 6, // TCP
+            end_time: 1_234_567_950,
+        },
+        PcapFilter {
+            timestamp: 1_234_567_900,
+            sensor: "sensor2".to_string(),
+            src_addr: IpAddr::V6("::1".parse().unwrap()),
+            src_port: 22,
+            dst_addr: IpAddr::V6("::2".parse().unwrap()),
+            dst_port: 2222,
+            proto: 6, // TCP
+            end_time: 1_234_567_960,
+        },
+    ];
+
+    let payload = StreamRequestPayload::new_pcap_extraction(pcap_filters.clone());
+
+    // Test that record_type returns None for PcapExtractRequest
+    assert_eq!(payload.record_type(), None);
+
+    // Test pattern matching
+    match payload {
+        StreamRequestPayload::PcapExtraction { filter } => {
+            assert_eq!(filter.len(), 2);
+            assert_eq!(filter[0].sensor, "sensor1");
+            assert_eq!(filter[1].sensor, "sensor2");
+        }
+        _ => panic!("Expected PcapExtractRequest variant"),
+    }
 }
