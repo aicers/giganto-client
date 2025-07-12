@@ -266,7 +266,7 @@ impl Display for Http {
             as_str_or_default(&self.uri),
             as_str_or_default(&self.referer),
             as_str_or_default(&self.version),
-            as_str_or_default(&self.user_agent),
+            crate::ingest::sanitize_csv_field(&self.user_agent),
             self.request_len,
             self.response_len,
             self.status_code,
@@ -281,11 +281,7 @@ impl Display for Http {
             vec_to_string_or_default(&self.orig_mime_types),
             vec_to_string_or_default(&self.resp_filenames),
             vec_to_string_or_default(&self.resp_mime_types),
-            if self.post_body.is_empty() {
-                String::from("-")
-            } else {
-                std::str::from_utf8(self.post_body.as_slice()).unwrap_or_default().replace('\t', " ")
-            },
+            crate::ingest::sanitize_csv_field_bytes(&self.post_body),
             as_str_or_default(&self.state),
         )
     }
@@ -1013,5 +1009,106 @@ impl ResponseRangeData for Dhcp {
         let dhcp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, sensor, &dhcp_csv.as_bytes())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+
+    use super::*;
+
+    #[test]
+    fn http_csv_export_with_special_characters() {
+        let http = Http {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 80,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 443,
+            proto: 6,
+            end_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
+            method: "GET".to_string(),
+            host: "example.com".to_string(),
+            uri: "/path".to_string(),
+            referer: String::new(),
+            version: "1.1".to_string(),
+            user_agent: "Mozilla/5.0\t(Windows NT\n10.0;\rWin64)".to_string(),
+            request_len: 100,
+            response_len: 200,
+            status_code: 200,
+            status_msg: "OK".to_string(),
+            username: String::new(),
+            password: String::new(),
+            cookie: String::new(),
+            content_encoding: String::new(),
+            content_type: "text/html".to_string(),
+            cache_control: String::new(),
+            orig_filenames: vec![],
+            orig_mime_types: vec![],
+            resp_filenames: vec![],
+            resp_mime_types: vec![],
+            post_body: b"username=test\tpassword=secret\nsubmit=true\r".to_vec(),
+            state: String::new(),
+        };
+
+        let csv_output = format!("{http}");
+
+        // Split by tabs to get individual fields and verify the specific fields
+        let fields: Vec<&str> = csv_output.split('\t').collect();
+
+        // Verify that user_agent field has special characters replaced with spaces
+        assert_eq!(fields[11], "Mozilla/5.0 (Windows NT 10.0; Win64)");
+
+        // Verify that post_body field has special characters replaced with spaces (at index 26)
+        assert_eq!(fields[26], "username=test password=secret submit=true ");
+
+        // Verify the sanitized fields don't contain special characters
+        assert!(!fields[11].contains('\n'));
+        assert!(!fields[11].contains('\r'));
+        assert!(!fields[26].contains('\t'));
+        assert!(!fields[26].contains('\n'));
+        assert!(!fields[26].contains('\r'));
+    }
+
+    #[test]
+    fn http_csv_export_empty_fields() {
+        let http = Http {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 80,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 443,
+            proto: 6,
+            end_time: 1_000_000_000_000_000_000,
+            method: String::new(),
+            host: String::new(),
+            uri: String::new(),
+            referer: String::new(),
+            version: String::new(),
+            user_agent: String::new(),
+            request_len: 0,
+            response_len: 0,
+            status_code: 0,
+            status_msg: String::new(),
+            username: String::new(),
+            password: String::new(),
+            cookie: String::new(),
+            content_encoding: String::new(),
+            content_type: String::new(),
+            cache_control: String::new(),
+            orig_filenames: vec![],
+            orig_mime_types: vec![],
+            resp_filenames: vec![],
+            resp_mime_types: vec![],
+            post_body: vec![],
+            state: String::new(),
+        };
+
+        let csv_output = format!("{http}");
+
+        // Verify that empty user_agent and post_body fields are converted to "-"
+        let fields: Vec<&str> = csv_output.split('\t').collect();
+        // user_agent is at index 11, post_body is at index 26
+        assert_eq!(fields[11], "-");
+        assert_eq!(fields[26], "-");
     }
 }

@@ -112,6 +112,24 @@ fn as_str_or_default(s: &str) -> &str {
     }
 }
 
+pub(crate) fn sanitize_csv_field(s: &str) -> String {
+    if s.is_empty() {
+        "-".to_string()
+    } else {
+        s.replace(['\t', '\n', '\r'], " ")
+    }
+}
+
+pub(crate) fn sanitize_csv_field_bytes(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        "-".to_string()
+    } else {
+        std::str::from_utf8(bytes)
+            .unwrap_or_default()
+            .replace(['\t', '\n', '\r'], " ")
+    }
+}
+
 fn vec_to_string_or_default<T>(vec: &[T]) -> String
 where
     T: Display,
@@ -210,5 +228,78 @@ mod tests {
         let ts = ndt.timestamp_nanos_opt().unwrap();
         let ts_fmt = super::convert_time_format(ts);
         assert_eq!(ts_fmt, "-1.000000000");
+    }
+
+    #[test]
+    fn sanitize_csv_field() {
+        // Test empty string
+        assert_eq!(super::sanitize_csv_field(""), "-");
+
+        // Test normal string without special characters
+        assert_eq!(super::sanitize_csv_field("normal text"), "normal text");
+
+        // Test string with horizontal tab (0x09)
+        assert_eq!(
+            super::sanitize_csv_field("text\twith\ttabs"),
+            "text with tabs"
+        );
+
+        // Test string with line feed (0x0a)
+        assert_eq!(
+            super::sanitize_csv_field("text\nwith\nlines"),
+            "text with lines"
+        );
+
+        // Test string with carriage return (0x0d)
+        assert_eq!(
+            super::sanitize_csv_field("text\rwith\rcarriage"),
+            "text with carriage"
+        );
+
+        // Test string with all special characters combined
+        assert_eq!(
+            super::sanitize_csv_field("text\t\n\rwith\tall\tspecial"),
+            "text   with all special"
+        );
+    }
+
+    #[test]
+    fn sanitize_csv_field_bytes() {
+        // Test empty bytes
+        assert_eq!(super::sanitize_csv_field_bytes(&[]), "-");
+
+        // Test normal bytes without special characters
+        assert_eq!(
+            super::sanitize_csv_field_bytes(b"normal text"),
+            "normal text"
+        );
+
+        // Test bytes with horizontal tab (0x09)
+        assert_eq!(
+            super::sanitize_csv_field_bytes(b"text\twith\ttabs"),
+            "text with tabs"
+        );
+
+        // Test bytes with line feed (0x0a)
+        assert_eq!(
+            super::sanitize_csv_field_bytes(b"text\nwith\nlines"),
+            "text with lines"
+        );
+
+        // Test bytes with carriage return (0x0d)
+        assert_eq!(
+            super::sanitize_csv_field_bytes(b"text\rwith\rcarriage"),
+            "text with carriage"
+        );
+
+        // Test bytes with all special characters combined
+        assert_eq!(
+            super::sanitize_csv_field_bytes(b"text\t\n\rwith\tall\tspecial"),
+            "text   with all special"
+        );
+
+        // Test invalid UTF-8 bytes
+        let invalid_utf8 = vec![0xff, 0xfe, 0xfd];
+        assert_eq!(super::sanitize_csv_field_bytes(&invalid_utf8), "");
     }
 }
