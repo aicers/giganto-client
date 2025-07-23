@@ -247,13 +247,17 @@ pub struct MalformedDns {
     pub additional_count: u16,
     pub query_count: u32,
     pub resp_count: u32,
+    pub query_bytes: u64,
+    pub resp_bytes: u64,
+    pub query_body: Vec<Vec<u8>>,
+    pub resp_body: Vec<Vec<u8>>,
 }
 
 impl Display for MalformedDns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -268,6 +272,10 @@ impl Display for MalformedDns {
             self.additional_count,
             self.query_count,
             self.resp_count,
+            self.query_bytes,
+            self.resp_bytes,
+            format!("{:x?}", self.query_body),
+            format!("{:x?}", self.resp_body),
         )
     }
 }
