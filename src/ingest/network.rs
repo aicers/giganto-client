@@ -274,8 +274,8 @@ impl Display for MalformedDns {
             self.resp_count,
             self.query_bytes,
             self.resp_bytes,
-            format!("{:x?}", self.query_body),
-            format!("{:x?}", self.resp_body),
+            format_args!("{:x?}", self.query_body),
+            format_args!("{:x?}", self.resp_body),
         )
     }
 }
