@@ -20,6 +20,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - Updated `send_stream_request`, `receive_stream_request` functions to use
     `StreamRequestPayload` for sending and receiving requests, removing the need
     for `NodeType` enum.
+- Added `MalformedDns` event.
 
 ## [0.23.0] - 2025-06-18
 
