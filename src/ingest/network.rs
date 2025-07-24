@@ -242,11 +242,9 @@ pub struct Http {
     pub content_encoding: String,
     pub content_type: String,
     pub cache_control: String,
-    pub orig_filenames: Vec<String>,
-    pub orig_mime_types: Vec<String>,
-    pub resp_filenames: Vec<String>,
-    pub resp_mime_types: Vec<String>,
-    pub post_body: Vec<u8>,
+    pub filenames: Vec<String>,
+    pub mime_types: Vec<String>,
+    pub body: Vec<u8>,
     pub state: String,
 }
 
@@ -254,7 +252,7 @@ impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -277,11 +275,9 @@ impl Display for Http {
             as_str_or_default(&self.content_encoding),
             as_str_or_default(&self.content_type),
             as_str_or_default(&self.cache_control),
-            vec_to_string_or_default(&self.orig_filenames),
-            vec_to_string_or_default(&self.orig_mime_types),
-            vec_to_string_or_default(&self.resp_filenames),
-            vec_to_string_or_default(&self.resp_mime_types),
-            crate::ingest::sanitize_csv_field_bytes(&self.post_body),
+            vec_to_string_or_default(&self.filenames),
+            vec_to_string_or_default(&self.mime_types),
+            crate::ingest::sanitize_csv_field_bytes(&self.body),
             as_str_or_default(&self.state),
         )
     }
@@ -1043,11 +1039,9 @@ mod tests {
             content_encoding: String::new(),
             content_type: "text/html".to_string(),
             cache_control: String::new(),
-            orig_filenames: vec![],
-            orig_mime_types: vec![],
-            resp_filenames: vec![],
-            resp_mime_types: vec![],
-            post_body: b"username=test\tpassword=secret\nsubmit=true\r".to_vec(),
+            filenames: vec![],
+            mime_types: vec![],
+            body: b"username=test\tpassword=secret\nsubmit=true\r".to_vec(),
             state: String::new(),
         };
 
@@ -1060,14 +1054,14 @@ mod tests {
         assert_eq!(fields[11], "Mozilla/5.0 (Windows NT 10.0; Win64)");
 
         // Verify that post_body field has special characters replaced with spaces (at index 26)
-        assert_eq!(fields[26], "username=test password=secret submit=true ");
+        assert_eq!(fields[24], "username=test password=secret submit=true ");
 
         // Verify the sanitized fields don't contain special characters
         assert!(!fields[11].contains('\n'));
         assert!(!fields[11].contains('\r'));
-        assert!(!fields[26].contains('\t'));
-        assert!(!fields[26].contains('\n'));
-        assert!(!fields[26].contains('\r'));
+        assert!(!fields[24].contains('\t'));
+        assert!(!fields[24].contains('\n'));
+        assert!(!fields[24].contains('\r'));
     }
 
     #[test]
@@ -1095,11 +1089,9 @@ mod tests {
             content_encoding: String::new(),
             content_type: String::new(),
             cache_control: String::new(),
-            orig_filenames: vec![],
-            orig_mime_types: vec![],
-            resp_filenames: vec![],
-            resp_mime_types: vec![],
-            post_body: vec![],
+            filenames: vec![],
+            mime_types: vec![],
+            body: vec![],
             state: String::new(),
         };
 
@@ -1109,6 +1101,6 @@ mod tests {
         let fields: Vec<&str> = csv_output.split('\t').collect();
         // user_agent is at index 11, post_body is at index 26
         assert_eq!(fields[11], "-");
-        assert_eq!(fields[26], "-");
+        assert_eq!(fields[24], "-");
     }
 }

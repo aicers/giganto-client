@@ -36,6 +36,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   the HTTP header field name.
   - This change aligns with the official HTTP standard and ensures accurate representation
     of the `Referer` header in variable names, struct fields, and documentation.
+- Changed HTTP event field structure.
+  - Merged `orig_filenames` and `resp_filenames` into `filenames`.
+  - Merged `orig_mime_types` and `resp_mime_types` into `mime_types`.
+  - Renamed `post_body` to `body`.
 
 ### Removed
 
