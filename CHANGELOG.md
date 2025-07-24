@@ -34,6 +34,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     for `NodeType` enum.
 - Renamed `timestamp` field to `start_time` in `PcapFilter` struct for consistency
   with protocol event structures.
+- Added `MalformedDns` event.
 
 ## [0.23.0] - 2025-06-18
 
