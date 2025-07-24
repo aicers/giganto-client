@@ -1039,11 +1039,9 @@ mod tests {
             content_encoding: String::new(),
             content_type: "text/html".to_string(),
             cache_control: String::new(),
-            orig_filenames: vec![],
-            orig_mime_types: vec![],
-            resp_filenames: vec![],
-            resp_mime_types: vec![],
-            post_body: b"username=test\tpassword=secret\nsubmit=true\r".to_vec(),
+            filenames: vec![],
+            mime_types: vec![],
+            body: b"username=test\tpassword=secret\nsubmit=true\r".to_vec(),
             state: String::new(),
         };
 
@@ -1091,11 +1089,9 @@ mod tests {
             content_encoding: String::new(),
             content_type: String::new(),
             cache_control: String::new(),
-            orig_filenames: vec![],
-            orig_mime_types: vec![],
-            resp_filenames: vec![],
-            resp_mime_types: vec![],
-            post_body: vec![],
+            filenames: vec![],
+            mime_types: vec![],
+            body: vec![],
             state: String::new(),
         };
 
