@@ -1057,7 +1057,7 @@ mod tests {
             resp_port: 443,
             proto: 6,
             start_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
-            end_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
+            end_time: 1_000_000_000_000_000_000,   // 1 second in nanoseconds
             method: "GET".to_string(),
             host: "example.com".to_string(),
             uri: "/path".to_string(),
