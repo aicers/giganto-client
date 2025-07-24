@@ -282,7 +282,7 @@ fn test_pcap_extract_request_payload() {
 
     let pcap_filters = vec![
         PcapFilter {
-            timestamp: 1_234_567_890,
+            start_time: 1_234_567_890,
             sensor: "sensor1".to_string(),
             src_addr: IpAddr::V4([192, 168, 1, 1].into()),
             src_port: 80,
@@ -292,7 +292,7 @@ fn test_pcap_extract_request_payload() {
             end_time: 1_234_567_950,
         },
         PcapFilter {
-            timestamp: 1_234_567_900,
+            start_time: 1_234_567_900,
             sensor: "sensor2".to_string(),
             src_addr: IpAddr::V6("::1".parse().unwrap()),
             src_port: 22,

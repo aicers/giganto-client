@@ -181,6 +181,7 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
+            start_time: 500,
             end_time: 1000,
             service: "-".to_string(),
             orig_bytes: 77,
