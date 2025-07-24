@@ -1054,14 +1054,14 @@ mod tests {
         assert_eq!(fields[11], "Mozilla/5.0 (Windows NT 10.0; Win64)");
 
         // Verify that post_body field has special characters replaced with spaces (at index 26)
-        assert_eq!(fields[26], "username=test password=secret submit=true ");
+        assert_eq!(fields[24], "username=test password=secret submit=true ");
 
         // Verify the sanitized fields don't contain special characters
         assert!(!fields[11].contains('\n'));
         assert!(!fields[11].contains('\r'));
-        assert!(!fields[26].contains('\t'));
-        assert!(!fields[26].contains('\n'));
-        assert!(!fields[26].contains('\r'));
+        assert!(!fields[24].contains('\t'));
+        assert!(!fields[24].contains('\n'));
+        assert!(!fields[24].contains('\r'));
     }
 
     #[test]
@@ -1101,6 +1101,6 @@ mod tests {
         let fields: Vec<&str> = csv_output.split('\t').collect();
         // user_agent is at index 11, post_body is at index 26
         assert_eq!(fields[11], "-");
-        assert_eq!(fields[26], "-");
+        assert_eq!(fields[24], "-");
     }
 }
