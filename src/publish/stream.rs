@@ -46,6 +46,7 @@ pub enum RequestStreamRecord {
     Nfs = 16,
     Bootp = 17,
     Dhcp = 18,
+    Radius = 19,
 
     // sysmon
     FileCreate = 31,
