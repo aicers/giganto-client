@@ -1042,6 +1042,67 @@ impl ResponseRangeData for Dhcp {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Radius {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub end_time: i64,
+    pub id: u8,
+    pub code: u8,
+    pub resp_code: u8,
+    pub auth: String,
+    pub resp_auth: String,
+    pub user_name: Vec<u8>,
+    pub user_passwd: Vec<u8>,
+    pub chap_passwd: Vec<u8>,
+    pub nas_ip: IpAddr,
+    pub nas_port: u32,
+    pub state: Vec<u8>,
+    pub nas_id: Vec<u8>,
+    pub nas_port_type: u32,
+    pub message: String,
+}
+
+impl Display for Radius {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.end_time),
+            self.id,
+            self.code,
+            self.resp_code,
+            self.auth,
+            self.resp_auth,
+            vec_to_string_or_default(&self.user_name),
+            vec_to_string_or_default(&self.user_passwd),
+            vec_to_string_or_default(&self.chap_passwd),
+            self.nas_ip,
+            self.nas_port,
+            vec_to_string_or_default(&self.state),
+            vec_to_string_or_default(&self.nas_id),
+            self.nas_port_type,
+            self.message,
+        )
+    }
+}
+
+impl ResponseRangeData for Radius {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        let radius_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, sensor, &radius_csv.as_bytes())))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::IpAddr;
