@@ -25,6 +25,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Modified `Ftp` event to store vector of commands.
 - Added `StreamRequestPayload` enum to encapsulate different stream request
   types (semi-supervised, time series generator, and pcap extraction).
   - Updated `send_stream_request`, `receive_stream_request` functions to use
