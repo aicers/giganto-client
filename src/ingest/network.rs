@@ -596,6 +596,11 @@ pub struct Ftp {
     pub end_time: i64,
     pub user: String,
     pub password: String,
+    pub commands: Vec<FtpCommand>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct FtpCommand {
     pub command: String,
     pub reply_code: String,
     pub reply_msg: String,
@@ -612,7 +617,7 @@ impl Display for Ftp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -622,6 +627,16 @@ impl Display for Ftp {
             convert_time_format(self.end_time),
             as_str_or_default(&self.user),
             as_str_or_default(&self.password),
+            vec_to_string_or_default(&self.commands),
+        )
+    }
+}
+
+impl Display for FtpCommand {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "({},{},{},{},{},{},{},{},{},{})",
             as_str_or_default(&self.command),
             as_str_or_default(&self.reply_code),
             as_str_or_default(&self.reply_msg),
