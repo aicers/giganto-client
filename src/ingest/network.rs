@@ -238,6 +238,7 @@ pub struct MalformedDns {
     pub resp_addr: IpAddr,
     pub resp_port: u16,
     pub proto: u8,
+    pub start_time: i64,
     pub end_time: i64,
     pub trans_id: u16,
     pub flags: u16,
@@ -257,12 +258,13 @@ impl Display for MalformedDns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
+            convert_time_format(self.start_time),
             convert_time_format(self.end_time),
             self.trans_id,
             self.flags,
