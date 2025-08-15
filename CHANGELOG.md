@@ -15,6 +15,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     `Smb`, `Nfs`, `Bootp`, and `Dhcp`.
   - The `start_time` field represents the session start time and complements
     the existing `end_time` field.
+- Added `Radius` event structure.
 
 ### Fixed
 
