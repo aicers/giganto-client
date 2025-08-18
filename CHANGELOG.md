@@ -6,6 +6,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Added `Radius` event structure.
+
 ### Fixed
 
 - Fixed special character handling in HTTP event CSV export. The `user_agent` and
