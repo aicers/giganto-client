@@ -46,6 +46,7 @@ pub enum RequestStreamRecord {
     Nfs = 16,
     Bootp = 17,
     Dhcp = 18,
+    Radius = 19,
 
     // sysmon
     FileCreate = 31,
@@ -257,6 +258,12 @@ fn test_node_stream_record_type() {
     assert_eq!(RequestStreamRecord::Dhcp.to_string(), "dhcp");
 
     assert_eq!(
+        RequestStreamRecord::Radius,
+        RequestStreamRecord::from_str("radius").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Radius.to_string(), "radius");
+
+    assert_eq!(
         RequestStreamRecord::FileCreate,
         RequestStreamRecord::from_str("file_create").unwrap(),
     );
@@ -269,7 +276,7 @@ fn test_node_stream_record_type() {
     assert_eq!(RequestStreamRecord::FileDelete.to_string(), "file_delete");
 
     let all_request_stream_records = RequestStreamRecord::all();
-    assert_eq!(all_request_stream_records.len(), 21);
+    assert_eq!(all_request_stream_records.len(), 22);
     assert_eq!(
         all_request_stream_records.first(),
         Some(&RequestStreamRecord::Conn)
