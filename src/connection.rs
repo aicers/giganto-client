@@ -4,6 +4,7 @@ use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use semver::{Version, VersionReq};
 use thiserror::Error;
 
+use crate::bincode_utils;
 use crate::frame::{self, recv_handshake, send_handshake, RecvError, SendError};
 
 /// The error type for a handshake failure.
@@ -18,7 +19,7 @@ pub enum HandshakeError {
     #[error("Cannot send a message")]
     WriteError(#[from] quinn::WriteError),
     #[error("Cannot serialize a message")]
-    SerializationFailure(#[from] bincode::Error),
+    SerializationFailure(#[from] bincode::error::EncodeError),
     #[error("Message is too large, so type casting failed")]
     MessageTooLarge,
     #[error("Invalid message")]
@@ -73,7 +74,7 @@ pub async fn client_handshake(
         Ok(()) | Err(_) => {}
     }
 
-    bincode::deserialize::<Option<&str>>(&buf)
+    bincode_utils::decode_legacy::<Option<String>>(&buf)
         .map_err(|_| HandshakeError::InvalidMessage)?
         .ok_or_else(|| HandshakeError::IncompatibleProtocol(protocol_version.to_string()))?;
 
@@ -105,13 +106,13 @@ pub async fn server_handshake(
     let protocol_version = Version::parse(&recv_version)
         .map_err(|_| HandshakeError::IncompatibleProtocol(recv_version))?;
     if version_req.matches(&protocol_version) {
-        let resp_data = bincode::serialize::<Option<&str>>(&Some(std_version))?;
+        let resp_data = bincode_utils::encode_legacy::<Option<&str>>(&Some(std_version))?;
         send_handshake(&mut send, &resp_data)
             .await
             .map_err(HandshakeError::from)?;
         return Ok((send, recv));
     }
-    let resp_data = bincode::serialize::<Option<&str>>(&None)?;
+    let resp_data = bincode_utils::encode_legacy::<Option<&str>>(&None)?;
     send_handshake(&mut send, &resp_data)
         .await
         .map_err(HandshakeError::from)?;

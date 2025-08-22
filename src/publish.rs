@@ -14,6 +14,7 @@ use self::{
     range::{MessageCode, ResponseRangeData},
     stream::{RequestStreamRecord, StreamRequestPayload},
 };
+use crate::bincode_utils;
 use crate::frame::{self, recv_bytes, recv_raw, send_bytes, send_raw, RecvError, SendError};
 
 /// The error type for a publish failure.
@@ -30,8 +31,10 @@ pub enum PublishError {
     WriteError(#[from] quinn::WriteError),
     #[error("Cannot call close request redundantly")]
     CloseStreamError(#[from] quinn::ClosedStream),
-    #[error("Cannot serialize/deserialize a publish message")]
-    SerialDeserialFailure(#[from] bincode::Error),
+    #[error("Cannot serialize a publish message")]
+    SerializationError(#[from] bincode::error::EncodeError),
+    #[error("Cannot deserialize a publish message")]
+    DeserializationError(#[from] bincode::error::DecodeError),
     #[error("Message is too large, so type casting failed")]
     MessageTooLarge,
     #[error("Invalid message type")]
@@ -45,7 +48,7 @@ pub enum PublishError {
 impl From<frame::RecvError> for PublishError {
     fn from(e: frame::RecvError) -> Self {
         match e {
-            RecvError::DeserializationFailure(e) => PublishError::SerialDeserialFailure(e),
+            RecvError::DeserializationFailure(e) => PublishError::DeserializationError(e),
             RecvError::ReadError(e) => match e {
                 quinn::ReadExactError::FinishedEarly(_) => PublishError::ConnectionClosed,
                 quinn::ReadExactError::ReadError(e) => PublishError::ReadError(e),
@@ -58,7 +61,7 @@ impl From<frame::RecvError> for PublishError {
 impl From<frame::SendError> for PublishError {
     fn from(e: frame::SendError) -> Self {
         match e {
-            SendError::SerializationFailure(e) => PublishError::SerialDeserialFailure(e),
+            SendError::SerializationFailure(e) => PublishError::SerializationError(e),
             SendError::MessageTooLarge(_) => PublishError::MessageTooLarge,
             SendError::WriteError(e) => PublishError::WriteError(e),
         }
@@ -149,9 +152,9 @@ where
 {
     let send_buf = if let Some((val, timestamp, sensor)) = data {
         val.response_data(timestamp, sensor)
-            .map_err(PublishError::SerialDeserialFailure)?
+            .map_err(PublishError::SerializationError)?
     } else {
-        T::response_done().map_err(PublishError::SerialDeserialFailure)?
+        T::response_done().map_err(PublishError::SerializationError)?
     };
     send_raw(send, &send_buf).await?;
     Ok(())
@@ -333,7 +336,8 @@ pub async fn pcap_extract_request(
     let (mut send, mut recv) = conn.open_bi().await?;
 
     // serialize pcapfilter data
-    let filter = bincode::serialize(pcap_filter)?;
+    let filter =
+        bincode_utils::encode_legacy(pcap_filter).map_err(PublishError::SerializationError)?;
 
     // send pacp extract request to sensor
     send_raw(&mut send, &filter).await?;
@@ -387,7 +391,7 @@ pub async fn send_ok<T: Serialize>(
     buf: &mut Vec<u8>,
     body: T,
 ) -> Result<(), PublishError> {
-    frame::send(send, buf, Ok(body) as Result<T, &str>).await?;
+    frame::send(send, buf, Ok(body) as Result<T, String>).await?;
     Ok(())
 }
 
@@ -419,7 +423,8 @@ pub async fn send_err<E: std::fmt::Display>(
 pub async fn recv_ack_response(recv: &mut RecvStream) -> Result<(), PublishError> {
     let mut ack_buf = Vec::new();
     recv_raw(recv, &mut ack_buf).await?;
-    bincode::deserialize::<Result<(), &str>>(&ack_buf)?
+    bincode_utils::decode_legacy::<Result<(), String>>(&ack_buf)
+        .map_err(PublishError::DeserializationError)?
         .map_err(|e| PublishError::PcapRequestFail(e.to_string()))?;
     Ok(())
 }
@@ -429,6 +434,7 @@ mod tests {
     use std::net::IpAddr;
     use std::str::FromStr;
 
+    use crate::bincode_utils;
     use crate::frame;
     use crate::ingest::network::Conn;
     use crate::publish::{recv_ack_response, PublishError};
@@ -531,8 +537,8 @@ mod tests {
             orig_l2_bytes: 21515,
             resp_l2_bytes: 27889,
         };
-        let raw_event = bincode::serialize(&conn).unwrap();
-        let sensor = bincode::serialize(&"hello").unwrap();
+        let raw_event = bincode_utils::encode_legacy(&conn).unwrap();
+        let sensor = bincode_utils::encode_legacy(&"hello").unwrap();
         let raw_len = u32::try_from(raw_event.len()).unwrap().to_le_bytes();
         let sensor_len = u32::try_from(sensor.len()).unwrap().to_le_bytes();
         let mut send_buf: Vec<u8> = Vec::new();
@@ -566,7 +572,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(timestamp, 7777);
-        assert_eq!(data, bincode::serialize(&conn).unwrap());
+        assert_eq!(data, bincode_utils::encode_legacy(&conn).unwrap());
 
         // send/recv range data request
         let req_range = super::range::RequestRange {
@@ -587,7 +593,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(msg_code, super::range::MessageCode::ReqRange);
-        assert_eq!(data, bincode::serialize(&req_range).unwrap());
+        assert_eq!(data, bincode_utils::encode_legacy(&req_range).unwrap());
 
         // send/recv range data
         super::send_range_data(
@@ -601,7 +607,7 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(
-            bincode::serialize::<Option<(i64, String, Vec<u8>)>>(&data).unwrap(),
+            bincode_utils::encode_legacy::<Option<(i64, String, Vec<u8>)>>(&data).unwrap(),
             conn.response_data(33333, "world").unwrap()
         );
 
@@ -690,7 +696,7 @@ mod tests {
             orig_l2_bytes: 21515,
             resp_l2_bytes: 27889,
         };
-        let raw_event = bincode::serialize(&conn).unwrap();
+        let raw_event = bincode_utils::encode_legacy(&conn).unwrap();
 
         let sensor1 = "src 1";
         let sensor2 = "src 2";
@@ -716,7 +722,7 @@ mod tests {
             .await
             .unwrap();
 
-        let recv_request = bincode::deserialize::<RequestRawData>(&data).unwrap();
+        let recv_request = bincode_utils::decode_legacy::<RequestRawData>(&data).unwrap();
         assert_eq!(msg_code, MessageCode::RawData);
         assert_eq!(
             RawEventKind::from_str(recv_request.kind.as_str()).unwrap(),

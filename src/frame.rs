@@ -3,14 +3,16 @@
 use std::{mem, num::TryFromIntError};
 
 use quinn::{RecvStream, SendStream};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
+
+use crate::bincode_utils;
 
 /// The error type for receiving and deserializing a frame.
 #[derive(Debug, Error)]
 pub enum RecvError {
     #[error("Failed deserializing message")]
-    DeserializationFailure(#[from] bincode::Error),
+    DeserializationFailure(#[from] bincode::error::DecodeError),
     #[error("Receive message is too large, so type casting failed")]
     MessageTooLarge(#[from] TryFromIntError),
     #[error("Failed to read from a stream")]
@@ -21,7 +23,7 @@ pub enum RecvError {
 #[derive(Debug, Error)]
 pub enum SendError {
     #[error("Failed serializing message")]
-    SerializationFailure(#[from] bincode::Error),
+    SerializationFailure(#[from] bincode::error::EncodeError),
     #[error("Send message is too large, so type casting failed")]
     MessageTooLarge(#[from] TryFromIntError),
     #[error("Failed to write to a stream")]
@@ -35,12 +37,12 @@ pub enum SendError {
 /// * `RecvError::DeserializationFailure`: if the message could not be
 ///   deserialized
 /// * `RecvError::ReadError`: if the message could not be read
-pub async fn recv<'b, T>(recv: &mut RecvStream, buf: &'b mut Vec<u8>) -> Result<T, RecvError>
+pub async fn recv<T>(recv: &mut RecvStream, buf: &mut Vec<u8>) -> Result<T, RecvError>
 where
-    T: Deserialize<'b>,
+    T: DeserializeOwned,
 {
     recv_raw(recv, buf).await?;
-    Ok(bincode::deserialize(buf)?)
+    Ok(bincode_utils::decode_legacy(buf)?)
 }
 
 /// Receives a sequence of bytes with a little-endian 4-byte length header.
@@ -102,7 +104,7 @@ where
     T: Serialize,
 {
     buf.resize(mem::size_of::<u32>(), 0);
-    bincode::serialize_into(&mut *buf, &msg)?;
+    bincode_utils::encode_into(&mut *buf, &msg)?;
     let len = u32::try_from(buf.len() - mem::size_of::<u32>())?;
     buf[..mem::size_of::<u32>()].clone_from_slice(&len.to_le_bytes());
     send.write_all(buf).await?;
@@ -194,7 +196,7 @@ mod tests {
             .await
             .unwrap();
         assert!(buf.is_empty());
-        let received = super::recv::<&str>(&mut channel.client.recv, &mut buf)
+        let received = super::recv::<String>(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
         assert_eq!(received, "hello");
