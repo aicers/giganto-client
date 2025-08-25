@@ -5,7 +5,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ingest::convert_time_format, publish::range::ResponseRangeData};
+use crate::{bincode_utils, ingest::convert_time_format, publish::range::ResponseRangeData};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
@@ -68,9 +68,13 @@ impl Display for Netflow5 {
 }
 
 impl ResponseRangeData for Netflow5 {
-    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+    fn response_data(
+        &self,
+        timestamp: i64,
+        sensor: &str,
+    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
         let csv = format!("{}\t{self}", convert_time_format(timestamp));
-        bincode::serialize(&Some((timestamp, sensor, &csv.as_bytes())))
+        bincode_utils::encode_legacy(&Some((timestamp, sensor, &csv.as_bytes())))
     }
 }
 
@@ -107,9 +111,13 @@ impl Display for Netflow9 {
 }
 
 impl ResponseRangeData for Netflow9 {
-    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+    fn response_data(
+        &self,
+        timestamp: i64,
+        sensor: &str,
+    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
         let csv = format!("{}\t{self}", convert_time_format(timestamp));
-        bincode::serialize(&Some((timestamp, sensor, &csv.as_bytes())))
+        bincode_utils::encode_legacy(&Some((timestamp, sensor, &csv.as_bytes())))
     }
 }
 
