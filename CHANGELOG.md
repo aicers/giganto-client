@@ -8,6 +8,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- Added `global_id` field to `OpLog` struct for tracking logs sent from data
+  broker to Giganto.
 - Added `start_time` field to all protocol event structures for improved
   temporal tracking and consistency.
   - This affects all network event structures: `Conn`, `Dns`, `Http`, `Rdp`,
