@@ -283,10 +283,14 @@ impl Display for MalformedDns {
 }
 
 impl ResponseRangeData for MalformedDns {
-    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+    fn response_data(
+        &self,
+        timestamp: i64,
+        sensor: &str,
+    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
         let dns_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode::serialize(&Some((timestamp, sensor, &dns_csv.as_bytes())))
+        bincode_utils::encode_legacy(&Some((timestamp, sensor, &dns_csv.as_bytes())))
     }
 }
 
