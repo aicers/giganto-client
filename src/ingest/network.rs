@@ -232,6 +232,69 @@ impl ResponseRangeData for Dns {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MalformedDns {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub trans_id: u16,
+    pub flags: u16,
+    pub question_count: u16,
+    pub answer_count: u16,
+    pub authority_count: u16,
+    pub additional_count: u16,
+    pub query_count: u32,
+    pub resp_count: u32,
+    pub query_bytes: u64,
+    pub resp_bytes: u64,
+    pub query_body: Vec<Vec<u8>>,
+    pub resp_body: Vec<Vec<u8>>,
+}
+
+impl Display for MalformedDns {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.start_time),
+            convert_time_format(self.end_time),
+            self.trans_id,
+            self.flags,
+            self.question_count,
+            self.answer_count,
+            self.authority_count,
+            self.additional_count,
+            self.query_count,
+            self.resp_count,
+            self.query_bytes,
+            self.resp_bytes,
+            format_args!("{:x?}", self.query_body),
+            format_args!("{:x?}", self.resp_body),
+        )
+    }
+}
+
+impl ResponseRangeData for MalformedDns {
+    fn response_data(
+        &self,
+        timestamp: i64,
+        sensor: &str,
+    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+        let dns_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode_utils::encode_legacy(&Some((timestamp, sensor, &dns_csv.as_bytes())))
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Http {
     pub orig_addr: IpAddr,
     pub orig_port: u16,
