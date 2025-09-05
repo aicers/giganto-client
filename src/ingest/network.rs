@@ -1280,6 +1280,25 @@ pub struct Radius {
     pub message: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Icmp {
+    pub orig_addr: IpAddr,
+    pub resp_addr: IpAddr,
+    pub proto: u8,
+    pub start_time: i64,
+    pub duration: i64,
+    pub orig_pkts: u64,
+    pub resp_pkts: u64,
+    pub orig_l2_bytes: u64,
+    pub resp_l2_bytes: u64,
+    pub icmp_type: u8,
+    pub icmp_code: u8,
+    pub id: u16,
+    pub seq_num: u16,
+    pub data_len: u16,
+    pub payload: Vec<u8>,
+}
+
 impl Display for Radius {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
@@ -1319,6 +1338,38 @@ impl ResponseRangeData for Radius {
         let radius_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
         bincode::serialize(&Some((timestamp, sensor, &radius_csv.as_bytes())))
+    }
+}
+
+impl Display for Icmp {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.resp_addr,
+            self.proto,
+            convert_time_format(self.start_time),
+            self.duration,
+            self.orig_pkts,
+            self.resp_pkts,
+            self.orig_l2_bytes,
+            self.resp_l2_bytes,
+            self.icmp_type,
+            self.icmp_code,
+            self.id,
+            self.seq_num,
+            self.data_len,
+            format_args!("{:x?}", self.payload),
+        )
+    }
+}
+
+impl ResponseRangeData for Icmp {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        let icmp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, sensor, &icmp_csv.as_bytes())))
     }
 }
 
@@ -1426,5 +1477,68 @@ mod tests {
         // user_agent is at index 16, post_body is at index 29
         assert_eq!(fields[16], "-");
         assert_eq!(fields[29], "-");
+    }
+
+    #[test]
+    fn icmp_display() {
+        let icmp = Icmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            duration: 0,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            icmp_type: 8,
+            icmp_code: 0,
+            id: 1234,
+            seq_num: 1,
+            data_len: 56,
+            payload: vec![0x08, 0x00, 0xff, 0xff],
+        };
+
+        let csv_output = format!("{icmp}");
+        let fields: Vec<&str> = csv_output.split('\t').collect();
+
+        assert_eq!(fields.len(), 15);
+        assert_eq!(fields[0], "192.168.1.1");
+        assert_eq!(fields[1], "192.168.1.2");
+        assert_eq!(fields[2], "1");
+        assert_eq!(fields[5], "1");
+        assert_eq!(fields[6], "1");
+        assert_eq!(fields[7], "100");
+        assert_eq!(fields[8], "100");
+        assert_eq!(fields[9], "8");
+        assert_eq!(fields[10], "0");
+        assert_eq!(fields[11], "1234");
+        assert_eq!(fields[12], "1");
+        assert_eq!(fields[13], "56");
+        assert_eq!(fields[14], "[8, 0, ff, ff]");
+    }
+
+    #[test]
+    fn icmp_response_data() {
+        let icmp = Icmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            duration: 0,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            icmp_type: 8,
+            icmp_code: 0,
+            id: 1234,
+            seq_num: 1,
+            data_len: 56,
+            payload: vec![0x08, 0x00, 0xff, 0xff],
+        };
+
+        let result = icmp.response_data(1_000_000_000_000_000_000, "sensor1");
+        assert!(result.is_ok());
     }
 }
