@@ -37,7 +37,7 @@ pub struct OpLog {
     pub agent_name: String,
     pub log_level: OpLogLevel,
     pub contents: String,
-    // Category, id
+    pub global_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -51,8 +51,8 @@ impl Display for OpLog {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{:?}\t{}",
-            self.sensor, self.agent_name, self.log_level, self.contents
+            "{}\t{}\t{:?}\t{}\t{}",
+            self.sensor, self.agent_name, self.log_level, self.contents, self.global_id
         )
     }
 }
