@@ -36,6 +36,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   - The `start_time` field represents the session start time and complements
     the existing `end_time` field.
 - Added `Radius`, `MalformedDns` event structure.
+- Added `Icmp` event structure for tracking ICMP protocol communications. The
+  structure includes a `payload` field that stores the original ICMP packet
+  payload for detailed analysis, which is useful for detecting potential C&C
+  activities through ICMP tunneling.
 
 ### Fixed
 
