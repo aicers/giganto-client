@@ -6,6 +6,7 @@ pub mod stream;
 use std::{mem, net::IpAddr};
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
@@ -70,14 +71,14 @@ impl From<frame::SendError> for PublishError {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PcapFilter {
-    pub start_time: i64,
+    pub start_time: DateTime<Utc>,
     pub sensor: String,
     pub src_addr: IpAddr,
     pub src_port: u16,
     pub dst_addr: IpAddr,
     pub dst_port: u16,
     pub proto: u8,
-    pub end_time: i64,
+    pub end_time: DateTime<Utc>,
 }
 
 /// Sends the stream request to giganto's publish module.
@@ -527,8 +528,9 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: 500,
-            end_time: 1000,
+            start_time: chrono::DateTime::from_timestamp_nanos(500),
+            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
             resp_bytes: 295,
@@ -613,14 +615,14 @@ mod tests {
 
         // send/recv pcap extract request
         let p_filter = PcapFilter {
-            start_time: 12345,
+            start_time: chrono::DateTime::from_timestamp_nanos(12345),
             sensor: "hello".to_string(),
             src_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             src_port: 46378,
             dst_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             dst_port: 80,
             proto: 6,
-            end_time: 1000,
+            end_time: chrono::DateTime::from_timestamp_nanos(1000),
         };
         let send_filter = p_filter.clone();
 
@@ -686,8 +688,9 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: 500,
-            end_time: 1000,
+            start_time: chrono::DateTime::from_timestamp_nanos(500),
+            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
             resp_bytes: 295,

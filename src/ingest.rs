@@ -15,6 +15,9 @@ use serde::{Deserialize, Serialize};
 use crate::frame::{self, RecvError, SendError};
 use crate::RawEventKind;
 
+/// Time format pattern for Zeek-compatible timestamp format ("%s%.9f")
+const TIME_FORMAT: &str = "%s%.9f";
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Packet {
     pub packet_timestamp: i64,
@@ -181,8 +184,9 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: 500,
-            end_time: 1000,
+            start_time: chrono::DateTime::from_timestamp_nanos(500),
+            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
             resp_bytes: 295,

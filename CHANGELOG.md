@@ -8,11 +8,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- Added `start_time` field to all protocol event structures for improved
-  temporal tracking and consistency.
+- Added session information fields to all network event structures:
+  - `duration` field (`i64`) to track session duration
+  - `orig_pkts` and `resp_pkts` fields (`u64`) for packet counts
+  - `orig_l2_bytes` and `resp_l2_bytes` fields (`u64`) for L2 byte counts
   - This affects all network event structures: `Conn`, `Dns`, `Http`, `Rdp`,
     `Smtp`, `Ntlm`, `Kerberos`, `Ssh`, `DceRpc`, `Ftp`, `Mqtt`, `Ldap`, `Tls`,
-    `Smb`, `Nfs`, `Bootp`, and `Dhcp`.
+    `Smb`, `Nfs`, `Bootp`, `Dhcp`, `Radius`, and `MalformedDns`
   - The `start_time` field represents the session start time and complements
     the existing `end_time` field.
 - Added `Radius` event structure.
@@ -27,6 +29,10 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Changed
 
 - Modified `Ftp` event to store vector of commands.
+- Unified time field types from `i64` to `DateTime<Utc>` for improved type safety:
+  - Network events: `start_time` and `end_time` fields now use `DateTime<Utc>`
+  - Sysmon events: time fields like `creation_utc_time` now use `DateTime<Utc>`
+- Updated CSV export format to include new session information fields
 - Added `StreamRequestPayload` enum to encapsulate different stream request
   types (semi-supervised, time series generator, and pcap extraction).
   - Updated `send_stream_request`, `receive_stream_request` functions to use
