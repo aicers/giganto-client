@@ -16,7 +16,7 @@ use crate::frame::{self, RecvError, SendError};
 use crate::RawEventKind;
 
 /// Time format pattern for Zeek-compatible timestamp format ("%s%.9f")
-pub const TIME_FORMAT: &str = "%s%.9f";
+const TIME_FORMAT: &str = "%s%.9f";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Packet {
