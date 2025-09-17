@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     bincode_utils,
-    ingest::{convert_time_format, vec_to_string_or_default},
+    ingest::{convert_time_format, vec_to_string_or_default, TIME_FORMAT},
     publish::range::ResponseRangeData,
 };
 
@@ -107,8 +107,8 @@ impl Display for FileCreationTimeChanged {
             self.process_id,
             self.image,
             self.target_filename,
-            self.creation_utc_time.format("%s%.9f"),
-            self.previous_creation_utc_time.format("%s%.9f"),
+            self.creation_utc_time.format(TIME_FORMAT),
+            self.previous_creation_utc_time.format(TIME_FORMAT),
             self.user,
         )
     }
@@ -307,7 +307,7 @@ impl Display for FileCreate {
             self.process_id,
             self.image,
             self.target_filename,
-            self.creation_utc_time.format("%s%.9f"),
+            self.creation_utc_time.format(TIME_FORMAT),
             self.user,
         )
     }
@@ -446,7 +446,7 @@ impl Display for FileCreateStreamHash {
             self.process_id,
             self.image,
             self.target_filename,
-            self.creation_utc_time.format("%s%.9f"),
+            self.creation_utc_time.format(TIME_FORMAT),
             vec_to_string_or_default(&self.hash),
             self.contents,
             self.user,
