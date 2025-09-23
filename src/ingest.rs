@@ -160,6 +160,8 @@ mod tests {
     async fn ingest_send_recv() {
         use std::{mem, net::IpAddr};
 
+        use jiff::Timestamp;
+
         use crate::test::{channel, TOKEN};
 
         let _lock = TOKEN.lock().await;
@@ -184,8 +186,8 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: chrono::DateTime::from_timestamp_nanos(500),
-            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            start_time: Timestamp::from_nanosecond(500).expect("valid timestamp"),
+            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
             duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
@@ -216,22 +218,22 @@ mod tests {
 
     #[test]
     fn convert_time_format() {
-        use chrono::DateTime;
+        use jiff::Timestamp;
 
         let sec = 2;
         let nsec = 123;
-        let ndt = DateTime::from_timestamp(sec, nsec).unwrap();
+        let ndt = Timestamp::from_nanosecond(sec * 1_000_000_000 + nsec).expect("valid timestamp");
 
-        let ts = ndt.timestamp_nanos_opt().unwrap();
-        let ts_fmt = super::convert_time_format(ts);
+        let ts = ndt.as_nanosecond();
+        let ts_fmt = super::convert_time_format(ts.try_into().unwrap());
         assert_eq!(ts_fmt, "2.000000123");
 
         let sec = -1;
         let nsec = 0;
-        let ndt = DateTime::from_timestamp(sec, nsec).unwrap();
+        let ndt = Timestamp::from_nanosecond(sec * 1_000_000_000 + nsec).expect("valid timestamp");
 
-        let ts = ndt.timestamp_nanos_opt().unwrap();
-        let ts_fmt = super::convert_time_format(ts);
+        let ts = ndt.as_nanosecond();
+        let ts_fmt = super::convert_time_format(ts.try_into().unwrap());
         assert_eq!(ts_fmt, "-1.000000000");
     }
 
