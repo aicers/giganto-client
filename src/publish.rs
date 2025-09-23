@@ -6,7 +6,7 @@ pub mod stream;
 use std::{mem, net::IpAddr};
 
 use anyhow::Result;
-use chrono::{DateTime, Utc};
+use jiff::Timestamp;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
@@ -71,14 +71,14 @@ impl From<frame::SendError> for PublishError {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PcapFilter {
-    pub start_time: DateTime<Utc>,
+    pub start_time: Timestamp,
     pub sensor: String,
     pub src_addr: IpAddr,
     pub src_port: u16,
     pub dst_addr: IpAddr,
     pub dst_port: u16,
     pub proto: u8,
-    pub end_time: DateTime<Utc>,
+    pub end_time: Timestamp,
 }
 
 /// Sends the stream request to giganto's publish module.
@@ -435,6 +435,8 @@ mod tests {
     use std::net::IpAddr;
     use std::str::FromStr;
 
+    use jiff::Timestamp;
+
     use crate::bincode_utils;
     use crate::frame;
     use crate::ingest::network::Conn;
@@ -528,8 +530,8 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: chrono::DateTime::from_timestamp_nanos(500),
-            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            start_time: Timestamp::from_nanosecond(500).expect("valid timestamp"),
+            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
             duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
@@ -615,14 +617,14 @@ mod tests {
 
         // send/recv pcap extract request
         let p_filter = PcapFilter {
-            start_time: chrono::DateTime::from_timestamp_nanos(12345),
+            start_time: Timestamp::from_nanosecond(12345).expect("valid timestamp"),
             sensor: "hello".to_string(),
             src_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             src_port: 46378,
             dst_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             dst_port: 80,
             proto: 6,
-            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
         };
         let send_filter = p_filter.clone();
 
@@ -688,8 +690,8 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: chrono::DateTime::from_timestamp_nanos(500),
-            end_time: chrono::DateTime::from_timestamp_nanos(1000),
+            start_time: Timestamp::from_nanosecond(500).expect("valid timestamp"),
+            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
             duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,

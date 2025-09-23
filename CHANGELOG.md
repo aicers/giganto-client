@@ -28,10 +28,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- **BREAKING**: Migrated from Chrono to Jiff crate for time handling. Time fields
+  now use `jiff::Timestamp` instead of `chrono::DateTime<Utc>` for improved type
+  safety and performance:
+  - Network events: `start_time` and `end_time` fields now use `jiff::Timestamp`
+  - Sysmon events: time fields like `creation_utc_time` now use `jiff::Timestamp`
+  - Users must update their code to work with `jiff::Timestamp` types
 - Modified `Ftp` event to store vector of commands.
-- Unified time field types from `i64` to `DateTime<Utc>` for improved type safety:
-  - Network events: `start_time` and `end_time` fields now use `DateTime<Utc>`
-  - Sysmon events: time fields like `creation_utc_time` now use `DateTime<Utc>`
 - Updated CSV export format to include new session information fields
 - Added `StreamRequestPayload` enum to encapsulate different stream request
   types (semi-supervised, time series generator, and pcap extraction).
