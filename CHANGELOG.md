@@ -17,7 +17,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     `Smb`, `Nfs`, `Bootp`, `Dhcp`, `Radius`, and `MalformedDns`
   - The `start_time` field represents the session start time and complements
     the existing `end_time` field.
-- Added `Radius` event structure.
+- Added `Radius`, `MalformedDns` event structure.
 
 ### Fixed
 
@@ -40,7 +40,6 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     for `NodeType` enum.
 - Renamed `timestamp` field to `start_time` in `PcapFilter` struct for consistency
   with protocol event structures.
-- Added `MalformedDns` event.
 
 ## [0.23.0] - 2025-06-18
 
