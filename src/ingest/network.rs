@@ -1392,6 +1392,36 @@ pub struct Radius {
     pub message: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Icmp {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub icmp_type: u8,
+    pub icmp_code: u8,
+    pub id: u16,
+    pub seq_num: u16,
+    pub data_len: u16,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct MalformedIcmp {
+    pub orig_addr: IpAddr,
+    pub orig_port: u16,
+    pub resp_addr: IpAddr,
+    pub resp_port: u16,
+    pub proto: u8,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub packet_len: u16,
+    pub malformed_reason: String,
+    pub raw_data: Vec<u8>,
+}
+
 impl Display for Radius {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
@@ -1436,6 +1466,70 @@ impl ResponseRangeData for Radius {
         let radius_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
         bincode_utils::encode_legacy(&Some((timestamp, sensor, &radius_csv.as_bytes())))
+    }
+}
+
+impl Display for Icmp {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.start_time),
+            convert_time_format(self.end_time),
+            self.icmp_type,
+            self.icmp_code,
+            self.id,
+            self.seq_num,
+            self.data_len,
+        )
+    }
+}
+
+impl ResponseRangeData for Icmp {
+    fn response_data(
+        &self,
+        timestamp: i64,
+        sensor: &str,
+    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+        let icmp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode_utils::encode_legacy(&Some((timestamp, sensor, &icmp_csv.as_bytes())))
+    }
+}
+
+impl Display for MalformedIcmp {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            self.orig_addr,
+            self.orig_port,
+            self.resp_addr,
+            self.resp_port,
+            self.proto,
+            convert_time_format(self.start_time),
+            convert_time_format(self.end_time),
+            self.packet_len,
+            crate::ingest::sanitize_csv_field(&self.malformed_reason),
+            format_args!("{:x?}", self.raw_data),
+        )
+    }
+}
+
+impl ResponseRangeData for MalformedIcmp {
+    fn response_data(
+        &self,
+        timestamp: i64,
+        sensor: &str,
+    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+        let icmp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode_utils::encode_legacy(&Some((timestamp, sensor, &icmp_csv.as_bytes())))
     }
 }
 
