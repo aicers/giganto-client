@@ -252,12 +252,13 @@ impl Display for ImageLoaded {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.agent_name,
             self.agent_id,
             self.process_guid,
             self.process_id,
             self.image,
+            self.image_loaded,
             self.file_version,
             self.description,
             self.product,
