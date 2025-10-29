@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     bincode_utils,
-    ingest::{convert_time_format, vec_to_string_or_default, TIME_FORMAT},
+    ingest::{TIME_FORMAT, convert_time_format, vec_to_string_or_default},
     publish::range::ResponseRangeData,
 };
 

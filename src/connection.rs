@@ -5,7 +5,7 @@ use semver::{Version, VersionReq};
 use thiserror::Error;
 
 use crate::bincode_utils;
-use crate::frame::{self, recv_handshake, send_handshake, RecvError, SendError};
+use crate::frame::{self, RecvError, SendError, recv_handshake, send_handshake};
 
 /// The error type for a handshake failure.
 #[derive(Debug, Error)]
@@ -52,7 +52,7 @@ pub async fn client_handshake(
     if let Err(e) = frame::send_handshake(&mut send, protocol_version.as_bytes()).await {
         match e {
             SendError::SerializationFailure(e) => {
-                return Err(HandshakeError::SerializationFailure(e))
+                return Err(HandshakeError::SerializationFailure(e));
             }
             SendError::MessageTooLarge(_) => return Err(HandshakeError::MessageTooLarge),
             SendError::WriteError(e) => return Err(HandshakeError::WriteError(e)),
@@ -124,7 +124,7 @@ pub async fn server_handshake(
 
 #[cfg(test)]
 mod tests {
-    use crate::test::{channel, TOKEN};
+    use crate::test::{TOKEN, channel};
 
     #[tokio::test]
     async fn handshake() {
