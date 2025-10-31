@@ -1521,4 +1521,131 @@ mod tests {
         assert_eq!(fields[16], "-");
         assert_eq!(fields[29], "-");
     }
+
+    #[test]
+    fn icmp_display() {
+        let icmp = Icmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 0,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 0,
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            end_time: 1_000_000_000_000_000_000,
+            icmp_type: 8,
+            icmp_code: 0,
+            id: 1234,
+            seq_num: 1,
+            data_len: 56,
+        };
+
+        let csv_output = format!("{icmp}");
+        let fields: Vec<&str> = csv_output.split('\t').collect();
+
+        assert_eq!(fields.len(), 12);
+        assert_eq!(fields[0], "192.168.1.1");
+        assert_eq!(fields[1], "0");
+        assert_eq!(fields[2], "192.168.1.2");
+        assert_eq!(fields[3], "0");
+        assert_eq!(fields[4], "1");
+        assert_eq!(fields[7], "8");
+        assert_eq!(fields[8], "0");
+        assert_eq!(fields[9], "1234");
+        assert_eq!(fields[10], "1");
+        assert_eq!(fields[11], "56");
+    }
+
+    #[test]
+    fn icmp_response_data() {
+        let icmp = Icmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 0,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 0,
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            end_time: 1_000_000_000_000_000_000,
+            icmp_type: 8,
+            icmp_code: 0,
+            id: 1234,
+            seq_num: 1,
+            data_len: 56,
+        };
+
+        let result = icmp.response_data(1_000_000_000_000_000_000, "sensor1");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn malformed_icmp_display() {
+        let malformed_icmp = MalformedIcmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 0,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 0,
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            end_time: 1_000_000_000_000_000_000,
+            packet_len: 100,
+            malformed_reason: "Invalid checksum".to_string(),
+            raw_data: vec![0x08, 0x00, 0xff, 0xff],
+        };
+
+        let csv_output = format!("{malformed_icmp}");
+        let fields: Vec<&str> = csv_output.split('\t').collect();
+
+        assert_eq!(fields.len(), 10);
+        assert_eq!(fields[0], "192.168.1.1");
+        assert_eq!(fields[1], "0");
+        assert_eq!(fields[2], "192.168.1.2");
+        assert_eq!(fields[3], "0");
+        assert_eq!(fields[4], "1");
+        assert_eq!(fields[7], "100");
+        assert_eq!(fields[8], "Invalid checksum");
+        assert_eq!(fields[9], "[8, 0, ff, ff]");
+    }
+
+    #[test]
+    fn malformed_icmp_display_with_special_characters() {
+        let malformed_icmp = MalformedIcmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 0,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 0,
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            end_time: 1_000_000_000_000_000_000,
+            packet_len: 100,
+            malformed_reason: "Invalid\tchecksum\nwith\rspecial chars".to_string(),
+            raw_data: vec![0x08, 0x00, 0xff, 0xff],
+        };
+
+        let csv_output = format!("{malformed_icmp}");
+        let fields: Vec<&str> = csv_output.split('\t').collect();
+
+        // Verify that malformed_reason field has special characters replaced with spaces
+        assert_eq!(fields[8], "Invalid checksum with special chars");
+        assert!(!fields[8].contains('\t'));
+        assert!(!fields[8].contains('\n'));
+        assert!(!fields[8].contains('\r'));
+    }
+
+    #[test]
+    fn malformed_icmp_response_data() {
+        let malformed_icmp = MalformedIcmp {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 0,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 0,
+            proto: 1,
+            start_time: 1_000_000_000_000_000_000,
+            end_time: 1_000_000_000_000_000_000,
+            packet_len: 100,
+            malformed_reason: "Invalid checksum".to_string(),
+            raw_data: vec![0x08, 0x00, 0xff, 0xff],
+        };
+
+        let result = malformed_icmp.response_data(1_000_000_000_000_000_000, "sensor1");
+        assert!(result.is_ok());
+    }
 }
