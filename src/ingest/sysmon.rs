@@ -525,6 +525,120 @@ pub struct FileDelete {
     pub archived: bool,
 }
 
+#[cfg(test)]
+mod tests {
+    use chrono::DateTime;
+
+    use super::*;
+
+    /// Helper function to convert Chrono `DateTime` to Jiff Timestamp for testing
+    fn chrono_to_jiff(dt: chrono::DateTime<chrono::Utc>) -> jiff::Timestamp {
+        jiff::Timestamp::from_nanosecond(dt.timestamp_nanos_opt().unwrap().into()).unwrap()
+    }
+
+    #[test]
+    fn file_creation_time_changed_formatting() {
+        let event = FileCreationTimeChanged {
+            agent_name: "test-agent".to_string(),
+            agent_id: "agent-123".to_string(),
+            process_guid: "{guid-123}".to_string(),
+            process_id: 1234,
+            image: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            target_filename: "C:\\temp\\test.txt".to_string(),
+            creation_utc_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_200, 123_456_789).unwrap(),
+            ),
+            previous_creation_utc_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_100, 987_654_321).unwrap(),
+            ),
+            user: "DOMAIN\\User".to_string(),
+        };
+
+        let csv = format!("{event}");
+        let fields: Vec<&str> = csv.split('\t').collect();
+
+        // Verify timestamp formatting
+        assert_eq!(fields[6], "1609459200.123456789"); // creation_utc_time
+        assert_eq!(fields[7], "1609459100.987654321"); // previous_creation_utc_time
+    }
+
+    #[test]
+    fn file_create_formatting() {
+        let event = FileCreate {
+            agent_name: "test-agent".to_string(),
+            agent_id: "agent-123".to_string(),
+            process_guid: "{guid-123}".to_string(),
+            process_id: 1234,
+            image: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            target_filename: "C:\\temp\\test.txt".to_string(),
+            creation_utc_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_200, 500_000_000).unwrap(),
+            ),
+            user: "DOMAIN\\User".to_string(),
+        };
+
+        let csv = format!("{event}");
+        let fields: Vec<&str> = csv.split('\t').collect();
+
+        // Verify timestamp formatting
+        assert_eq!(fields[6], "1609459200.500000000"); // creation_utc_time
+    }
+
+    #[test]
+    fn file_create_stream_hash_formatting() {
+        let event = FileCreateStreamHash {
+            agent_name: "test-agent".to_string(),
+            agent_id: "agent-123".to_string(),
+            process_guid: "{guid-123}".to_string(),
+            process_id: 1234,
+            image: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            target_filename: "C:\\temp\\test.txt:Zone.Identifier".to_string(),
+            creation_utc_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_200, 750_000_000).unwrap(),
+            ),
+            hash: vec!["SHA256=ABC123".to_string()],
+            contents: "ZoneId=3".to_string(),
+            user: "DOMAIN\\User".to_string(),
+        };
+
+        let csv = format!("{event}");
+        let fields: Vec<&str> = csv.split('\t').collect();
+
+        // Verify timestamp formatting
+        assert_eq!(fields[6], "1609459200.750000000"); // creation_utc_time
+    }
+
+    #[test]
+    fn sysmon_datetime_serialization() {
+        let event = FileCreationTimeChanged {
+            agent_name: "test-agent".to_string(),
+            agent_id: "agent-123".to_string(),
+            process_guid: "{guid-123}".to_string(),
+            process_id: 1234,
+            image: "C:\\Windows\\System32\\cmd.exe".to_string(),
+            target_filename: "C:\\temp\\test.txt".to_string(),
+            creation_utc_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_200, 123_456_789).unwrap(),
+            ),
+            previous_creation_utc_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_100, 987_654_321).unwrap(),
+            ),
+            user: "DOMAIN\\User".to_string(),
+        };
+
+        // Test serialization and deserialization
+        let serialized = bincode::serialize(&event).unwrap();
+        let deserialized: FileCreationTimeChanged = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(event, deserialized);
+        assert_eq!(event.creation_utc_time, deserialized.creation_utc_time);
+        assert_eq!(
+            event.previous_creation_utc_time,
+            deserialized.previous_creation_utc_time
+        );
+    }
+}
+
 impl Display for FileDelete {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(

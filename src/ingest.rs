@@ -100,11 +100,10 @@ pub async fn receive_ack_timestamp(recv: &mut RecvStream) -> Result<i64, RecvErr
 fn convert_time_format(timestamp: i64) -> String {
     const A_BILLION: i64 = 1_000_000_000;
 
-    if timestamp > 0 {
-        format!("{}.{:09}", timestamp / A_BILLION, timestamp % A_BILLION)
-    } else {
-        format!("{}.{:09}", timestamp / A_BILLION, -timestamp % A_BILLION)
-    }
+    let seconds = timestamp.div_euclid(A_BILLION);
+    let nanos = timestamp.rem_euclid(A_BILLION);
+
+    format!("{seconds}.{nanos:09}")
 }
 
 fn as_str_or_default(s: &str) -> &str {
@@ -235,6 +234,46 @@ mod tests {
         let ts = ndt.as_nanosecond();
         let ts_fmt = super::convert_time_format(ts.try_into().unwrap());
         assert_eq!(ts_fmt, "-1.000000000");
+    }
+
+    #[test]
+    fn convert_time_format_comprehensive() {
+        use chrono::DateTime;
+
+        // Test zero timestamp
+        let ts = 0_i64;
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "0.000000000");
+
+        // Test positive timestamp with various nanosecond values
+        let ndt = DateTime::from_timestamp(1, 1).unwrap();
+        let ts = ndt.timestamp_nanos_opt().unwrap();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "1.000000001");
+
+        // Test large positive timestamp
+        let ndt = DateTime::from_timestamp(1_000_000, 999_999_999).unwrap();
+        let ts = ndt.timestamp_nanos_opt().unwrap();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "1000000.999999999");
+
+        // Test negative timestamp with non-zero nanoseconds
+        let ndt = DateTime::from_timestamp(-2, 500_000_000).unwrap();
+        let ts = ndt.timestamp_nanos_opt().unwrap();
+        let ts_fmt = super::convert_time_format(ts);
+        // Chrono (and Zeek) floor-divide seconds for negatives, so this prints -2.5
+        assert_eq!(ts_fmt, "-2.500000000");
+
+        // Test negative timestamp whose magnitude is less than one second
+        let ts = -1_i64;
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "-1.999999999");
+
+        // Test timestamp that requires padding of nanoseconds
+        let ndt = DateTime::from_timestamp(5, 100).unwrap();
+        let ts = ndt.timestamp_nanos_opt().unwrap();
+        let ts_fmt = super::convert_time_format(ts);
+        assert_eq!(ts_fmt, "5.000000100");
     }
 
     #[test]

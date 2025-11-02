@@ -434,7 +434,7 @@ mod tests {
 
     use crate::frame;
     use crate::ingest::network::Conn;
-    use crate::publish::{recv_ack_response, PublishError};
+    use crate::publish::{recv_ack_response, PcapFilter, PublishError};
     use crate::test::{channel, TOKEN};
 
     #[tokio::test]
@@ -743,5 +743,58 @@ mod tests {
         let recv_data = receive_raw_events(&mut channel.client.recv).await.unwrap();
 
         assert_eq!(recv_data.len(), 4);
+    }
+
+    /// Helper function to convert Chrono `DateTime` to Jiff Timestamp for testing
+    fn chrono_to_jiff(dt: chrono::DateTime<chrono::Utc>) -> jiff::Timestamp {
+        jiff::Timestamp::from_nanosecond(dt.timestamp_nanos_opt().unwrap().into()).unwrap()
+    }
+
+    #[test]
+    fn pcap_filter_datetime_serialization() {
+        use chrono::DateTime;
+
+        let filter = PcapFilter {
+            start_time: chrono_to_jiff(
+                DateTime::from_timestamp(1_609_459_200, 123_456_789).unwrap(),
+            ),
+            sensor: "test-sensor".to_string(),
+            src_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            src_port: 12345,
+            dst_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            dst_port: 80,
+            proto: 6,
+            end_time: chrono_to_jiff(DateTime::from_timestamp(1_609_459_300, 987_654_321).unwrap()),
+        };
+
+        // Test serialization and deserialization
+        let serialized = bincode::serialize(&filter).unwrap();
+        let deserialized: PcapFilter = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(filter, deserialized);
+        assert_eq!(filter.start_time, deserialized.start_time);
+        assert_eq!(filter.end_time, deserialized.end_time);
+    }
+
+    #[test]
+    fn pcap_filter_datetime_edge_cases() {
+        use chrono::DateTime;
+
+        // Test with timestamps at epoch
+        let filter = PcapFilter {
+            start_time: chrono_to_jiff(DateTime::from_timestamp(0, 0).unwrap()),
+            sensor: "test-sensor".to_string(),
+            src_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            src_port: 12345,
+            dst_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            dst_port: 80,
+            proto: 6,
+            end_time: chrono_to_jiff(DateTime::from_timestamp(1, 0).unwrap()),
+        };
+
+        let serialized = bincode::serialize(&filter).unwrap();
+        let deserialized: PcapFilter = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(filter, deserialized);
     }
 }

@@ -19,6 +19,10 @@ thiserror = "2"
 tokio = "1"
 
 [dev-dependencies]
+chrono = { version = "0.4.35", default-features = false, features = [
+  "serde",
+  "std",
+] }
 futures = "0.3"
 quinn = { version = "0.11", features = ["ring"] }
 rcgen = "0.13"
