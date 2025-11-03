@@ -3,7 +3,6 @@ use std::fmt::{Display, Formatter};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::bincode_utils;
 use crate::publish::range::ResponseRangeData;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -19,14 +18,10 @@ impl Display for PeriodicTimeSeries {
 }
 
 impl ResponseRangeData for PeriodicTimeSeries {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &self.data)))
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&Some((timestamp, sensor, &self.data)))
     }
-    fn response_done() -> Result<Vec<u8>, bincode::error::EncodeError> {
-        bincode_utils::encode_legacy(&None::<(i64, String, Vec<f64>)>)
+    fn response_done() -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&None::<(i64, String, Vec<f64>)>)
     }
 }

@@ -1,4 +1,3 @@
-mod bincode_utils;
 pub mod connection;
 pub mod frame;
 pub mod ingest;

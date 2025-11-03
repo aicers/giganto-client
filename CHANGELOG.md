@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Reverted `bincode` from version 2 to version 1 to align
+  with broader migration strategy. This change affects serialization and
+  deserialization behavior.
+
 ### Fixed
 
 - Fixed missing `image_loaded` field in `ImageLoaded` struct `Display`

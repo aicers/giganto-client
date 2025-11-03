@@ -2,23 +2,17 @@ use anyhow::Result;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
-use crate::bincode_utils;
-
 pub trait ResponseRangeData {
     /// # Errors
     ///
     /// Will return `Err` if response data's serialize faild.
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError>;
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error>;
 
     /// # Errors
     ///
     /// Will return `Err` if serialize faild.
-    fn response_done() -> Result<Vec<u8>, bincode::error::EncodeError> {
-        bincode_utils::encode_legacy(&None::<(i64, String, Vec<u8>)>)
+    fn response_done() -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&None::<(i64, String, Vec<u8>)>)
     }
 }
 
