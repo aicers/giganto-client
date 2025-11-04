@@ -6,7 +6,7 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{bincode_utils, ingest::to_string_or_empty, publish::range::ResponseRangeData};
+use crate::{ingest::to_string_or_empty, publish::range::ResponseRangeData};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Log {
@@ -21,12 +21,8 @@ impl Display for Log {
 }
 
 impl ResponseRangeData for Log {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &self.log)))
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        bincode::serialize(&Some((timestamp, sensor, &self.log)))
     }
 }
 
