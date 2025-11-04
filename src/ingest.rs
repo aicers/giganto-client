@@ -204,7 +204,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(timestamp, 9999);
-        assert_eq!(data, crate::bincode_utils::encode_legacy(&conn).unwrap());
+        assert_eq!(data, bincode::serialize(&conn).unwrap());
 
         // recv ack timestamp
         crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes())

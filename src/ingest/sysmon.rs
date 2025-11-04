@@ -7,7 +7,6 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    bincode_utils,
     ingest::{convert_time_format, vec_to_string_or_default, TIME_FORMAT},
     publish::range::ResponseRangeData,
 };
@@ -72,14 +71,10 @@ impl Display for ProcessCreate {
 }
 
 impl ResponseRangeData for ProcessCreate {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let process_create_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &process_create_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &process_create_csv.as_bytes())))
     }
 }
 
@@ -115,14 +110,10 @@ impl Display for FileCreationTimeChanged {
 }
 
 impl ResponseRangeData for FileCreationTimeChanged {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let file_create_time_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &file_create_time_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &file_create_time_csv.as_bytes())))
     }
 }
 
@@ -176,14 +167,10 @@ impl Display for NetworkConnection {
 }
 
 impl ResponseRangeData for NetworkConnection {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let network_connect_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &network_connect_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &network_connect_csv.as_bytes())))
     }
 }
 
@@ -213,14 +200,10 @@ impl Display for ProcessTerminated {
 }
 
 impl ResponseRangeData for ProcessTerminated {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let process_terminate_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((
+        bincode::serialize(&Some((
             timestamp,
             sensor,
             &process_terminate_csv.as_bytes(),
@@ -274,14 +257,10 @@ impl Display for ImageLoaded {
 }
 
 impl ResponseRangeData for ImageLoaded {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let image_load_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &image_load_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &image_load_csv.as_bytes())))
     }
 }
 
@@ -315,14 +294,10 @@ impl Display for FileCreate {
 }
 
 impl ResponseRangeData for FileCreate {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let file_create_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &file_create_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &file_create_csv.as_bytes())))
     }
 }
 
@@ -358,15 +333,11 @@ impl Display for RegistryValueSet {
 }
 
 impl ResponseRangeData for RegistryValueSet {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let registry_value_set_csv =
             format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((
+        bincode::serialize(&Some((
             timestamp,
             sensor,
             &registry_value_set_csv.as_bytes(),
@@ -406,15 +377,11 @@ impl Display for RegistryKeyValueRename {
 }
 
 impl ResponseRangeData for RegistryKeyValueRename {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let registry_key_rename_csv =
             format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((
+        bincode::serialize(&Some((
             timestamp,
             sensor,
             &registry_key_rename_csv.as_bytes(),
@@ -456,15 +423,11 @@ impl Display for FileCreateStreamHash {
 }
 
 impl ResponseRangeData for FileCreateStreamHash {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let file_create_stream_hash_csv =
             format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((
+        bincode::serialize(&Some((
             timestamp,
             sensor,
             &file_create_stream_hash_csv.as_bytes(),
@@ -502,14 +465,10 @@ impl Display for PipeEvent {
 }
 
 impl ResponseRangeData for PipeEvent {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let pipe_event_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &pipe_event_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &pipe_event_csv.as_bytes())))
     }
 }
 
@@ -545,14 +504,10 @@ impl Display for DnsEvent {
 }
 
 impl ResponseRangeData for DnsEvent {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let dns_event_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &dns_event_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &dns_event_csv.as_bytes())))
     }
 }
 
@@ -590,14 +545,10 @@ impl Display for FileDelete {
 }
 
 impl ResponseRangeData for FileDelete {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let file_delete_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &file_delete_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &file_delete_csv.as_bytes())))
     }
 }
 
@@ -629,14 +580,10 @@ impl Display for ProcessTampering {
 }
 
 impl ResponseRangeData for ProcessTampering {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let process_tamper_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &process_tamper_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &process_tamper_csv.as_bytes())))
     }
 }
 
@@ -672,15 +619,11 @@ impl Display for FileDeleteDetected {
 }
 
 impl ResponseRangeData for FileDeleteDetected {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let file_delete_detected_csv =
             format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((
+        bincode::serialize(&Some((
             timestamp,
             sensor,
             &file_delete_detected_csv.as_bytes(),
