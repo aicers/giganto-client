@@ -7,14 +7,14 @@ use std::{mem, net::IpAddr};
 
 use anyhow::Result;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use self::{
     range::{MessageCode, ResponseRangeData},
     stream::{RequestStreamRecord, StreamRequestPayload},
 };
-use crate::frame::{self, recv_bytes, recv_raw, send_bytes, send_raw, RecvError, SendError};
+use crate::frame::{self, RecvError, SendError, recv_bytes, recv_raw, send_bytes, send_raw};
 
 /// The error type for a publish failure.
 #[allow(clippy::module_name_repetitions)]
@@ -431,19 +431,19 @@ mod tests {
 
     use crate::frame;
     use crate::ingest::network::Conn;
-    use crate::publish::{recv_ack_response, PublishError};
-    use crate::test::{channel, TOKEN};
+    use crate::publish::{PublishError, recv_ack_response};
+    use crate::test::{TOKEN, channel};
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn publish_send_recv() {
         use crate::frame::send_bytes;
         use crate::publish::{
+            PcapFilter,
             range::ResponseRangeData,
             stream::{
                 RequestSemiSupervisedStream, RequestTimeSeriesGeneratorStream, StreamRequestPayload,
             },
-            PcapFilter,
         };
 
         let _lock = TOKEN.lock().await;
@@ -665,9 +665,9 @@ mod tests {
 
     #[tokio::test]
     async fn send_recv_raw_events() {
+        use crate::RawEventKind;
         use crate::publish::range::{MessageCode, RequestRawData};
         use crate::publish::{receive_raw_events, send_raw_events};
-        use crate::RawEventKind;
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 

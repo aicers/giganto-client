@@ -12,8 +12,8 @@ use std::fmt::Display;
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 
-use crate::frame::{self, RecvError, SendError};
 use crate::RawEventKind;
+use crate::frame::{self, RecvError, SendError};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Packet {
@@ -105,11 +105,7 @@ fn convert_time_format(timestamp: i64) -> String {
 }
 
 fn as_str_or_default(s: &str) -> &str {
-    if s.is_empty() {
-        "-"
-    } else {
-        s
-    }
+    if s.is_empty() { "-" } else { s }
 }
 
 pub(crate) fn sanitize_csv_field(s: &str) -> String {
@@ -157,7 +153,7 @@ mod tests {
     async fn ingest_send_recv() {
         use std::{mem, net::IpAddr};
 
-        use crate::test::{channel, TOKEN};
+        use crate::test::{TOKEN, channel};
 
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;

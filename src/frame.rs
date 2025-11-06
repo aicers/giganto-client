@@ -150,7 +150,7 @@ pub async fn send_handshake(send: &mut SendStream, buf: &[u8]) -> Result<(), Sen
 mod tests {
     #[tokio::test]
     async fn frame_send_and_recv() {
-        use crate::test::{channel, TOKEN};
+        use crate::test::{TOKEN, channel};
 
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
