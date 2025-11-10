@@ -3,11 +3,10 @@ use std::{
     net::IpAddr,
 };
 
-use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ingest::{convert_time_format, vec_to_string_or_default, TIME_FORMAT},
+    ingest::{convert_time_format, vec_to_string_or_default},
     publish::range::ResponseRangeData,
 };
 
@@ -86,8 +85,8 @@ pub struct FileCreationTimeChanged {
     pub process_id: u32,
     pub image: String,
     pub target_filename: String,
-    pub creation_utc_time: Timestamp,
-    pub previous_creation_utc_time: Timestamp,
+    pub creation_utc_time: i64,
+    pub previous_creation_utc_time: i64,
     pub user: String,
 }
 
@@ -102,8 +101,8 @@ impl Display for FileCreationTimeChanged {
             self.process_id,
             self.image,
             self.target_filename,
-            self.creation_utc_time.strftime(TIME_FORMAT),
-            self.previous_creation_utc_time.strftime(TIME_FORMAT),
+            convert_time_format(self.creation_utc_time),
+            convert_time_format(self.previous_creation_utc_time),
             self.user,
         )
     }
@@ -272,7 +271,7 @@ pub struct FileCreate {
     pub process_id: u32,
     pub image: String,
     pub target_filename: String,
-    pub creation_utc_time: Timestamp,
+    pub creation_utc_time: i64,
     pub user: String,
 }
 
@@ -287,7 +286,7 @@ impl Display for FileCreate {
             self.process_id,
             self.image,
             self.target_filename,
-            self.creation_utc_time.strftime(TIME_FORMAT),
+            convert_time_format(self.creation_utc_time),
             self.user,
         )
     }
@@ -397,7 +396,7 @@ pub struct FileCreateStreamHash {
     pub process_id: u32,
     pub image: String,
     pub target_filename: String,
-    pub creation_utc_time: Timestamp,
+    pub creation_utc_time: i64,
     pub hash: Vec<String>,
     pub contents: String,
     pub user: String,
@@ -414,7 +413,7 @@ impl Display for FileCreateStreamHash {
             self.process_id,
             self.image,
             self.target_filename,
-            self.creation_utc_time.strftime(TIME_FORMAT),
+            convert_time_format(self.creation_utc_time),
             vec_to_string_or_default(&self.hash),
             self.contents,
             self.user,
