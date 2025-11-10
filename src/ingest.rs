@@ -15,9 +15,6 @@ use serde::{Deserialize, Serialize};
 use crate::frame::{self, RecvError, SendError};
 use crate::RawEventKind;
 
-/// Time format pattern for Zeek-compatible timestamp format ("%s%.9f")
-const TIME_FORMAT: &str = "%s%.9f";
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Packet {
     pub packet_timestamp: i64,
@@ -160,8 +157,6 @@ mod tests {
     async fn ingest_send_recv() {
         use std::{mem, net::IpAddr};
 
-        use jiff::Timestamp;
-
         use crate::test::{channel, TOKEN};
 
         let _lock = TOKEN.lock().await;
@@ -186,8 +181,8 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: Timestamp::from_nanosecond(500).expect("valid timestamp"),
-            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
+            start_time: 500,
+            end_time: 1000,
             duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
@@ -218,22 +213,12 @@ mod tests {
 
     #[test]
     fn convert_time_format() {
-        use jiff::Timestamp;
-
-        let sec = 2;
-        let nsec = 123;
-        let ndt = Timestamp::from_nanosecond(sec * 1_000_000_000 + nsec).expect("valid timestamp");
-
-        let ts = ndt.as_nanosecond();
-        let ts_fmt = super::convert_time_format(ts.try_into().unwrap());
+        let ts = 2 * 1_000_000_000 + 123;
+        let ts_fmt = super::convert_time_format(ts);
         assert_eq!(ts_fmt, "2.000000123");
 
-        let sec = -1;
-        let nsec = 0;
-        let ndt = Timestamp::from_nanosecond(sec * 1_000_000_000 + nsec).expect("valid timestamp");
-
-        let ts = ndt.as_nanosecond();
-        let ts_fmt = super::convert_time_format(ts.try_into().unwrap());
+        let ts = -1_000_000_000;
+        let ts_fmt = super::convert_time_format(ts);
         assert_eq!(ts_fmt, "-1.000000000");
     }
 

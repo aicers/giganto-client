@@ -6,7 +6,6 @@ pub mod stream;
 use std::{mem, net::IpAddr};
 
 use anyhow::Result;
-use jiff::Timestamp;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
@@ -68,14 +67,14 @@ impl From<frame::SendError> for PublishError {
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct PcapFilter {
-    pub start_time: Timestamp,
+    pub start_time: i64,
     pub sensor: String,
     pub src_addr: IpAddr,
     pub src_port: u16,
     pub dst_addr: IpAddr,
     pub dst_port: u16,
     pub proto: u8,
-    pub end_time: Timestamp,
+    pub end_time: i64,
 }
 
 /// Sends the stream request to giganto's publish module.
@@ -430,8 +429,6 @@ mod tests {
     use std::net::IpAddr;
     use std::str::FromStr;
 
-    use jiff::Timestamp;
-
     use crate::frame;
     use crate::ingest::network::Conn;
     use crate::publish::{recv_ack_response, PublishError};
@@ -524,8 +521,8 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: Timestamp::from_nanosecond(500).expect("valid timestamp"),
-            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
+            start_time: 500,
+            end_time: 1000,
             duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
@@ -611,14 +608,14 @@ mod tests {
 
         // send/recv pcap extract request
         let p_filter = PcapFilter {
-            start_time: Timestamp::from_nanosecond(12345).expect("valid timestamp"),
+            start_time: 12345,
             sensor: "hello".to_string(),
             src_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             src_port: 46378,
             dst_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
             dst_port: 80,
             proto: 6,
-            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
+            end_time: 1000,
         };
         let send_filter = p_filter.clone();
 
@@ -684,8 +681,8 @@ mod tests {
             resp_port: 80,
             proto: 6,
             conn_state: String::new(),
-            start_time: Timestamp::from_nanosecond(500).expect("valid timestamp"),
-            end_time: Timestamp::from_nanosecond(1000).expect("valid timestamp"),
+            start_time: 500,
+            end_time: 1000,
             duration: 500,
             service: "-".to_string(),
             orig_bytes: 77,
