@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 use common::{channel, decode_legacy, encode_legacy, sample_conn, TOKEN};
 use giganto_client::{
+    frame,
     frame::send_bytes,
     publish::{
         pcap_extract_request, pcap_extract_response,
@@ -20,7 +21,7 @@ use giganto_client::{
             RequestSemiSupervisedStream, RequestStreamRecord, RequestTimeSeriesGeneratorStream,
             StreamRequestPayload,
         },
-        PcapFilter,
+        PcapFilter, PublishError,
     },
     RawEventKind,
 };
@@ -278,4 +279,174 @@ async fn send_recv_raw_events() {
     let recv_data = receive_raw_events(&mut channel.client.recv).await.unwrap();
 
     assert_eq!(recv_data.len(), 4);
+}
+
+#[tokio::test]
+async fn pcap_extract_request_success() {
+    let _lock = TOKEN.lock().await;
+    let channel = channel().await;
+
+    let send_filter: PcapFilter = serde_json::from_value(json!({
+        "start_time": "1970-01-01T00:00:00.000012345Z",
+        "sensor": "test-sensor",
+        "src_addr": "192.168.1.1",
+        "src_port": 8080,
+        "dst_addr": "192.168.1.2",
+        "dst_port": 443,
+        "proto": 6,
+        "end_time": "1970-01-01T00:00:01.000000000Z",
+    }))
+    .expect("valid PcapFilter payload");
+
+    // Spawn a task to accept bidirectional stream from server and respond with OK
+    let client_conn = channel.client.conn.clone();
+    let handle = tokio::spawn(async move {
+        let (mut server_send, mut server_recv) = client_conn.accept_bi().await.unwrap();
+        // Receive the filter
+        let mut buf = Vec::new();
+        let received_filter: PcapFilter = frame::recv(&mut server_recv, &mut buf).await.unwrap();
+        // Send OK response
+        let mut ack_buf = Vec::new();
+        send_ok(&mut server_send, &mut ack_buf, ()).await.unwrap();
+        received_filter
+    });
+
+    // Call pcap_extract_request from server side
+    let result = pcap_extract_request(&channel.server.conn, &send_filter).await;
+
+    // Verify it completes successfully
+    assert!(result.is_ok());
+
+    // Wait for the receive task to complete and verify the filter was received correctly
+    let received_filter = handle.await.unwrap();
+    assert_eq!(received_filter, send_filter);
+}
+
+/// Ensures the `pcap_extract_request` function returns an `PublishError::PcapRequestFail` error
+/// when the received data cannot be deserialized as `PcapFilter`.
+#[tokio::test]
+async fn pcap_extract_request_error_pcap_request_fail() {
+    let _lock = TOKEN.lock().await;
+    let channel = channel().await;
+
+    let send_filter: PcapFilter = serde_json::from_value(json!({
+        "start_time": "1970-01-01T00:00:00.000012345Z",
+        "sensor": "test-sensor",
+        "src_addr": "192.168.1.1",
+        "src_port": 8080,
+        "dst_addr": "192.168.1.2",
+        "dst_port": 443,
+        "proto": 6,
+        "end_time": "1970-01-01T00:00:01.000000000Z",
+    }))
+    .expect("valid PcapFilter payload");
+
+    // Spawn a task to accept bidirectional stream from server and respond with Err
+    let client_conn = channel.client.conn.clone();
+    let handle = tokio::spawn(async move {
+        let (mut server_send, mut server_recv) = client_conn.accept_bi().await.unwrap();
+        // Receive the filter
+        let mut buf = Vec::new();
+        let _received_filter: PcapFilter = frame::recv(&mut server_recv, &mut buf).await.unwrap();
+        // Send Err response
+        let mut ack_buf = Vec::new();
+        send_err(&mut server_send, &mut ack_buf, "test error message")
+            .await
+            .unwrap();
+    });
+
+    // Call pcap_extract_request from server side
+    let result = pcap_extract_request(&channel.server.conn, &send_filter).await;
+
+    // Verify it returns an `PublishError::PcapRequestFail` error
+    assert!(result.is_err_and(|e| matches!(e, PublishError::PcapRequestFail(_))));
+
+    // Wait for the send task to complete
+    handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn pcap_extract_response_success() {
+    let _lock = TOKEN.lock().await;
+    let channel = channel().await;
+
+    let send_filter: PcapFilter = serde_json::from_value(json!({
+        "start_time": "1970-01-01T00:00:00.000012345Z",
+        "sensor": "test-sensor",
+        "src_addr": "192.168.1.1",
+        "src_port": 8080,
+        "dst_addr": "192.168.1.2",
+        "dst_port": 443,
+        "proto": 6,
+        "end_time": "1970-01-01T00:00:01.000000000Z",
+    }))
+    .expect("valid PcapFilter payload");
+
+    // Spawn a task to open bidirectional stream from client and send the filter
+    let send_filter_clone = send_filter.clone();
+    let client_conn = channel.client.conn.clone();
+    let handle = tokio::spawn(async move {
+        let (mut client_send, client_recv) = client_conn.open_bi().await.unwrap();
+        let mut buf = Vec::new();
+        frame::send(&mut client_send, &mut buf, send_filter_clone)
+            .await
+            .unwrap();
+        client_send.finish().unwrap();
+        client_recv
+    });
+
+    // Accept the bidirectional stream on server side and call pcap_extract_response
+    let (server_send, server_recv) = channel.server.conn.accept_bi().await.unwrap();
+    let received_filter = pcap_extract_response(server_send, server_recv)
+        .await
+        .unwrap();
+
+    // Verify the received filter matches the sent filter
+    assert_eq!(received_filter, send_filter);
+
+    // Wait for the send task to complete and verify the ack response was sent (Ok)
+    let mut client_recv = handle.await.unwrap();
+    let mut ack_buf = Vec::new();
+    frame::recv_raw(&mut client_recv, &mut ack_buf)
+        .await
+        .unwrap();
+    let ack_result: Result<(), String> = decode_legacy(&ack_buf).unwrap();
+    assert!(ack_result.is_ok());
+}
+
+/// Ensures the `pcap_extract_response` function returns an `PublishError::PcapRequestFail` error
+/// when the received data cannot be deserialized as `PcapFilter`.
+#[tokio::test]
+async fn pcap_extract_response_error_pcap_request_fail() {
+    let _lock = TOKEN.lock().await;
+    let channel = channel().await;
+
+    // Spawn a task to open bidirectional stream from client and send invalid data
+    let client_conn = channel.client.conn.clone();
+    let handle = tokio::spawn(async move {
+        let (mut client_send, client_recv) = client_conn.open_bi().await.unwrap();
+        // Send invalid data that cannot be deserialized as PcapFilter
+        let invalid_data = b"invalid pcap filter data";
+        frame::send_raw(&mut client_send, invalid_data)
+            .await
+            .unwrap();
+        client_send.finish().unwrap();
+        client_recv
+    });
+
+    // Accept the bidirectional stream on server side and call pcap_extract_response
+    let (server_send, server_recv) = channel.server.conn.accept_bi().await.unwrap();
+    let result = pcap_extract_response(server_send, server_recv).await;
+
+    // Verify it returns an `PublishError::PcapRequestFail` error
+    assert!(result.is_err_and(|e| matches!(e, PublishError::PcapRequestFail(_))));
+
+    // Wait for the send task to complete and verify the ack response was sent (Err)
+    let mut client_recv = handle.await.unwrap();
+    let mut ack_buf = Vec::new();
+    frame::recv_raw(&mut client_recv, &mut ack_buf)
+        .await
+        .unwrap();
+    let ack_result: Result<(), String> = decode_legacy(&ack_buf).unwrap();
+    assert!(ack_result.is_err());
 }

@@ -337,3 +337,50 @@ fn test_pcap_extract_request_payload() {
         _ => panic!("Expected PcapExtractRequest variant"),
     }
 }
+
+/// Ensures the `StreamRequestPayload::PcapExtraction` variant survives a bincode encode/decode pass
+/// with multiple filters, matching the actual wire-format behavior.
+#[test]
+fn pcap_filter_vec_roundtrips_via_stream_payload_bincode() {
+    use serde_json::json;
+
+    use crate::bincode_utils;
+
+    let filters: Vec<PcapFilter> = serde_json::from_value(json!([
+        {
+            "start_time": "2024-08-01T00:00:00Z",
+            "sensor": "sensor-bravo",
+            "src_addr": "203.0.113.30",
+            "src_port": 2200,
+            "dst_addr": "203.0.113.40",
+            "dst_port": 2201,
+            "proto": 17,
+            "end_time": "2024-08-01T00:05:00Z"
+        },
+        {
+            "start_time": "2024-08-02T01:01:01Z",
+            "sensor": "sensor-charlie",
+            "src_addr": "2001:db8::1",
+            "src_port": 8080,
+            "dst_addr": "2001:db8::2",
+            "dst_port": 8081,
+            "proto": 6,
+            "end_time": "2024-08-02T01:06:01Z"
+        }
+    ]))
+    .expect("valid filter list");
+
+    let payload = StreamRequestPayload::new_pcap_extraction(filters.clone());
+    let encoded = bincode_utils::encode_legacy(&payload).expect("payload encodes by bincode");
+    let decoded: StreamRequestPayload =
+        bincode_utils::decode_legacy(&encoded).expect("payload decodes by bincode");
+
+    let StreamRequestPayload::PcapExtraction {
+        filter: decoded_filters,
+    } = decoded
+    else {
+        panic!("expected PcapExtraction variant")
+    };
+
+    assert_eq!(decoded_filters, filters);
+}
