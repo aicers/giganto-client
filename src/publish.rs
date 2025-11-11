@@ -426,6 +426,6 @@ pub async fn recv_ack_response(recv: &mut RecvStream) -> Result<(), PublishError
     recv_raw(recv, &mut ack_buf).await?;
     bincode_utils::decode_legacy::<Result<(), String>>(&ack_buf)
         .map_err(PublishError::DeserializationError)?
-        .map_err(|e| PublishError::PcapRequestFail(e.to_string()))?;
+        .map_err(PublishError::PcapRequestFail)?;
     Ok(())
 }
