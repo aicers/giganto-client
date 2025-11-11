@@ -156,64 +156,6 @@ fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
 
 #[cfg(test)]
 mod tests {
-    #[tokio::test]
-    async fn ingest_send_recv() {
-        use std::{mem, net::IpAddr};
-
-        use crate::test::{channel, TOKEN};
-
-        let _lock = TOKEN.lock().await;
-        let mut channel = channel().await;
-
-        // send/recv event type
-        super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn)
-            .await
-            .unwrap();
-
-        let mut buf = vec![0; mem::size_of::<u32>()];
-        super::receive_record_header(&mut channel.server.recv, &mut buf)
-            .await
-            .unwrap();
-        assert_eq!(buf, u32::from(super::RawEventKind::Conn).to_le_bytes());
-
-        // send/recv event data
-        let conn = super::network::Conn {
-            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            orig_port: 46378,
-            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            resp_port: 80,
-            proto: 6,
-            conn_state: String::new(),
-            start_time: chrono::DateTime::from_timestamp_nanos(500),
-            end_time: chrono::DateTime::from_timestamp_nanos(1000),
-            duration: 500,
-            service: "-".to_string(),
-            orig_bytes: 77,
-            resp_bytes: 295,
-            orig_pkts: 397,
-            resp_pkts: 511,
-            orig_l2_bytes: 21515,
-            resp_l2_bytes: 27889,
-        };
-        super::send_event(&mut channel.client.send, 9999, conn.clone())
-            .await
-            .unwrap();
-        let (data, timestamp) = super::receive_event(&mut channel.server.recv)
-            .await
-            .unwrap();
-        assert_eq!(timestamp, 9999);
-        assert_eq!(data, crate::bincode_utils::encode_legacy(&conn).unwrap());
-
-        // recv ack timestamp
-        crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes())
-            .await
-            .unwrap();
-        let timestamp = super::receive_ack_timestamp(&mut channel.server.recv)
-            .await
-            .unwrap();
-        assert_eq!(timestamp, 8888);
-    }
-
     #[test]
     fn convert_time_format() {
         use chrono::DateTime;

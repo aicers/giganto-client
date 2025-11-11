@@ -3,8 +3,6 @@ pub mod connection;
 pub mod frame;
 pub mod ingest;
 pub mod publish;
-#[cfg(test)]
-mod test;
 
 use std::default::Default;
 

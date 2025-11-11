@@ -295,29 +295,31 @@ fn test_node_stream_record_type() {
 
 #[test]
 fn test_pcap_extract_request_payload() {
-    use std::net::IpAddr;
+    use serde_json::json;
 
     let pcap_filters = vec![
-        PcapFilter {
-            start_time: chrono::DateTime::from_timestamp_nanos(1_234_567_890),
-            sensor: "sensor1".to_string(),
-            src_addr: IpAddr::V4([192, 168, 1, 1].into()),
-            src_port: 80,
-            dst_addr: IpAddr::V4([192, 168, 1, 2].into()),
-            dst_port: 443,
-            proto: 6, // TCP
-            end_time: chrono::DateTime::from_timestamp_nanos(1_234_567_950),
-        },
-        PcapFilter {
-            start_time: chrono::DateTime::from_timestamp_nanos(1_234_567_900),
-            sensor: "sensor2".to_string(),
-            src_addr: IpAddr::V6("::1".parse().unwrap()),
-            src_port: 22,
-            dst_addr: IpAddr::V6("::2".parse().unwrap()),
-            dst_port: 2222,
-            proto: 6, // TCP
-            end_time: chrono::DateTime::from_timestamp_nanos(1_234_567_960),
-        },
+        serde_json::from_value(json!({
+            "start_time": "1970-01-01T00:00:01.234567890Z",
+            "sensor": "sensor1",
+            "src_addr": "192.168.1.1",
+            "src_port": 80,
+            "dst_addr": "192.168.1.2",
+            "dst_port": 443,
+            "proto": 6,
+            "end_time": "1970-01-01T00:00:01.234567950Z"
+        }))
+        .unwrap(),
+        serde_json::from_value(json!({
+            "start_time": "1970-01-01T00:00:01.234567900Z",
+            "sensor": "sensor2",
+            "src_addr": "::1",
+            "src_port": 22,
+            "dst_addr": "::2",
+            "dst_port": 2222,
+            "proto": 6,
+            "end_time": "1970-01-01T00:00:01.234567960Z"
+        }))
+        .unwrap(),
     ];
 
     let payload = StreamRequestPayload::new_pcap_extraction(pcap_filters.clone());
