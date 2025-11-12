@@ -20,7 +20,6 @@ pub struct Conn {
     pub proto: u8,
     pub conn_state: String,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub service: String,
     pub orig_bytes: u64,
@@ -35,7 +34,7 @@ impl Display for Conn {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -43,7 +42,6 @@ impl Display for Conn {
             self.proto,
             as_str_or_default(&self.conn_state),
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.service,
             self.orig_bytes,
@@ -73,7 +71,6 @@ pub struct Dns {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -196,14 +193,13 @@ impl Display for Dns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -241,7 +237,6 @@ pub struct MalformedDns {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -265,14 +260,13 @@ impl Display for MalformedDns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -310,7 +304,6 @@ pub struct Http {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -342,14 +335,13 @@ impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -395,7 +387,6 @@ pub struct Rdp {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -408,14 +399,13 @@ impl Display for Rdp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -442,7 +432,6 @@ pub struct Smtp {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -461,14 +450,13 @@ impl Display for Smtp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -501,7 +489,6 @@ pub struct Ntlm {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -518,14 +505,13 @@ impl Display for Ntlm {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -556,7 +542,6 @@ pub struct Kerberos {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -577,14 +562,13 @@ impl Display for Kerberos {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -619,7 +603,6 @@ pub struct Ssh {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -644,14 +627,13 @@ impl Display for Ssh {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -690,7 +672,6 @@ pub struct DceRpc {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -706,14 +687,13 @@ impl Display for DceRpc {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -743,7 +723,6 @@ pub struct Ftp {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -772,14 +751,13 @@ impl Display for Ftp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -827,7 +805,6 @@ pub struct Mqtt {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -845,14 +822,13 @@ impl Display for Mqtt {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -884,7 +860,6 @@ pub struct Ldap {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -903,14 +878,13 @@ impl Display for Ldap {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -943,7 +917,6 @@ pub struct Tls {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -976,14 +949,13 @@ impl Display for Tls {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -1030,7 +1002,6 @@ pub struct Smb {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -1053,14 +1024,13 @@ impl Display for Smb {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -1098,7 +1068,6 @@ pub struct Nfs {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -1112,14 +1081,13 @@ impl Display for Nfs {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -1147,7 +1115,6 @@ pub struct Bootp {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -1170,14 +1137,13 @@ impl Display for Bootp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -1214,7 +1180,6 @@ pub struct Dhcp {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -1244,14 +1209,13 @@ impl Display for Dhcp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -1295,7 +1259,6 @@ pub struct Radius {
     pub resp_port: u16,
     pub proto: u8,
     pub start_time: i64,
-    pub end_time: i64,
     pub duration: i64,
     pub orig_pkts: u64,
     pub resp_pkts: u64,
@@ -1321,14 +1284,13 @@ impl Display for Radius {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
             self.resp_port,
             self.proto,
             convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -1375,7 +1337,6 @@ mod tests {
             resp_port: 443,
             proto: 6,
             start_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
-            end_time: 1_000_000_000_000_000_000,   // 1 second in nanoseconds
             duration: 0,
             orig_pkts: 1,
             resp_pkts: 1,
@@ -1408,18 +1369,18 @@ mod tests {
         // Split by tabs to get individual fields and verify the specific fields
         let fields: Vec<&str> = csv_output.split('\t').collect();
 
-        // Verify that user_agent field has special characters replaced with spaces (at index 17 now due to new fields)
-        assert_eq!(fields[17], "Mozilla/5.0 (Windows NT 10.0; Win64)");
+        // Verify that user_agent field has special characters replaced with spaces (at index 16)
+        assert_eq!(fields[16], "Mozilla/5.0 (Windows NT 10.0; Win64)");
 
-        // Verify that post_body field has special characters replaced with spaces (at index 30 now due to new fields)
-        assert_eq!(fields[30], "username=test password=secret submit=true ");
+        // Verify that post_body field has special characters replaced with spaces (at index 29)
+        assert_eq!(fields[29], "username=test password=secret submit=true ");
 
         // Verify the sanitized fields don't contain special characters
-        assert!(!fields[17].contains('\n'));
-        assert!(!fields[17].contains('\r'));
-        assert!(!fields[30].contains('\t'));
-        assert!(!fields[30].contains('\n'));
-        assert!(!fields[30].contains('\r'));
+        assert!(!fields[16].contains('\n'));
+        assert!(!fields[16].contains('\r'));
+        assert!(!fields[29].contains('\t'));
+        assert!(!fields[29].contains('\n'));
+        assert!(!fields[29].contains('\r'));
     }
 
     #[test]
@@ -1431,7 +1392,6 @@ mod tests {
             resp_port: 443,
             proto: 6,
             start_time: 1_000_000_000_000_000_000,
-            end_time: 1_000_000_000_000_000_000,
             duration: 0,
             orig_pkts: 0,
             resp_pkts: 0,
@@ -1463,8 +1423,8 @@ mod tests {
 
         // Verify that empty user_agent and post_body fields are converted to "-"
         let fields: Vec<&str> = csv_output.split('\t').collect();
-        // user_agent is now at index 17, post_body is now at index 30 due to new fields
-        assert_eq!(fields[17], "-");
-        assert_eq!(fields[30], "-");
+        // user_agent is at index 16, post_body is at index 29
+        assert_eq!(fields[16], "-");
+        assert_eq!(fields[29], "-");
     }
 }
