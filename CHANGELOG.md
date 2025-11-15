@@ -10,7 +10,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Changed timestamp-related fields in network protocol and Sysmon structs from
   `jiff::Timestamp` to `i64` to reduce serialized payload size. This affects
-  `start_time`, `end_time`, `creation_utc_time`, and `previous_creation_utc_time`.
+  `start_time`, `creation_utc_time`, and `previous_creation_utc_time`.
 
 ### Removed
 
