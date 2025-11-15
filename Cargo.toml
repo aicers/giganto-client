@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 bincode = "1"
-jiff = { version = "0.2.15", features = ["serde"] }
 num_enum = "0.7"
 quinn = "0.11"
 semver = "1"
