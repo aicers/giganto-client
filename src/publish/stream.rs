@@ -320,7 +320,7 @@ fn test_pcap_extract_request_payload() {
         },
     ];
 
-    let payload = StreamRequestPayload::new_pcap_extraction(pcap_filters.clone());
+    let payload = StreamRequestPayload::new_pcap_extraction(pcap_filters);
 
     // Test that record_type returns None for PcapExtractRequest
     assert_eq!(payload.record_type(), None);
