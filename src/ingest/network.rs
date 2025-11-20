@@ -1294,20 +1294,7 @@ pub struct Icmp {
     pub id: u16,
     pub seq_num: u16,
     pub data_len: u16,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MalformedIcmp {
-    pub orig_addr: IpAddr,
-    pub orig_port: u16,
-    pub resp_addr: IpAddr,
-    pub resp_port: u16,
-    pub proto: u8,
-    pub start_time: i64,
-    pub end_time: i64,
-    pub packet_len: u16,
-    pub malformed_reason: String,
-    pub raw_data: Vec<u8>,
+    pub payload: Vec<u8>,
 }
 
 impl Display for Radius {
@@ -1356,7 +1343,7 @@ impl Display for Icmp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -1369,50 +1356,16 @@ impl Display for Icmp {
             self.id,
             self.seq_num,
             self.data_len,
+            format_args!("{:x?}", self.payload),
         )
     }
 }
 
 impl ResponseRangeData for Icmp {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
         let icmp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
 
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &icmp_csv.as_bytes())))
-    }
-}
-
-impl Display for MalformedIcmp {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.orig_addr,
-            self.orig_port,
-            self.resp_addr,
-            self.resp_port,
-            self.proto,
-            convert_time_format(self.start_time),
-            convert_time_format(self.end_time),
-            self.packet_len,
-            crate::ingest::sanitize_csv_field(&self.malformed_reason),
-            format_args!("{:x?}", self.raw_data),
-        )
-    }
-}
-
-impl ResponseRangeData for MalformedIcmp {
-    fn response_data(
-        &self,
-        timestamp: i64,
-        sensor: &str,
-    ) -> Result<Vec<u8>, bincode::error::EncodeError> {
-        let icmp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
-
-        bincode_utils::encode_legacy(&Some((timestamp, sensor, &icmp_csv.as_bytes())))
+        bincode::serialize(&Some((timestamp, sensor, &icmp_csv.as_bytes())))
     }
 }
 
@@ -1537,12 +1490,13 @@ mod tests {
             id: 1234,
             seq_num: 1,
             data_len: 56,
+            payload: vec![0x08, 0x00, 0xff, 0xff],
         };
 
         let csv_output = format!("{icmp}");
         let fields: Vec<&str> = csv_output.split('\t').collect();
 
-        assert_eq!(fields.len(), 12);
+        assert_eq!(fields.len(), 13);
         assert_eq!(fields[0], "192.168.1.1");
         assert_eq!(fields[1], "0");
         assert_eq!(fields[2], "192.168.1.2");
@@ -1553,6 +1507,7 @@ mod tests {
         assert_eq!(fields[9], "1234");
         assert_eq!(fields[10], "1");
         assert_eq!(fields[11], "56");
+        assert_eq!(fields[12], "[8, 0, ff, ff]");
     }
 
     #[test]
@@ -1570,82 +1525,10 @@ mod tests {
             id: 1234,
             seq_num: 1,
             data_len: 56,
+            payload: vec![0x08, 0x00, 0xff, 0xff],
         };
 
         let result = icmp.response_data(1_000_000_000_000_000_000, "sensor1");
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn malformed_icmp_display() {
-        let malformed_icmp = MalformedIcmp {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            orig_port: 0,
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            resp_port: 0,
-            proto: 1,
-            start_time: 1_000_000_000_000_000_000,
-            end_time: 1_000_000_000_000_000_000,
-            packet_len: 100,
-            malformed_reason: "Invalid checksum".to_string(),
-            raw_data: vec![0x08, 0x00, 0xff, 0xff],
-        };
-
-        let csv_output = format!("{malformed_icmp}");
-        let fields: Vec<&str> = csv_output.split('\t').collect();
-
-        assert_eq!(fields.len(), 10);
-        assert_eq!(fields[0], "192.168.1.1");
-        assert_eq!(fields[1], "0");
-        assert_eq!(fields[2], "192.168.1.2");
-        assert_eq!(fields[3], "0");
-        assert_eq!(fields[4], "1");
-        assert_eq!(fields[7], "100");
-        assert_eq!(fields[8], "Invalid checksum");
-        assert_eq!(fields[9], "[8, 0, ff, ff]");
-    }
-
-    #[test]
-    fn malformed_icmp_display_with_special_characters() {
-        let malformed_icmp = MalformedIcmp {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            orig_port: 0,
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            resp_port: 0,
-            proto: 1,
-            start_time: 1_000_000_000_000_000_000,
-            end_time: 1_000_000_000_000_000_000,
-            packet_len: 100,
-            malformed_reason: "Invalid\tchecksum\nwith\rspecial chars".to_string(),
-            raw_data: vec![0x08, 0x00, 0xff, 0xff],
-        };
-
-        let csv_output = format!("{malformed_icmp}");
-        let fields: Vec<&str> = csv_output.split('\t').collect();
-
-        // Verify that malformed_reason field has special characters replaced with spaces
-        assert_eq!(fields[8], "Invalid checksum with special chars");
-        assert!(!fields[8].contains('\t'));
-        assert!(!fields[8].contains('\n'));
-        assert!(!fields[8].contains('\r'));
-    }
-
-    #[test]
-    fn malformed_icmp_response_data() {
-        let malformed_icmp = MalformedIcmp {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            orig_port: 0,
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            resp_port: 0,
-            proto: 1,
-            start_time: 1_000_000_000_000_000_000,
-            end_time: 1_000_000_000_000_000_000,
-            packet_len: 100,
-            malformed_reason: "Invalid checksum".to_string(),
-            raw_data: vec![0x08, 0x00, 0xff, 0xff],
-        };
-
-        let result = malformed_icmp.response_data(1_000_000_000_000_000_000, "sensor1");
         assert!(result.is_ok());
     }
 }
