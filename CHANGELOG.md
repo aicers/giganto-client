@@ -4,7 +4,7 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.25.0] - 2025-11-26
 
 ### Changed
 
@@ -390,7 +390,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Move from giganto
 
-[Unreleased]: https://github.com/aicers/giganto-client/compare/0.24.0...main
+[0.25.0]: https://github.com/aicers/giganto-client/compare/0.24.0...0.25.0
 [0.24.0]: https://github.com/aicers/giganto-client/compare/0.23.0...0.24.0
 [0.23.0]: https://github.com/aicers/giganto-client/compare/0.22.0...0.23.0
 [0.22.0]: https://github.com/aicers/giganto-client/compare/0.21.0...0.22.0
