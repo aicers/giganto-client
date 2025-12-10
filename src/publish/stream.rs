@@ -48,6 +48,7 @@ pub enum RequestStreamRecord {
     Dhcp = 18,
     Radius = 19,
     MalformedDns = 20,
+    Icmp = 21,
 
     // sysmon
     FileCreate = 31,
@@ -274,6 +275,12 @@ fn test_node_stream_record_type() {
     );
 
     assert_eq!(
+        RequestStreamRecord::Icmp,
+        RequestStreamRecord::from_str("icmp").unwrap()
+    );
+    assert_eq!(RequestStreamRecord::Icmp.to_string(), "icmp");
+
+    assert_eq!(
         RequestStreamRecord::FileCreate,
         RequestStreamRecord::from_str("file_create").unwrap(),
     );
@@ -286,7 +293,7 @@ fn test_node_stream_record_type() {
     assert_eq!(RequestStreamRecord::FileDelete.to_string(), "file_delete");
 
     let all_request_stream_records = RequestStreamRecord::all();
-    assert_eq!(all_request_stream_records.len(), 23);
+    assert_eq!(all_request_stream_records.len(), 24);
     assert_eq!(
         all_request_stream_records.first(),
         Some(&RequestStreamRecord::Conn)
