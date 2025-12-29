@@ -1375,9 +1375,168 @@ impl ResponseRangeData for Icmp {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Display;
     use std::net::IpAddr;
 
     use super::*;
+
+    fn assert_response_data<T>(value: &T, timestamp: i64, sensor: &str)
+    where
+        T: ResponseRangeData + Display,
+    {
+        let res = value.response_data(timestamp, sensor).unwrap();
+        let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&res).unwrap();
+        let (decoded_ts, decoded_sensor, decoded_csv) = decoded.expect("expected Some payload");
+
+        assert_eq!(decoded_ts, timestamp);
+        assert_eq!(decoded_sensor, sensor);
+
+        let expected_csv = format!("{}	{sensor}	{value}", convert_time_format(timestamp));
+        assert_eq!(decoded_csv, expected_csv.as_bytes());
+    }
+
+    #[test]
+    fn conn_display() {
+        let conn = Conn {
+            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            orig_port: 46378,
+            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            resp_port: 80,
+            proto: 6,
+            conn_state: "SF".to_string(),
+            start_time: 1000,
+            duration: 500,
+            service: "http".to_string(),
+            orig_bytes: 77,
+            resp_bytes: 295,
+            orig_pkts: 397,
+            resp_pkts: 511,
+            orig_l2_bytes: 21515,
+            resp_l2_bytes: 27889,
+        };
+        let display = format!("{conn}");
+        assert!(display.contains("192.168.4.76"));
+        assert!(display.contains("46378"));
+        assert!(display.contains("SF"));
+        assert!(display.contains("http"));
+    }
+
+    #[test]
+    fn test_conn_response_data_contents() {
+        let conn = Conn {
+            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            orig_port: 46378,
+            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            resp_port: 80,
+            proto: 6,
+            conn_state: "SF".to_string(),
+            start_time: 1000,
+            duration: 500,
+            service: "http".to_string(),
+            orig_bytes: 77,
+            resp_bytes: 295,
+            orig_pkts: 397,
+            resp_pkts: 511,
+            orig_l2_bytes: 21515,
+            resp_l2_bytes: 27889,
+        };
+
+        assert_response_data(&conn, 1_234_567_890, "conn-sensor");
+    }
+
+    #[test]
+    fn dns_display() {
+        let dns = Dns {
+            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            orig_port: 1234,
+            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            resp_port: 53,
+            proto: 17,
+            start_time: 1000,
+            duration: 500,
+            orig_pkts: 10,
+            resp_pkts: 20,
+            orig_l2_bytes: 150,
+            resp_l2_bytes: 250,
+            query: "example.com".to_string(),
+            answer: vec!["1.2.3.4".to_string()],
+            trans_id: 1,
+            rtt: 100,
+            qclass: 1,
+            qtype: 1,
+            rcode: 0,
+            aa_flag: true,
+            tc_flag: false,
+            rd_flag: true,
+            ra_flag: true,
+            ttl: vec![3600],
+        };
+        let display = format!("{dns}");
+        assert!(display.contains("example.com"));
+        assert!(display.contains("1.2.3.4"));
+    }
+
+    #[test]
+    fn test_dns_response_data() {
+        let dns = Dns {
+            orig_addr: "127.0.0.1".parse().unwrap(),
+            orig_port: 1234,
+            resp_addr: "127.0.0.1".parse().unwrap(),
+            resp_port: 53,
+            proto: 17,
+            start_time: 1000,
+            duration: 100,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            query: "example.com".to_string(),
+            answer: vec!["1.2.3.4".to_string()],
+            trans_id: 1,
+            rtt: 10,
+            qclass: 1,
+            qtype: 1,
+            rcode: 0,
+            aa_flag: true,
+            tc_flag: false,
+            rd_flag: true,
+            ra_flag: true,
+            ttl: vec![3600],
+        };
+
+        assert_response_data(&dns, 1000, "dns-sensor");
+    }
+
+    #[test]
+    fn test_malformed_dns_response_data() {
+        let malformed = MalformedDns {
+            orig_addr: "10.0.0.1".parse().unwrap(),
+            orig_port: 1111,
+            resp_addr: "10.0.0.2".parse().unwrap(),
+            resp_port: 2222,
+            proto: 17,
+            start_time: 2_000,
+            duration: 50,
+            orig_pkts: 2,
+            resp_pkts: 3,
+            orig_l2_bytes: 200,
+            resp_l2_bytes: 300,
+            trans_id: 42,
+            flags: 0x1234,
+            question_count: 1,
+            answer_count: 0,
+            authority_count: 0,
+            additional_count: 0,
+            query_count: 2,
+            resp_count: 1,
+            query_bytes: 128,
+            resp_bytes: 256,
+            query_body: vec![b"query".to_vec()],
+            resp_body: vec![b"resp".to_vec()],
+        };
+
+        assert_response_data(&malformed, 9_999, "malformed-dns");
+    }
 
     #[test]
     fn http_csv_export_with_special_characters() {
@@ -1480,6 +1639,483 @@ mod tests {
     }
 
     #[test]
+    fn test_http_response_data() {
+        let http = Http {
+            orig_addr: "127.0.0.1".parse().unwrap(),
+            orig_port: 1234,
+            resp_addr: "127.0.0.1".parse().unwrap(),
+            resp_port: 80,
+            proto: 6,
+            start_time: 1000,
+            duration: 100,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            method: "GET".to_string(),
+            host: "example.com".to_string(),
+            uri: "/".to_string(),
+            referer: String::new(),
+            version: "1.1".to_string(),
+            user_agent: "Mozilla".to_string(),
+            request_len: 100,
+            response_len: 100,
+            status_code: 200,
+            status_msg: "OK".to_string(),
+            username: String::new(),
+            password: String::new(),
+            cookie: String::new(),
+            content_encoding: String::new(),
+            content_type: String::new(),
+            cache_control: String::new(),
+            filenames: vec![],
+            mime_types: vec![],
+            body: vec![],
+            state: String::new(),
+        };
+
+        assert_response_data(&http, 1000, "http-sensor");
+    }
+
+    #[test]
+    fn test_rdp_response_data_contents() {
+        let rdp = Rdp {
+            orig_addr: "127.0.0.1".parse().unwrap(),
+            orig_port: 1234,
+            resp_addr: "127.0.0.1".parse().unwrap(),
+            resp_port: 3389,
+            proto: 6,
+            start_time: 1000,
+            duration: 100,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            cookie: "cookie".to_string(),
+        };
+
+        let display = format!("{rdp}");
+        assert!(display.contains("cookie"));
+
+        assert_response_data(&rdp, 2_000, "rdp-sensor");
+    }
+
+    #[test]
+    fn test_smtp_response_data() {
+        let smtp = Smtp {
+            orig_addr: "192.0.2.1".parse().unwrap(),
+            orig_port: 25,
+            resp_addr: "192.0.2.2".parse().unwrap(),
+            resp_port: 2525,
+            proto: 6,
+            start_time: 3_000,
+            duration: 120,
+            orig_pkts: 4,
+            resp_pkts: 4,
+            orig_l2_bytes: 400,
+            resp_l2_bytes: 450,
+            mailfrom: "sender@example.com".to_string(),
+            date: "Fri, 05 Jan 2024 12:00:00 GMT".to_string(),
+            from: "Sender".to_string(),
+            to: "recipient@example.com".to_string(),
+            subject: "Hello".to_string(),
+            agent: "Postfix".to_string(),
+            state: "delivered".to_string(),
+        };
+
+        assert_response_data(&smtp, 3_000, "smtp-sensor");
+    }
+
+    #[test]
+    fn test_ntlm_response_data() {
+        let ntlm = Ntlm {
+            orig_addr: "203.0.113.1".parse().unwrap(),
+            orig_port: 139,
+            resp_addr: "203.0.113.2".parse().unwrap(),
+            resp_port: 445,
+            proto: 6,
+            start_time: 4_000,
+            duration: 60,
+            orig_pkts: 5,
+            resp_pkts: 5,
+            orig_l2_bytes: 500,
+            resp_l2_bytes: 600,
+            protocol: "NTLMSSP".to_string(),
+            username: "user".to_string(),
+            hostname: "host".to_string(),
+            domainname: "domain".to_string(),
+            success: "true".to_string(),
+        };
+
+        assert_response_data(&ntlm, 4_000, "ntlm-sensor");
+    }
+
+    #[test]
+    fn test_kerberos_response_data() {
+        let kerberos = Kerberos {
+            orig_addr: "198.51.100.1".parse().unwrap(),
+            orig_port: 88,
+            resp_addr: "198.51.100.2".parse().unwrap(),
+            resp_port: 88,
+            proto: 6,
+            start_time: 5_000,
+            duration: 70,
+            orig_pkts: 6,
+            resp_pkts: 7,
+            orig_l2_bytes: 600,
+            resp_l2_bytes: 700,
+            client_time: 1_000,
+            server_time: 2_000,
+            error_code: 0,
+            client_realm: "EXAMPLE.COM".to_string(),
+            cname_type: 1,
+            client_name: vec!["client".to_string()],
+            realm: "EXAMPLE.COM".to_string(),
+            sname_type: 2,
+            service_name: vec!["krbtgt".to_string(), "EXAMPLE.COM".to_string()],
+        };
+
+        assert_response_data(&kerberos, 5_000, "kerberos-sensor");
+    }
+
+    #[test]
+    fn ssh_display_and_response_data() {
+        let ssh = Ssh {
+            orig_addr: "127.0.0.1".parse().unwrap(),
+            orig_port: 1234,
+            resp_addr: "127.0.0.1".parse().unwrap(),
+            resp_port: 22,
+            proto: 6,
+            start_time: 1000,
+            duration: 100,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            client: "client".to_string(),
+            server: "server".to_string(),
+            cipher_alg: "alg".to_string(),
+            mac_alg: "mac".to_string(),
+            compression_alg: "comp".to_string(),
+            kex_alg: "kex".to_string(),
+            host_key_alg: "host".to_string(),
+            hassh_algorithms: "hassh".to_string(),
+            hassh: "hassh_val".to_string(),
+            hassh_server_algorithms: "hassh_srv".to_string(),
+            hassh_server: "hassh_srv_val".to_string(),
+            client_shka: "cshka".to_string(),
+            server_shka: "sshka".to_string(),
+        };
+        let display = format!("{ssh}");
+        assert!(display.contains("client"));
+        assert!(display.contains("server"));
+
+        assert_response_data(&ssh, 1000, "ssh-sensor");
+    }
+
+    #[test]
+    fn dcerpc_display() {
+        let dcerpc = DceRpc {
+            orig_addr: "127.0.0.1".parse().unwrap(),
+            orig_port: 1234,
+            resp_addr: "127.0.0.1".parse().unwrap(),
+            resp_port: 135,
+            proto: 6,
+            start_time: 1000,
+            duration: 100,
+            orig_pkts: 1,
+            resp_pkts: 1,
+            orig_l2_bytes: 100,
+            resp_l2_bytes: 100,
+            rtt: 10,
+            named_pipe: "pipe".to_string(),
+            endpoint: "endpoint".to_string(),
+            operation: "op".to_string(),
+        };
+        let display = format!("{dcerpc}");
+        assert!(display.contains("pipe"));
+        assert!(display.contains("endpoint"));
+        assert!(display.contains("op"));
+
+        assert_response_data(&dcerpc, 1000, "dcerpc-sensor");
+    }
+
+    #[test]
+    fn test_ftp_response_data() {
+        let ftp = Ftp {
+            orig_addr: "203.0.113.10".parse().unwrap(),
+            orig_port: 21,
+            resp_addr: "203.0.113.11".parse().unwrap(),
+            resp_port: 21,
+            proto: 6,
+            start_time: 6_000,
+            duration: 30,
+            orig_pkts: 7,
+            resp_pkts: 8,
+            orig_l2_bytes: 700,
+            resp_l2_bytes: 800,
+            user: "ftp_user".to_string(),
+            password: "ftp_pass".to_string(),
+            commands: vec![FtpCommand {
+                command: "LIST".to_string(),
+                reply_code: "150".to_string(),
+                reply_msg: "Here comes the directory listing".to_string(),
+                data_passive: true,
+                data_orig_addr: "203.0.113.10".parse().unwrap(),
+                data_resp_addr: "203.0.113.11".parse().unwrap(),
+                data_resp_port: 2121,
+                file: "file.txt".to_string(),
+                file_size: 1024,
+                file_id: "id123".to_string(),
+            }],
+        };
+
+        assert_response_data(&ftp, 6_000, "ftp-sensor");
+    }
+
+    #[test]
+    fn test_mqtt_response_data() {
+        let mqtt = Mqtt {
+            orig_addr: "192.0.2.10".parse().unwrap(),
+            orig_port: 1883,
+            resp_addr: "192.0.2.11".parse().unwrap(),
+            resp_port: 1883,
+            proto: 6,
+            start_time: 7_000,
+            duration: 40,
+            orig_pkts: 9,
+            resp_pkts: 10,
+            orig_l2_bytes: 900,
+            resp_l2_bytes: 1_000,
+            protocol: "MQTT".to_string(),
+            version: 5,
+            client_id: "client-id".to_string(),
+            connack_reason: 0,
+            subscribe: vec!["/topic".to_string()],
+            suback_reason: vec![0],
+        };
+
+        assert_response_data(&mqtt, 7_000, "mqtt-sensor");
+    }
+
+    #[test]
+    fn test_ldap_response_data() {
+        let ldap = Ldap {
+            orig_addr: "198.51.100.10".parse().unwrap(),
+            orig_port: 389,
+            resp_addr: "198.51.100.11".parse().unwrap(),
+            resp_port: 389,
+            proto: 6,
+            start_time: 8_000,
+            duration: 45,
+            orig_pkts: 11,
+            resp_pkts: 12,
+            orig_l2_bytes: 1_100,
+            resp_l2_bytes: 1_200,
+            message_id: 1,
+            version: 3,
+            opcode: vec!["bindRequest".to_string()],
+            result: vec!["success".to_string()],
+            diagnostic_message: vec![String::new()],
+            object: vec!["cn=users,dc=example,dc=com".to_string()],
+            argument: vec!["arg".to_string()],
+        };
+
+        assert_response_data(&ldap, 8_000, "ldap-sensor");
+    }
+
+    #[test]
+    fn test_tls_response_data() {
+        let tls = Tls {
+            orig_addr: "203.0.113.20".parse().unwrap(),
+            orig_port: 443,
+            resp_addr: "203.0.113.21".parse().unwrap(),
+            resp_port: 443,
+            proto: 6,
+            start_time: 9_000,
+            duration: 55,
+            orig_pkts: 13,
+            resp_pkts: 14,
+            orig_l2_bytes: 1_300,
+            resp_l2_bytes: 1_400,
+            server_name: "example.com".to_string(),
+            alpn_protocol: "h2".to_string(),
+            ja3: "ja3".to_string(),
+            version: "TLS1.3".to_string(),
+            client_cipher_suites: vec![4865, 4866],
+            client_extensions: vec![0, 11],
+            cipher: 4865,
+            extensions: vec![0, 23],
+            ja3s: "ja3s".to_string(),
+            serial: "serial".to_string(),
+            subject_country: "US".to_string(),
+            subject_org_name: "Org".to_string(),
+            subject_common_name: "example.com".to_string(),
+            validity_not_before: 1_700_000_000,
+            validity_not_after: 1_800_000_000,
+            subject_alt_name: "example.com".to_string(),
+            issuer_country: "US".to_string(),
+            issuer_org_name: "CA".to_string(),
+            issuer_org_unit_name: "Unit".to_string(),
+            issuer_common_name: "CA".to_string(),
+            last_alert: 0,
+        };
+
+        assert_response_data(&tls, 9_000, "tls-sensor");
+    }
+
+    #[test]
+    fn test_smb_response_data() {
+        let smb = Smb {
+            orig_addr: "192.0.2.30".parse().unwrap(),
+            orig_port: 445,
+            resp_addr: "192.0.2.31".parse().unwrap(),
+            resp_port: 445,
+            proto: 6,
+            start_time: 10_000,
+            duration: 65,
+            orig_pkts: 15,
+            resp_pkts: 16,
+            orig_l2_bytes: 1_500,
+            resp_l2_bytes: 1_600,
+            command: 3,
+            path: r"\\server\share".to_string(),
+            service: "SMB".to_string(),
+            file_name: "file.txt".to_string(),
+            file_size: 2_048,
+            resource_type: 1,
+            fid: 2,
+            create_time: 1_700_000_000,
+            access_time: 1_700_000_100,
+            write_time: 1_700_000_200,
+            change_time: 1_700_000_300,
+        };
+
+        assert_response_data(&smb, 10_000, "smb-sensor");
+    }
+
+    #[test]
+    fn test_nfs_response_data() {
+        let nfs = Nfs {
+            orig_addr: "198.51.100.20".parse().unwrap(),
+            orig_port: 2049,
+            resp_addr: "198.51.100.21".parse().unwrap(),
+            resp_port: 2049,
+            proto: 6,
+            start_time: 11_000,
+            duration: 75,
+            orig_pkts: 17,
+            resp_pkts: 18,
+            orig_l2_bytes: 1_700,
+            resp_l2_bytes: 1_800,
+            read_files: vec!["/mnt/share/read.txt".to_string()],
+            write_files: vec!["/mnt/share/write.txt".to_string()],
+        };
+
+        assert_response_data(&nfs, 11_000, "nfs-sensor");
+    }
+
+    #[test]
+    fn test_bootp_response_data() {
+        let bootp = Bootp {
+            orig_addr: "192.0.2.40".parse().unwrap(),
+            orig_port: 68,
+            resp_addr: "192.0.2.41".parse().unwrap(),
+            resp_port: 67,
+            proto: 17,
+            start_time: 12_000,
+            duration: 85,
+            orig_pkts: 19,
+            resp_pkts: 20,
+            orig_l2_bytes: 1_900,
+            resp_l2_bytes: 2_000,
+            op: 1,
+            htype: 1,
+            hops: 0,
+            xid: 0x1234_5678,
+            ciaddr: "0.0.0.0".parse().unwrap(),
+            yiaddr: "192.0.2.50".parse().unwrap(),
+            siaddr: "192.0.2.1".parse().unwrap(),
+            giaddr: "0.0.0.0".parse().unwrap(),
+            chaddr: vec![0, 1, 2, 3, 4, 5],
+            sname: "server".to_string(),
+            file: "bootfile".to_string(),
+        };
+
+        assert_response_data(&bootp, 12_000, "bootp-sensor");
+    }
+
+    #[test]
+    fn test_dhcp_response_data() {
+        let dhcp = Dhcp {
+            orig_addr: "192.0.2.60".parse().unwrap(),
+            orig_port: 68,
+            resp_addr: "192.0.2.61".parse().unwrap(),
+            resp_port: 67,
+            proto: 17,
+            start_time: 13_000,
+            duration: 95,
+            orig_pkts: 21,
+            resp_pkts: 22,
+            orig_l2_bytes: 2_100,
+            resp_l2_bytes: 2_200,
+            msg_type: 5,
+            ciaddr: "0.0.0.0".parse().unwrap(),
+            yiaddr: "192.0.2.70".parse().unwrap(),
+            siaddr: "192.0.2.1".parse().unwrap(),
+            giaddr: "0.0.0.0".parse().unwrap(),
+            subnet_mask: "255.255.255.0".parse().unwrap(),
+            router: vec!["192.0.2.1".parse().unwrap()],
+            domain_name_server: vec!["192.0.2.2".parse().unwrap()],
+            req_ip_addr: "192.0.2.80".parse().unwrap(),
+            lease_time: 86_400,
+            server_id: "192.0.2.1".parse().unwrap(),
+            param_req_list: vec![1, 3, 6],
+            message: "dhcp offer".to_string(),
+            renewal_time: 43_200,
+            rebinding_time: 64_800,
+            class_id: vec![1, 2, 3],
+            client_id_type: 1,
+            client_id: vec![0, 1, 2, 3, 4, 5],
+        };
+
+        assert_response_data(&dhcp, 13_000, "dhcp-sensor");
+    }
+
+    #[test]
+    fn test_radius_response_data() {
+        let radius = Radius {
+            orig_addr: "198.51.100.30".parse().unwrap(),
+            orig_port: 1812,
+            resp_addr: "198.51.100.31".parse().unwrap(),
+            resp_port: 1812,
+            proto: 17,
+            start_time: 14_000,
+            duration: 105,
+            orig_pkts: 23,
+            resp_pkts: 24,
+            orig_l2_bytes: 2_300,
+            resp_l2_bytes: 2_400,
+            id: 1,
+            code: 1,
+            resp_code: 2,
+            auth: "auth".to_string(),
+            resp_auth: "resp_auth".to_string(),
+            user_name: b"user".to_vec(),
+            user_passwd: b"pass".to_vec(),
+            chap_passwd: b"chap".to_vec(),
+            nas_ip: "198.51.100.100".parse().unwrap(),
+            nas_port: 0,
+            state: b"state".to_vec(),
+            nas_id: b"nas-id".to_vec(),
+            nas_port_type: 5,
+            message: "ok".to_string(),
+        };
+
+        assert_response_data(&radius, 14_000, "radius-sensor");
+    }
+
+    #[test]
     fn icmp_display() {
         let icmp = Icmp {
             orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
@@ -1538,7 +2174,6 @@ mod tests {
             payload: vec![0x08, 0x00, 0xff, 0xff],
         };
 
-        let result = icmp.response_data(1_000_000_000_000_000_000, "sensor1");
-        assert!(result.is_ok());
+        assert_response_data(&icmp, 1_000_000_000_000_000_000, "icmp-sensor");
     }
 }

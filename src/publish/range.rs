@@ -41,3 +41,41 @@ pub struct RequestRawData {
     pub kind: String,
     pub input: Vec<(String, Vec<i64>)>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct MockResponseRangeData;
+
+    impl ResponseRangeData for MockResponseRangeData {
+        fn response_data(&self, _timestamp: i64, _sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+            Ok(vec![])
+        }
+    }
+
+    #[test]
+    fn test_message_code_conversion() {
+        assert_eq!(u32::from(MessageCode::ReqRange), 1);
+        assert_eq!(u32::from(MessageCode::Pcap), 2);
+        assert_eq!(u32::from(MessageCode::RawData), 3);
+
+        assert_eq!(MessageCode::try_from(1).unwrap(), MessageCode::ReqRange);
+        assert_eq!(MessageCode::try_from(2).unwrap(), MessageCode::Pcap);
+        assert_eq!(MessageCode::try_from(3).unwrap(), MessageCode::RawData);
+    }
+
+    #[test]
+    fn test_mock_response_data() {
+        let mock = MockResponseRangeData;
+        let res = mock.response_data(100, "sensor").unwrap();
+        assert_eq!(res, vec![]);
+    }
+
+    #[test]
+    fn test_response_done() {
+        let done = MockResponseRangeData::response_done().unwrap();
+        let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&done).unwrap();
+        assert!(decoded.is_none());
+    }
+}

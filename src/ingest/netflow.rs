@@ -145,3 +145,143 @@ fn tcp_flags(b: u8) -> String {
 fn millis_to_secs(millis: u32) -> String {
     format!("{}.{}", millis / 1000, millis - (millis / 1000) * 1000)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_netflow5_display() {
+        let nf5 = Netflow5 {
+            src_addr: IpAddr::from([127, 0, 0, 1]),
+            dst_addr: IpAddr::from([192, 168, 0, 1]),
+            next_hop: IpAddr::from([10, 0, 0, 1]),
+            input: 1,
+            output: 2,
+            d_pkts: 10,
+            d_octets: 100,
+            first: 1000,
+            last: 2000,
+            src_port: 80,
+            dst_port: 8080,
+            tcp_flags: 0x02, // SYN
+            prot: 6,
+            tos: 0,
+            src_as: 65001,
+            dst_as: 65002,
+            src_mask: 24,
+            dst_mask: 24,
+            sequence: 123,
+            engine_type: 1,
+            engine_id: 1,
+            sampling_mode: 0,
+            sampling_rate: 0,
+        };
+        let display = format!("{nf5}");
+        assert!(display.contains("127.0.0.1"));
+        assert!(display.contains("SYN"));
+        assert!(display.contains("1.0")); // first
+        assert!(display.contains("2.0")); // last
+    }
+
+    #[test]
+    fn test_netflow9_display() {
+        let nf9 = Netflow9 {
+            sequence: 1,
+            source_id: 2,
+            template_id: 3,
+            orig_addr: IpAddr::from([127, 0, 0, 1]),
+            orig_port: 80,
+            resp_addr: IpAddr::from([192, 168, 0, 1]),
+            resp_port: 8080,
+            proto: 6,
+            contents: "content".to_string(),
+        };
+        let display = format!("{nf9}");
+        assert_eq!(
+            display,
+            "1\t2\t3\t127.0.0.1\t80\t192.168.0.1\t8080\t6\tcontent"
+        );
+    }
+
+    #[test]
+    fn test_netflow5_response_data() {
+        let nf5 = Netflow5 {
+            src_addr: IpAddr::from([10, 0, 0, 1]),
+            dst_addr: IpAddr::from([10, 0, 0, 2]),
+            next_hop: IpAddr::from([10, 0, 0, 3]),
+            input: 1,
+            output: 2,
+            d_pkts: 10,
+            d_octets: 100,
+            first: 1500,
+            last: 3500,
+            src_port: 1234,
+            dst_port: 4321,
+            tcp_flags: 0x12, // SYN-ACK
+            prot: 6,
+            tos: 0,
+            src_as: 65001,
+            dst_as: 65002,
+            src_mask: 24,
+            dst_mask: 24,
+            sequence: 123,
+            engine_type: 1,
+            engine_id: 2,
+            sampling_mode: 0,
+            sampling_rate: 0,
+        };
+
+        let timestamp = 1_500_000_000;
+        let sensor = "sensor1";
+        let res = nf5.response_data(timestamp, sensor).unwrap();
+        let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&res).unwrap();
+        let (decoded_ts, decoded_sensor, decoded_csv) = decoded.expect("expected Some payload");
+
+        assert_eq!(decoded_ts, timestamp);
+        assert_eq!(decoded_sensor, sensor);
+
+        let expected_csv = format!("{}\t{nf5}", convert_time_format(timestamp));
+        assert_eq!(decoded_csv, expected_csv.as_bytes());
+    }
+
+    #[test]
+    fn test_netflow9_response_data() {
+        let nf9 = Netflow9 {
+            sequence: 10,
+            source_id: 20,
+            template_id: 30,
+            orig_addr: IpAddr::from([172, 16, 0, 1]),
+            orig_port: 5050,
+            resp_addr: IpAddr::from([172, 16, 0, 2]),
+            resp_port: 6060,
+            proto: 17,
+            contents: "payload".to_string(),
+        };
+
+        let timestamp = 2_000_000_123;
+        let sensor = "sensor9";
+        let res = nf9.response_data(timestamp, sensor).unwrap();
+        let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&res).unwrap();
+        let (decoded_ts, decoded_sensor, decoded_csv) = decoded.expect("expected Some payload");
+
+        assert_eq!(decoded_ts, timestamp);
+        assert_eq!(decoded_sensor, sensor);
+
+        let expected_csv = format!("{}\t{nf9}", convert_time_format(timestamp));
+        assert_eq!(decoded_csv, expected_csv.as_bytes());
+    }
+
+    #[test]
+    fn test_tcp_flags() {
+        assert_eq!(tcp_flags(0x02), "SYN");
+        assert_eq!(tcp_flags(0x12), "SYN-ACK");
+        assert_eq!(tcp_flags(0x00), "None");
+    }
+
+    #[test]
+    fn test_millis_to_secs() {
+        assert_eq!(millis_to_secs(1234), "1.234");
+        assert_eq!(millis_to_secs(1000), "1.0");
+    }
+}

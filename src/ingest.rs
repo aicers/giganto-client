@@ -289,4 +289,18 @@ mod tests {
         let invalid_utf8 = vec![0xff, 0xfe, 0xfd];
         assert_eq!(super::sanitize_csv_field_bytes(&invalid_utf8), "");
     }
+
+    #[test]
+    fn test_vec_to_string_or_default() {
+        let v: Vec<i32> = vec![];
+        assert_eq!(super::vec_to_string_or_default(&v), "-");
+        let v = vec![1, 2, 3];
+        assert_eq!(super::vec_to_string_or_default(&v), "1,2,3");
+    }
+
+    #[test]
+    fn test_to_string_or_empty() {
+        assert_eq!(super::to_string_or_empty::<i32>(None), "-");
+        assert_eq!(super::to_string_or_empty(Some(123)), "123");
+    }
 }

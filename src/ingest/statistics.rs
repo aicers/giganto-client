@@ -21,3 +21,23 @@ impl Display for Statistics {
         write!(f, "{}\t{}\t{}", self.core, self.period, stats.join(","))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ingest::RawEventKind;
+
+    #[test]
+    fn test_statistics_display() {
+        let stats = Statistics {
+            core: 1,
+            period: 60,
+            stats: vec![
+                (RawEventKind::Dns, 100, 1024),
+                (RawEventKind::Http, 200, 2048),
+            ],
+        };
+        let display = format!("{stats}");
+        assert_eq!(display, "1\t60\tDns/1024/100,Http/2048/200");
+    }
+}
