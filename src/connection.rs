@@ -163,4 +163,40 @@ mod tests {
         let res = tokio::join!(handle).0.unwrap();
         assert!(res.is_err());
     }
+
+    #[tokio::test]
+    async fn handshake_invalid_version_string() {
+        const VERSION_REQ: &str = ">=0.7.0";
+        const VERSION_INVALID: &str = "not-a-version";
+
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        let handle =
+            tokio::spawn(
+                async move { super::client_handshake(&client.conn, VERSION_INVALID).await },
+            );
+
+        let res = super::server_handshake(&server.conn, VERSION_REQ).await;
+        assert!(res.is_err());
+
+        let res = tokio::join!(handle).0.unwrap();
+        assert!(res.is_err());
+    }
+
+    #[tokio::test]
+    async fn handshake_connection_closed_early() {
+        const VERSION_STD: &str = "0.7.0";
+
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        // Terminate the server side (implicitly when channel goes out of scope or we drop it)
+        drop(server);
+
+        let res = super::client_handshake(&client.conn, VERSION_STD).await;
+        assert!(res.is_err());
+    }
 }

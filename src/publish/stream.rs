@@ -342,3 +342,29 @@ fn test_pcap_extract_request_payload() {
         _ => panic!("Expected PcapExtractRequest variant"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_record_type_all() {
+        let all = RequestStreamRecord::all();
+        assert!(all.contains(&RequestStreamRecord::Conn));
+        assert!(all.contains(&RequestStreamRecord::Dns));
+        assert!(all.contains(&RequestStreamRecord::FileCreate));
+    }
+
+    #[test]
+    fn test_stream_request_payload_record_type() {
+        let req = RequestSemiSupervisedStream {
+            start: 0,
+            sensor: None,
+        };
+        let payload = StreamRequestPayload::new_semi_supervised(RequestStreamRecord::Conn, req);
+        assert_eq!(payload.record_type(), Some(RequestStreamRecord::Conn));
+
+        let payload = StreamRequestPayload::new_pcap_extraction(vec![]);
+        assert_eq!(payload.record_type(), None);
+    }
+}

@@ -84,3 +84,61 @@ impl Display for SecuLog {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_log_display() {
+        let log = Log {
+            kind: "test".to_string(),
+            log: b"test log".to_vec(),
+        };
+        assert_eq!(format!("{log}"), "test\ttest log");
+    }
+
+    #[test]
+    fn test_log_response_data() {
+        let log = Log {
+            kind: "test".to_string(),
+            log: b"test log".to_vec(),
+        };
+        let res = log.response_data(100, "sensor").unwrap();
+        let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&res).unwrap();
+        let (timestamp, sensor, log_data) = decoded.unwrap();
+        assert_eq!(timestamp, 100);
+        assert_eq!(sensor, "sensor");
+        assert_eq!(log_data, b"test log".to_vec());
+    }
+
+    #[test]
+    fn test_op_log_display() {
+        let op_log = OpLog {
+            sensor: "sensor".to_string(),
+            agent_name: "agent".to_string(),
+            log_level: OpLogLevel::Info,
+            contents: "content".to_string(),
+        };
+        assert_eq!(format!("{op_log}"), "sensor\tagent\tInfo\tcontent");
+    }
+
+    #[test]
+    fn test_secu_log_display() {
+        let secu_log = SecuLog {
+            kind: "kind".to_string(),
+            log_type: "type".to_string(),
+            version: "v1".to_string(),
+            orig_addr: Some(IpAddr::from([127, 0, 0, 1])),
+            orig_port: Some(8080),
+            resp_addr: None,
+            resp_port: None,
+            proto: Some(6),
+            contents: "content".to_string(),
+        };
+        assert_eq!(
+            format!("{secu_log}"),
+            "kind\ttype\tv1\t127.0.0.1\t8080\t-\t-\t6\tcontent"
+        );
+    }
+}

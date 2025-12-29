@@ -739,4 +739,98 @@ mod tests {
 
         assert_eq!(recv_data.len(), 4);
     }
+
+    #[tokio::test]
+    async fn publish_pcap_extract_response_err() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send invalid data that will fail deserialization to PcapFilter
+        frame::send_raw(&mut channel.server.send, b"invalid data")
+            .await
+            .unwrap();
+
+        let res = super::pcap_extract_response(channel.client.send, channel.client.recv).await;
+        assert!(matches!(
+            res,
+            Err(PublishError::PcapRequestFail(msg)) if msg.contains("Failed deserializing message")
+        ));
+
+        // Verify server received the error response (via recv_ack_response)
+        let mut ack_buf = Vec::new();
+        frame::recv_raw(&mut channel.server.recv, &mut ack_buf)
+            .await
+            .unwrap();
+        let resp = bincode::deserialize::<Result<(), String>>(&ack_buf).unwrap();
+        assert!(resp.is_err());
+    }
+
+    #[test]
+    fn test_publish_error_conversion() {
+        let err = PublishError::MessageTooLarge;
+        assert_eq!(
+            err.to_string(),
+            "Message is too large, so type casting failed"
+        );
+
+        let err = PublishError::InvalidMessageType;
+        assert_eq!(err.to_string(), "Invalid message type");
+
+        let err = PublishError::InvalidMessageData;
+        assert_eq!(err.to_string(), "Invalid message data");
+    }
+
+    #[tokio::test]
+    async fn test_receive_time_series_generator_stream_start_message_invalid_data() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send non-numeric string
+        frame::send_raw(&mut channel.server.send, b"not a number")
+            .await
+            .unwrap();
+
+        let res =
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
+                .await;
+        assert!(matches!(res, Err(PublishError::InvalidMessageData)));
+
+        // Send invalid UTF-8
+        frame::send_raw(&mut channel.server.send, &[0xFF, 0xFE, 0xFD])
+            .await
+            .unwrap();
+        let res =
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
+                .await;
+        assert!(matches!(res, Err(PublishError::InvalidMessageData)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_semi_supervised_stream_start_message_invalid_type() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send invalid enum variant (e.g. u32::MAX)
+        frame::send_bytes(&mut channel.server.send, &u32::MAX.to_le_bytes())
+            .await
+            .unwrap();
+
+        let res =
+            super::receive_semi_supervised_stream_start_message(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::InvalidMessageType)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_data_request_invalid_type() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send invalid enum variant
+        frame::send_bytes(&mut channel.server.send, &u32::MAX.to_le_bytes())
+            .await
+            .unwrap();
+
+        let res = super::receive_range_data_request(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::InvalidMessageType)));
+    }
 }

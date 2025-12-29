@@ -25,3 +25,31 @@ impl ResponseRangeData for PeriodicTimeSeries {
         bincode::serialize::<Option<(i64, String, Vec<f64>)>>(&None)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_periodic_time_series_display() {
+        let pts = PeriodicTimeSeries {
+            id: "test".to_string(),
+            data: vec![1.0, 2.0, 3.0],
+        };
+        assert_eq!(format!("{pts}"), "[1.0, 2.0, 3.0]");
+    }
+
+    #[test]
+    fn test_periodic_time_series_response_data() {
+        let pts = PeriodicTimeSeries {
+            id: "test".to_string(),
+            data: vec![1.0, 2.0, 3.0],
+        };
+        let res = pts.response_data(100, "sensor").unwrap();
+        let decoded: Option<(i64, String, Vec<f64>)> = bincode::deserialize(&res).unwrap();
+        let (timestamp, sensor, data) = decoded.unwrap();
+        assert_eq!(timestamp, 100);
+        assert_eq!(sensor, "sensor");
+        assert_eq!(data, vec![1.0, 2.0, 3.0]);
+    }
+}
