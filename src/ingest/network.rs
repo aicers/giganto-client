@@ -678,6 +678,7 @@ pub struct DceRpc {
     pub orig_l2_bytes: u64,
     pub resp_l2_bytes: u64,
     pub context: Vec<DceRpcContext>,
+    pub request: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -697,7 +698,7 @@ impl Display for DceRpc {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -710,6 +711,7 @@ impl Display for DceRpc {
             self.orig_l2_bytes,
             self.resp_l2_bytes,
             vec_to_string_or_default(&self.context),
+            vec_to_string_or_default(&self.request),
         )
     }
 }
