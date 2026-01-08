@@ -95,12 +95,21 @@ pub async fn receive_ack_timestamp(recv: &mut RecvStream) -> Result<i64, RecvErr
 /// Converts a timestamp to a string in the format of "%s%.9f", which is the format used by Zeek.
 #[must_use]
 fn convert_time_format(timestamp: i64) -> String {
-    const A_BILLION: i64 = 1_000_000_000;
+    const A_BILLION: u64 = 1_000_000_000;
 
-    if timestamp > 0 {
-        format!("{}.{:09}", timestamp / A_BILLION, timestamp % A_BILLION)
+    // Keep the sign, but format using absolute magnitude.
+    let neg = timestamp < 0;
+
+    // Use unsigned_abs() to avoid overflow on i64::MIN
+    let abs: u64 = timestamp.unsigned_abs();
+
+    let secs: u64 = abs / A_BILLION;
+    let nanos: u64 = abs % A_BILLION;
+
+    if neg {
+        format!("-{secs}.{nanos:09}")
     } else {
-        format!("{}.{:09}", timestamp / A_BILLION, -timestamp % A_BILLION)
+        format!("{secs}.{nanos:09}")
     }
 }
 
@@ -215,6 +224,45 @@ mod tests {
         let ts = -1_000_000_000;
         let ts_fmt = super::convert_time_format(ts);
         assert_eq!(ts_fmt, "-1.000000000");
+
+        assert_eq!(super::convert_time_format(0), "0.000000000");
+        assert_eq!(super::convert_time_format(1), "0.000000001");
+        assert_eq!(super::convert_time_format(-1), "-0.000000001");
+
+        // Boundaries right below/at/above one second
+        assert_eq!(super::convert_time_format(999_999_999), "0.999999999");
+        assert_eq!(super::convert_time_format(1_000_000_000), "1.000000000");
+        assert_eq!(super::convert_time_format(1_000_000_001), "1.000000001");
+
+        assert_eq!(super::convert_time_format(-999_999_999), "-0.999999999");
+        assert_eq!(super::convert_time_format(-1_000_000_000), "-1.000000000");
+        assert_eq!(super::convert_time_format(-1_000_000_001), "-1.000000001");
+
+        // Further boundaries (e.g., 2 seconds)
+        assert_eq!(super::convert_time_format(1_999_999_999), "1.999999999");
+        assert_eq!(super::convert_time_format(2_000_000_000), "2.000000000");
+        assert_eq!(super::convert_time_format(2_000_000_001), "2.000000001");
+
+        assert_eq!(super::convert_time_format(-1_999_999_999), "-1.999999999");
+        assert_eq!(super::convert_time_format(-2_000_000_000), "-2.000000000");
+        assert_eq!(super::convert_time_format(-2_000_000_001), "-2.000000001");
+
+        // Large values
+        assert_eq!(
+            super::convert_time_format(123_456_789_000_000_000),
+            "123456789.000000000"
+        );
+        assert_eq!(
+            super::convert_time_format(-123_456_789_000_000_000),
+            "-123456789.000000000"
+        );
+
+        // Extremes to ensure unsigned_abs() keeps working across the full range
+        assert_eq!(super::convert_time_format(i64::MAX), "9223372036.854775807");
+        assert_eq!(
+            super::convert_time_format(i64::MIN),
+            "-9223372036.854775808"
+        );
     }
 
     #[test]
