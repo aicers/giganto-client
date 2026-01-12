@@ -50,7 +50,7 @@ impl From<frame::RecvError> for PublishError {
                 quinn::ReadExactError::FinishedEarly(_) => PublishError::ConnectionClosed,
                 quinn::ReadExactError::ReadError(e) => PublishError::ReadError(e),
             },
-            RecvError::MessageTooLarge(_) => PublishError::MessageTooLarge,
+            RecvError::MessageTooLarge => PublishError::MessageTooLarge,
         }
     }
 }

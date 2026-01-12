@@ -6,6 +6,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- Added runtime buffer sizing logic `prepare_buf` to prevent OOM during receive
+  and safely handle variable frame sizes.
+
 ### Fixed
 
 - Fixed inconsistent formatting of negative timestamps in `convert_time_format`.
