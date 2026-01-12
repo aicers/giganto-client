@@ -67,7 +67,7 @@ pub async fn client_handshake(
                 return Err(HandshakeError::ReadError(e));
             }
         },
-        Err(RecvError::MessageTooLarge(_)) => {
+        Err(RecvError::MessageTooLarge) => {
             return Err(HandshakeError::MessageTooLarge);
         }
         Ok(()) | Err(_) => {}
