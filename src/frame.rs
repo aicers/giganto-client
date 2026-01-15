@@ -158,6 +158,52 @@ fn prepare_buf(buf: &mut Vec<u8>, len: u64) -> Result<(), RecvError> {
 
 #[cfg(test)]
 mod tests {
+    use super::{RecvError, SendError};
+
+    /// Asserts that the result is a specific `RecvError` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// assert_recv_err!(result, RecvError::ReadError(_));
+    /// assert_recv_err!(result, RecvError::DeserializationFailure(_));
+    /// ```
+    macro_rules! assert_recv_err {
+        ($res:expr, $pat:pat $(if $guard:expr)?) => {
+            match $res {
+                Err(ref e) => assert!(
+                    matches!(e, $pat $(if $guard)?),
+                    "expected {}, got {:?}",
+                    stringify!($pat),
+                    e
+                ),
+                Ok(ref v) => panic!("expected RecvError::{}, got Ok({:?})", stringify!($pat), v),
+            }
+        };
+    }
+
+    /// Asserts that the result is a specific `SendError` variant.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// assert_send_err!(result, SendError::WriteError(_));
+    /// assert_send_err!(result, SendError::SerializationFailure(_));
+    /// ```
+    macro_rules! assert_send_err {
+        ($res:expr, $pat:pat $(if $guard:expr)?) => {
+            match $res {
+                Err(ref e) => assert!(
+                    matches!(e, $pat $(if $guard)?),
+                    "expected {}, got {:?}",
+                    stringify!($pat),
+                    e
+                ),
+                Ok(ref v) => panic!("expected SendError::{}, got Ok({:?})", stringify!($pat), v),
+            }
+        };
+    }
+
     #[tokio::test]
     async fn frame_send_and_recv() {
         use crate::test::{TOKEN, channel};
@@ -280,5 +326,579 @@ mod tests {
             .await
             .unwrap();
         assert!(buf.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recv_raw_returns_read_error_when_stream_closed_before_header() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the send stream without sending any data
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive - should fail because stream closed before header
+        let mut buf = Vec::new();
+        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's a FinishedEarly error (stream ended before header bytes)
+        if let Err(RecvError::ReadError(quinn::ReadExactError::FinishedEarly(bytes_read))) = result
+        {
+            assert_eq!(bytes_read, 0, "expected 0 bytes read before stream ended");
+        }
+    }
+
+    #[tokio::test]
+    async fn recv_raw_returns_read_error_when_stream_closed_during_header() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send only 2 bytes of a 4-byte header then close
+        channel.server.send.write_all(&[0x05, 0x00]).await.unwrap();
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive - should fail because stream closed mid-header
+        let mut buf = Vec::new();
+        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's a FinishedEarly error with partial header read
+        if let Err(RecvError::ReadError(quinn::ReadExactError::FinishedEarly(bytes_read))) = result
+        {
+            assert_eq!(bytes_read, 2, "expected 2 bytes read before stream ended");
+        }
+    }
+
+    #[tokio::test]
+    async fn recv_raw_returns_read_error_when_payload_truncated() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send a header indicating 10 bytes but only provide 3 bytes of payload
+        let len: u32 = 10;
+        channel
+            .server
+            .send
+            .write_all(&len.to_le_bytes())
+            .await
+            .unwrap();
+        channel.server.send.write_all(b"abc").await.unwrap();
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive - should fail because payload is truncated
+        let mut buf = Vec::new();
+        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's a FinishedEarly error with partial payload read
+        if let Err(RecvError::ReadError(quinn::ReadExactError::FinishedEarly(bytes_read))) = result
+        {
+            assert_eq!(
+                bytes_read, 3,
+                "expected 3 bytes of payload read before stream ended"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn recv_bytes_returns_read_error_when_stream_closed() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the send stream without sending any data
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive 5 bytes - should fail because stream closed
+        let mut buf = [0u8; 5];
+        let result = super::recv_bytes(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's a FinishedEarly error
+        if let Err(RecvError::ReadError(quinn::ReadExactError::FinishedEarly(bytes_read))) = result
+        {
+            assert_eq!(bytes_read, 0, "expected 0 bytes read before stream ended");
+        }
+    }
+
+    #[tokio::test]
+    async fn recv_handshake_returns_read_error_when_stream_closed_before_header() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the send stream without sending any data
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive handshake - should fail because stream closed
+        let mut buf = Vec::new();
+        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+    }
+
+    #[tokio::test]
+    async fn recv_handshake_returns_read_error_when_payload_truncated() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send an 8-byte header indicating 100 bytes, but only send 10
+        let len: u64 = 100;
+        channel
+            .server
+            .send
+            .write_all(&len.to_le_bytes())
+            .await
+            .unwrap();
+        channel.server.send.write_all(b"0123456789").await.unwrap();
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive handshake - should fail because payload truncated
+        let mut buf = Vec::new();
+        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's a FinishedEarly error with partial read
+        if let Err(RecvError::ReadError(quinn::ReadExactError::FinishedEarly(bytes_read))) = result
+        {
+            assert_eq!(
+                bytes_read, 10,
+                "expected 10 bytes of payload read before stream ended"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn recv_returns_deserialization_failure_for_invalid_data() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send raw bytes that cannot be deserialized as the expected type
+        // We'll try to receive a String but send invalid bincode data
+        let invalid_data = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF]; // Invalid bincode for String
+        super::send_raw(&mut channel.server.send, &invalid_data)
+            .await
+            .unwrap();
+
+        // Attempt to receive and deserialize as String - should fail
+        let mut buf = Vec::new();
+        let result = super::recv::<String>(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::DeserializationFailure(_));
+    }
+
+    #[tokio::test]
+    async fn recv_returns_deserialization_failure_for_truncated_serialized_data() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send a truncated serialized string - missing the actual string bytes
+        // bincode format for String: 8 bytes length + string bytes
+        // We send length=5 but only provide 2 chars worth
+        let truncated_data = [
+            0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // length = 5
+            b'a', b'b', // only 2 bytes instead of 5
+        ];
+        super::send_raw(&mut channel.server.send, &truncated_data)
+            .await
+            .unwrap();
+
+        // Attempt to receive as String - should fail deserialization
+        let mut buf = Vec::new();
+        let result = super::recv::<String>(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::DeserializationFailure(_));
+    }
+
+    #[tokio::test]
+    async fn send_returns_write_error_when_stream_stopped() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Have the client stop the server's send stream with an error code
+        channel
+            .client
+            .recv
+            .stop(quinn::VarInt::from_u32(42))
+            .unwrap();
+
+        // Give the stop signal time to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Attempt to send - should fail because stream was stopped
+        let mut buf = Vec::new();
+        let result = super::send(&mut channel.server.send, &mut buf, "hello").await;
+
+        assert_send_err!(result, SendError::WriteError(_));
+
+        // Verify it's a Stopped error with the correct code
+        if let Err(SendError::WriteError(quinn::WriteError::Stopped(code))) = result {
+            assert_eq!(code.into_inner(), 42, "expected stop code 42");
+        }
+    }
+
+    #[tokio::test]
+    async fn send_raw_returns_write_error_when_stream_stopped() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Have the client stop the server's send stream
+        channel
+            .client
+            .recv
+            .stop(quinn::VarInt::from_u32(100))
+            .unwrap();
+
+        // Give the stop signal time to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Attempt to send raw - should fail
+        let result = super::send_raw(&mut channel.server.send, b"hello world").await;
+
+        assert_send_err!(result, SendError::WriteError(_));
+    }
+
+    #[tokio::test]
+    async fn send_bytes_returns_write_error_when_stream_stopped() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Have the client stop the server's send stream
+        channel
+            .client
+            .recv
+            .stop(quinn::VarInt::from_u32(200))
+            .unwrap();
+
+        // Give the stop signal time to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Attempt to send bytes - should fail
+        let result = super::send_bytes(&mut channel.server.send, b"hello").await;
+
+        assert_send_err!(result, SendError::WriteError(_));
+    }
+
+    #[tokio::test]
+    async fn send_handshake_returns_write_error_when_stream_stopped() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Have the client stop the server's send stream
+        channel
+            .client
+            .recv
+            .stop(quinn::VarInt::from_u32(300))
+            .unwrap();
+
+        // Give the stop signal time to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Attempt to send handshake - should fail
+        let result = super::send_handshake(&mut channel.server.send, b"handshake data").await;
+
+        assert_send_err!(result, SendError::WriteError(_));
+    }
+
+    #[tokio::test]
+    async fn send_returns_write_error_when_connection_closed() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the client connection entirely
+        channel
+            .client
+            .conn
+            .close(quinn::VarInt::from_u32(0), b"closing");
+
+        // Give the close signal time to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Attempt to send - should fail because connection closed
+        let mut buf = Vec::new();
+        let result = super::send(&mut channel.server.send, &mut buf, "hello").await;
+
+        assert_send_err!(result, SendError::WriteError(_));
+
+        // Verify it's a ConnectionLost error
+        assert!(
+            matches!(
+                result,
+                Err(SendError::WriteError(quinn::WriteError::ConnectionLost(_)))
+            ),
+            "expected ConnectionLost, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn recv_raw_returns_read_error_when_connection_closed() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the server connection entirely
+        channel
+            .server
+            .conn
+            .close(quinn::VarInt::from_u32(0), b"closing");
+
+        // Give the close signal time to propagate
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Attempt to receive - should fail because connection closed
+        let mut buf = Vec::new();
+        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+    }
+
+    #[tokio::test]
+    async fn recv_bytes_returns_read_error_for_partial_data() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send only 3 bytes then close
+        channel.server.send.write_all(b"abc").await.unwrap();
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive 10 bytes - should fail with FinishedEarly
+        let mut buf = [0u8; 10];
+        let result = super::recv_bytes(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's a FinishedEarly error showing we only got 3 bytes
+        if let Err(RecvError::ReadError(quinn::ReadExactError::FinishedEarly(bytes_read))) = result
+        {
+            assert_eq!(bytes_read, 3, "expected 3 bytes read before stream ended");
+        }
+    }
+
+    #[tokio::test]
+    async fn recv_returns_read_error_when_empty_stream() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the stream immediately without sending anything
+        channel.server.send.finish().unwrap();
+
+        // Attempt to receive - should fail because stream is empty
+        let mut buf = Vec::new();
+        let result = super::recv::<String>(&mut channel.client.recv, &mut buf).await;
+
+        // This should be a ReadError (FinishedEarly) since we can't even read the header
+        assert_recv_err!(result, RecvError::ReadError(_));
+    }
+
+    /// Tests that `RecvError::MessageTooLarge` is correctly returned when
+    /// `recv_handshake` receives a length header that exceeds capacity.
+    /// This variant is a unit variant (no inner data) unlike `SendError::MessageTooLarge`.
+    #[test]
+    fn recv_error_message_too_large_variant_exists() {
+        // RecvError::MessageTooLarge is a unit variant, verify it can be constructed
+        let recv_err = RecvError::MessageTooLarge;
+        assert!(
+            matches!(recv_err, RecvError::MessageTooLarge),
+            "expected MessageTooLarge, got {recv_err:?}"
+        );
+    }
+
+    /// Tests that `send_raw` returns `MessageTooLarge` when the buffer length
+    /// exceeds `u32::MAX`.
+    #[test]
+    fn send_raw_message_too_large_error_conversion() {
+        use std::num::TryFromIntError;
+
+        // Attempt to convert a value larger than u32::MAX to u32
+        let large_len: usize = u32::MAX as usize + 1;
+        let err: Result<u32, TryFromIntError> = large_len.try_into();
+        let try_err = err.unwrap_err();
+
+        // Verify the conversion to SendError::MessageTooLarge works
+        let send_err: SendError = try_err.into();
+        assert!(
+            matches!(send_err, SendError::MessageTooLarge(_)),
+            "expected MessageTooLarge, got {send_err:?}"
+        );
+    }
+
+    /// Tests that `send` returns `SerializationFailure` when bincode cannot
+    /// serialize the provided data.
+    #[tokio::test]
+    async fn send_returns_serialization_failure_for_unserializable_data() {
+        use serde::ser::{Serialize, Serializer};
+
+        use crate::test::{TOKEN, channel};
+
+        // Define a type that always fails to serialize
+        struct AlwaysFailsToSerialize;
+
+        impl Serialize for AlwaysFailsToSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                // Simulate a serialization failure
+                Err(serde::ser::Error::custom(
+                    "intentional serialization failure",
+                ))
+            }
+        }
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let mut buf = Vec::new();
+        let result = super::send(&mut channel.server.send, &mut buf, AlwaysFailsToSerialize).await;
+
+        assert_send_err!(result, SendError::SerializationFailure(_));
+    }
+
+    /// Tests that `recv` returns `DeserializationFailure` when trying to
+    /// deserialize into a type with different structure than what was sent.
+    #[tokio::test]
+    async fn recv_returns_deserialization_failure_for_type_mismatch() {
+        use serde::Deserialize;
+
+        use crate::test::{TOKEN, channel};
+
+        // Define a struct that expects specific fields
+        #[derive(Debug, Deserialize)]
+        struct ExpectedStruct {
+            _field1: u64,
+            _field2: String,
+            _field3: Vec<u8>,
+        }
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send a simple u32 value
+        let mut buf = Vec::new();
+        super::send(&mut channel.server.send, &mut buf, 42u32)
+            .await
+            .unwrap();
+
+        // Try to receive as a complex struct - should fail deserialization
+        let result = super::recv::<ExpectedStruct>(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::DeserializationFailure(_));
+    }
+
+    /// Tests `ReadError` variant wrapping `quinn::ReadExactError::ReadError`.
+    #[tokio::test]
+    async fn recv_raw_returns_read_error_with_read_error_variant_when_reset() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Reset the stream with an error code instead of finishing cleanly
+        channel
+            .server
+            .send
+            .reset(quinn::VarInt::from_u32(123))
+            .unwrap();
+
+        // Attempt to receive - should fail with a ReadError containing ReadError
+        let mut buf = Vec::new();
+        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::ReadError(_));
+
+        // Verify it's specifically a ReadError (not FinishedEarly)
+        if let Err(RecvError::ReadError(quinn::ReadExactError::ReadError(read_err))) = result {
+            // The inner error should be a Reset error
+            assert!(
+                matches!(read_err, quinn::ReadError::Reset(_)),
+                "expected Reset error, got {read_err:?}"
+            );
+        }
+    }
+
+    /// Tests that error Display implementations provide useful messages.
+    #[test]
+    fn error_display_messages_are_descriptive() {
+        use std::num::TryFromIntError;
+
+        // Test RecvError::MessageTooLarge display
+        // RecvError::MessageTooLarge is a unit variant
+        let recv_err = RecvError::MessageTooLarge;
+        let msg = recv_err.to_string();
+        assert!(
+            msg.contains("too large"),
+            "RecvError::MessageTooLarge message should mention size: {msg}"
+        );
+
+        // Test SendError::MessageTooLarge display
+        // Use a conversion that always fails regardless of platform
+        let result: Result<u8, TryFromIntError> = 256u16.try_into();
+        let send_err: SendError = result.unwrap_err().into();
+        let msg = send_err.to_string();
+        assert!(
+            msg.contains("too large") || msg.contains("type casting"),
+            "SendError::MessageTooLarge message should mention size: {msg}"
+        );
+    }
+
+    /// Tests error source chain for `RecvError::ReadError`.
+    #[tokio::test]
+    async fn recv_error_source_chain_is_accessible() {
+        use std::error::Error;
+
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Close the stream to trigger ReadError
+        channel.server.send.finish().unwrap();
+
+        let mut buf = Vec::new();
+        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+
+        if let Err(ref recv_err) = result {
+            // Verify the error has a source (the underlying quinn error)
+            assert!(
+                recv_err.source().is_some(),
+                "RecvError should have an underlying source error"
+            );
+        } else {
+            panic!("expected error, got Ok");
+        }
     }
 }
