@@ -1109,7 +1109,11 @@ mod tests {
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        let message_codes = [MessageCode::ReqRange, MessageCode::Pcap, MessageCode::RawData];
+        let message_codes = [
+            MessageCode::ReqRange,
+            MessageCode::Pcap,
+            MessageCode::RawData,
+        ];
 
         for msg_code in message_codes {
             let request = RequestRangeBuilder::new().build();
@@ -1121,7 +1125,10 @@ mod tests {
                 super::receive_range_data_request(&mut channel.server.recv)
                     .await
                     .unwrap();
-            assert_eq!(received_code, msg_code, "MessageCode mismatch for {msg_code:?}");
+            assert_eq!(
+                received_code, msg_code,
+                "MessageCode mismatch for {msg_code:?}"
+            );
             let deserialized: super::range::RequestRange =
                 bincode::deserialize(&received_data).unwrap();
             assert_eq!(deserialized, request);
@@ -1294,11 +1301,7 @@ mod tests {
         let mut channel = channel().await;
 
         // Test with zero values
-        let zero_range = RequestRangeBuilder::new()
-            .start(0)
-            .end(0)
-            .count(0)
-            .build();
+        let zero_range = RequestRangeBuilder::new().start(0).end(0).count(0).build();
         super::send_range_data_request(
             &mut channel.client.send,
             super::range::MessageCode::ReqRange,
@@ -1571,8 +1574,7 @@ mod tests {
 
         // Verify the received data contains timestamp, sensor, and record
         assert!(received_data.len() > 8, "Should contain timestamp and data");
-        let received_ts =
-            i64::from_le_bytes(received_data[..8].try_into().unwrap());
+        let received_ts = i64::from_le_bytes(received_data[..8].try_into().unwrap());
         assert_eq!(received_ts, timestamp);
     }
 
@@ -1700,9 +1702,9 @@ mod tests {
 
         // Create events with various sizes
         let events = vec![
-            (1_i64, "sensor1".to_string(), vec![]),            // empty data
-            (2_i64, "sensor2".to_string(), vec![0u8; 1]),      // minimal data
-            (3_i64, "sensor3".to_string(), vec![0u8; 1000]),   // medium data
+            (1_i64, "sensor1".to_string(), vec![]),          // empty data
+            (2_i64, "sensor2".to_string(), vec![0u8; 1]),    // minimal data
+            (3_i64, "sensor3".to_string(), vec![0u8; 1000]), // medium data
         ];
 
         super::send_raw_events(&mut channel.server.send, events.clone())
