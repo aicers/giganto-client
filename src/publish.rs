@@ -1448,6 +1448,49 @@ mod tests {
         assert_eq!(received.input[1].1.len(), 3);
     }
 
+    /// Tests `send_range_data` with `None` data, which should send a
+    /// `response_done()` signal.
+    #[tokio::test]
+    async fn test_send_range_data_none_response_done() {
+        use super::range::ResponseRangeData;
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send None, which triggers the response_done() path
+        super::send_range_data::<Conn>(&mut channel.server.send, None)
+            .await
+            .unwrap();
+
+        // Receive and verify it matches the response_done() format
+        let received =
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
+                .await
+                .unwrap();
+
+        // response_done() serializes None, so received should be None
+        assert!(
+            received.is_none(),
+            "Expected None for response_done signal, got {received:?}"
+        );
+
+        // Also verify that the raw bytes match the response_done() output
+        super::send_range_data::<Conn>(&mut channel.server.send, None)
+            .await
+            .unwrap();
+
+        let mut raw_buf = Vec::new();
+        frame::recv_raw(&mut channel.client.recv, &mut raw_buf)
+            .await
+            .unwrap();
+
+        let expected_done = Conn::response_done().unwrap();
+        assert_eq!(
+            raw_buf, expected_done,
+            "Raw bytes should match response_done() output"
+        );
+    }
+
     // =========================================================================
     // Error Conversion and Variant Tests
     // =========================================================================
@@ -1500,6 +1543,26 @@ mod tests {
             matches!(publish_err, PublishError::MessageTooLarge),
             "Expected MessageTooLarge, got {publish_err:?}"
         );
+
+        // Test ReadError::FinishedEarly conversion -> ConnectionClosed
+        // FinishedEarly takes a usize (bytes read before stream ended)
+        let finished_early_err = quinn::ReadExactError::FinishedEarly(0);
+        let recv_err = frame::RecvError::ReadError(finished_early_err);
+        let publish_err: PublishError = recv_err.into();
+        assert!(
+            matches!(publish_err, PublishError::ConnectionClosed),
+            "Expected ConnectionClosed for FinishedEarly, got {publish_err:?}"
+        );
+
+        // Test ReadError::ReadError conversion -> PublishError::ReadError
+        let read_err = quinn::ReadError::ClosedStream;
+        let read_exact_err = quinn::ReadExactError::ReadError(read_err);
+        let recv_err = frame::RecvError::ReadError(read_exact_err);
+        let publish_err: PublishError = recv_err.into();
+        assert!(
+            matches!(publish_err, PublishError::ReadError(_)),
+            "Expected ReadError, got {publish_err:?}"
+        );
     }
 
     /// Tests `From<frame::SendError>` conversion for `PublishError`.
@@ -1520,6 +1583,15 @@ mod tests {
         assert!(
             matches!(publish_err, PublishError::MessageTooLarge),
             "Expected MessageTooLarge, got {publish_err:?}"
+        );
+
+        // Test WriteError conversion -> PublishError::WriteError
+        let write_err = quinn::WriteError::ClosedStream;
+        let send_err = frame::SendError::WriteError(write_err);
+        let publish_err: PublishError = send_err.into();
+        assert!(
+            matches!(publish_err, PublishError::WriteError(_)),
+            "Expected WriteError, got {publish_err:?}"
         );
     }
 
