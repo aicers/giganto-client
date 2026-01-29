@@ -215,140 +215,363 @@ mod tests {
         assert_eq!(timestamp, 8888);
     }
 
-    #[test]
-    fn convert_time_format() {
-        let ts = 2 * 1_000_000_000 + 123;
-        let ts_fmt = super::convert_time_format(ts);
-        assert_eq!(ts_fmt, "2.000000123");
+    #[tokio::test]
+    async fn receive_record_header_short_read_returns_error() {
+        use crate::frame::RecvError;
+        use crate::test::{TOKEN, channel};
 
-        let ts = -1_000_000_000;
-        let ts_fmt = super::convert_time_format(ts);
-        assert_eq!(ts_fmt, "-1.000000000");
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
-        assert_eq!(super::convert_time_format(0), "0.000000000");
-        assert_eq!(super::convert_time_format(1), "0.000000001");
-        assert_eq!(super::convert_time_format(-1), "-0.000000001");
+        channel
+            .server
+            .send
+            .write_all(&u32::from(super::RawEventKind::Conn).to_le_bytes()[..2])
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
 
-        // Boundaries right below/at/above one second
-        assert_eq!(super::convert_time_format(999_999_999), "0.999999999");
-        assert_eq!(super::convert_time_format(1_000_000_000), "1.000000000");
-        assert_eq!(super::convert_time_format(1_000_000_001), "1.000000001");
-
-        assert_eq!(super::convert_time_format(-999_999_999), "-0.999999999");
-        assert_eq!(super::convert_time_format(-1_000_000_000), "-1.000000000");
-        assert_eq!(super::convert_time_format(-1_000_000_001), "-1.000000001");
-
-        // Further boundaries (e.g., 2 seconds)
-        assert_eq!(super::convert_time_format(1_999_999_999), "1.999999999");
-        assert_eq!(super::convert_time_format(2_000_000_000), "2.000000000");
-        assert_eq!(super::convert_time_format(2_000_000_001), "2.000000001");
-
-        assert_eq!(super::convert_time_format(-1_999_999_999), "-1.999999999");
-        assert_eq!(super::convert_time_format(-2_000_000_000), "-2.000000000");
-        assert_eq!(super::convert_time_format(-2_000_000_001), "-2.000000001");
-
-        // Large values
-        assert_eq!(
-            super::convert_time_format(123_456_789_000_000_000),
-            "123456789.000000000"
-        );
-        assert_eq!(
-            super::convert_time_format(-123_456_789_000_000_000),
-            "-123456789.000000000"
-        );
-
-        // Extremes to ensure unsigned_abs() keeps working across the full range
-        assert_eq!(super::convert_time_format(i64::MAX), "9223372036.854775807");
-        assert_eq!(
-            super::convert_time_format(i64::MIN),
-            "-9223372036.854775808"
-        );
+        let mut buf = [0; std::mem::size_of::<u32>()];
+        let err = super::receive_record_header(&mut channel.client.recv, &mut buf)
+            .await
+            .expect_err("expected short read to fail");
+        assert!(matches!(err, RecvError::ReadError(_)));
     }
 
-    #[test]
-    fn sanitize_csv_field() {
-        // Test empty string
-        assert_eq!(super::sanitize_csv_field(""), "-");
+    #[tokio::test]
+    async fn receive_ack_timestamp_short_read_returns_error() {
+        use crate::frame::RecvError;
+        use crate::test::{TOKEN, channel};
 
-        // Test normal string without special characters
-        assert_eq!(super::sanitize_csv_field("normal text"), "normal text");
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
-        // Test string with horizontal tab (0x09)
-        assert_eq!(
-            super::sanitize_csv_field("text\twith\ttabs"),
-            "text with tabs"
-        );
+        channel
+            .server
+            .send
+            .write_all(&8888_i64.to_be_bytes()[..4])
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
 
-        // Test string with line feed (0x0a)
-        assert_eq!(
-            super::sanitize_csv_field("text\nwith\nlines"),
-            "text with lines"
-        );
-
-        // Test string with carriage return (0x0d)
-        assert_eq!(
-            super::sanitize_csv_field("text\rwith\rcarriage"),
-            "text with carriage"
-        );
-
-        // Test string with all special characters combined
-        assert_eq!(
-            super::sanitize_csv_field("text\t\n\rwith\tall\tspecial"),
-            "text   with all special"
-        );
+        let err = super::receive_ack_timestamp(&mut channel.client.recv)
+            .await
+            .expect_err("expected short read to fail");
+        assert!(matches!(err, RecvError::ReadError(_)));
     }
 
+    // ==================== Edge Case Tests ====================
     #[test]
-    fn sanitize_csv_field_bytes() {
-        // Test empty bytes
-        assert_eq!(super::sanitize_csv_field_bytes(&[]), "-");
+    #[allow(clippy::too_many_lines)]
+    fn convert_time_format_edge_cases() {
+        struct TestCase {
+            name: &'static str,
+            input: i64,
+            expected: &'static str,
+        }
 
-        // Test normal bytes without special characters
-        assert_eq!(
-            super::sanitize_csv_field_bytes(b"normal text"),
-            "normal text"
-        );
+        let test_cases = [
+            TestCase {
+                name: "zero",
+                input: 0,
+                expected: "0.000000000",
+            },
+            TestCase {
+                name: "one nanosecond",
+                input: 1,
+                expected: "0.000000001",
+            },
+            TestCase {
+                name: "max nanoseconds in one second",
+                input: 999_999_999,
+                expected: "0.999999999",
+            },
+            TestCase {
+                name: "one second exactly",
+                input: 1_000_000_000,
+                expected: "1.000000000",
+            },
+            TestCase {
+                name: "one second plus one nanosecond",
+                input: 1_000_000_001,
+                expected: "1.000000001",
+            },
+            TestCase {
+                name: "small negative",
+                input: -1,
+                expected: "-0.000000001",
+            },
+            TestCase {
+                name: "negative max nanoseconds in one second",
+                input: -999_999_999,
+                expected: "-0.999999999",
+            },
+            TestCase {
+                name: "negative one second",
+                input: -1_000_000_000,
+                expected: "-1.000000000",
+            },
+            TestCase {
+                name: "negative one second minus one nanosecond",
+                input: -1_000_000_001,
+                expected: "-1.000000001",
+            },
+            TestCase {
+                name: "boundary just below two seconds",
+                input: 1_999_999_999,
+                expected: "1.999999999",
+            },
+            TestCase {
+                name: "two seconds exactly",
+                input: 2_000_000_000,
+                expected: "2.000000000",
+            },
+            TestCase {
+                name: "two seconds plus one nanosecond",
+                input: 2_000_000_001,
+                expected: "2.000000001",
+            },
+            TestCase {
+                name: "negative boundary just below two seconds",
+                input: -1_999_999_999,
+                expected: "-1.999999999",
+            },
+            TestCase {
+                name: "negative two seconds exactly",
+                input: -2_000_000_000,
+                expected: "-2.000000000",
+            },
+            TestCase {
+                name: "negative two seconds minus one nanosecond",
+                input: -2_000_000_001,
+                expected: "-2.000000001",
+            },
+            TestCase {
+                name: "large exact seconds",
+                input: 123_456_789_000_000_000,
+                expected: "123456789.000000000",
+            },
+            TestCase {
+                name: "large exact seconds negative",
+                input: -123_456_789_000_000_000,
+                expected: "-123456789.000000000",
+            },
+            TestCase {
+                name: "i64::MAX",
+                input: i64::MAX,
+                expected: "9223372036.854775807",
+            },
+            TestCase {
+                name: "i64::MIN",
+                input: i64::MIN,
+                expected: "-9223372036.854775808",
+            },
+        ];
 
-        // Test bytes with horizontal tab (0x09)
-        assert_eq!(
-            super::sanitize_csv_field_bytes(b"text\twith\ttabs"),
-            "text with tabs"
-        );
-
-        // Test bytes with line feed (0x0a)
-        assert_eq!(
-            super::sanitize_csv_field_bytes(b"text\nwith\nlines"),
-            "text with lines"
-        );
-
-        // Test bytes with carriage return (0x0d)
-        assert_eq!(
-            super::sanitize_csv_field_bytes(b"text\rwith\rcarriage"),
-            "text with carriage"
-        );
-
-        // Test bytes with all special characters combined
-        assert_eq!(
-            super::sanitize_csv_field_bytes(b"text\t\n\rwith\tall\tspecial"),
-            "text   with all special"
-        );
-
-        // Test invalid UTF-8 bytes
-        let invalid_utf8 = vec![0xff, 0xfe, 0xfd];
-        assert_eq!(super::sanitize_csv_field_bytes(&invalid_utf8), "");
+        for tc in test_cases {
+            let result = super::convert_time_format(tc.input);
+            assert_eq!(result, tc.expected, "Test case '{}' failed", tc.name);
+        }
     }
 
+    /// Table-driven tests for `as_str_or_default`
     #[test]
-    fn test_vec_to_string_or_default() {
-        let v: Vec<i32> = vec![];
-        assert_eq!(super::vec_to_string_or_default(&v), "-");
-        let v = vec![1, 2, 3];
-        assert_eq!(super::vec_to_string_or_default(&v), "1,2,3");
+    fn as_str_or_default_edge_cases() {
+        // Static test cases
+        let static_cases: &[(&str, &str, &str)] = &[
+            ("empty string", "", "-"),
+            ("single character", "a", "a"),
+            ("whitespace only", " ", " "),
+            ("tab only", "\t", "\t"),
+            ("dash string", "-", "-"),
+            ("unicode string", "日本語", "日本語"),
+        ];
+
+        for (name, input, expected) in static_cases {
+            let result = super::as_str_or_default(input);
+            assert_eq!(result, *expected, "Test case '{name}' failed");
+        }
+
+        // Test long string separately (dynamic allocation)
+        let long_input = "a".repeat(500);
+        let result = super::as_str_or_default(&long_input);
+        assert_eq!(result, long_input, "Test case 'long string' failed");
     }
 
+    /// Table-driven tests for `sanitize_csv_field`
     #[test]
-    fn test_to_string_or_empty() {
-        assert_eq!(super::to_string_or_empty::<i32>(None), "-");
-        assert_eq!(super::to_string_or_empty(Some(123)), "123");
+    fn sanitize_csv_field_edge_cases() {
+        struct TestCase {
+            name: &'static str,
+            input: &'static str,
+            expected: &'static str,
+        }
+
+        let test_cases = [
+            TestCase {
+                name: "empty string",
+                input: "",
+                expected: "-",
+            },
+            TestCase {
+                name: "normal text",
+                input: "normal text",
+                expected: "normal text",
+            },
+            TestCase {
+                name: "mixed special characters",
+                input: "text\t\n\rwith\tall\tspecial",
+                expected: "text   with all special",
+            },
+            TestCase {
+                name: "CRLF sequence",
+                input: "\r\n",
+                expected: "  ",
+            },
+            TestCase {
+                name: "multiple consecutive tabs",
+                input: "\t\t\t",
+                expected: "   ",
+            },
+            TestCase {
+                name: "tabs at start and end",
+                input: "\ttext\t",
+                expected: " text ",
+            },
+            TestCase {
+                name: "unicode with special chars",
+                input: "日本語\t中文\n한국어",
+                expected: "日本語 中文 한국어",
+            },
+            TestCase {
+                name: "spaces preserved",
+                input: "  multiple  spaces  ",
+                expected: "  multiple  spaces  ",
+            },
+            TestCase {
+                name: "mixed whitespace",
+                input: " \t \n \r ",
+                expected: "       ",
+            },
+        ];
+
+        for tc in test_cases {
+            let result = super::sanitize_csv_field(tc.input);
+            assert_eq!(result, tc.expected, "Test case '{}' failed", tc.name);
+        }
+    }
+
+    /// Table-driven tests for `sanitize_csv_field_bytes`
+    #[test]
+    fn sanitize_csv_field_bytes_edge_cases() {
+        struct TestCase {
+            name: &'static str,
+            input: &'static [u8],
+            expected: &'static str,
+        }
+
+        let test_cases = [
+            TestCase {
+                name: "empty bytes",
+                input: &[],
+                expected: "-",
+            },
+            TestCase {
+                name: "normal text",
+                input: b"normal text",
+                expected: "normal text",
+            },
+            TestCase {
+                name: "single null byte",
+                input: &[0x00],
+                expected: "\0",
+            },
+            TestCase {
+                name: "binary data with valid UTF-8",
+                input: b"hello\x00world",
+                expected: "hello\0world",
+            },
+            TestCase {
+                name: "high ASCII values",
+                input: &[0x7f],
+                expected: "\x7f",
+            },
+            TestCase {
+                name: "valid 2-byte UTF-8",
+                input: &[0xc3, 0xa9],
+                expected: "é",
+            },
+            TestCase {
+                name: "valid 3-byte UTF-8 with special chars",
+                input: "日\t本".as_bytes(),
+                expected: "日 本",
+            },
+            TestCase {
+                name: "mixed valid and special chars",
+                input: b"line1\nline2\rline3\tend",
+                expected: "line1 line2 line3 end",
+            },
+            TestCase {
+                name: "invalid UTF-8 bytes",
+                input: &[0xff, 0xfe, 0xfd],
+                expected: "",
+            },
+        ];
+
+        for tc in test_cases {
+            let result = super::sanitize_csv_field_bytes(tc.input);
+            assert_eq!(result, tc.expected, "Test case '{}' failed", tc.name);
+        }
+    }
+
+    /// Table-driven tests for `vec_to_string_or_default` with various types and edge cases
+    #[test]
+    fn vec_to_string_or_default_edge_cases() {
+        let cases_i32: &[(&str, &[i32], &str)] = &[
+            ("empty -> dash", &[], "-"),
+            ("single element", &[42], "42"),
+            ("multiple preserves order", &[-1, 0, 1], "-1,0,1"),
+        ];
+
+        for (name, input, expected) in cases_i32 {
+            let out = super::vec_to_string_or_default(input);
+            assert_eq!(out, *expected, "i32 case '{name}' failed: input={input:?}");
+        }
+
+        let cases_str: &[(&str, &[&str], &str)] = &[
+            ("single element", &["single"], "single"),
+            ("string elements join", &["hello", "world"], "hello,world"),
+            (
+                "comma inside element is not escaped",
+                &["with,comma", "normal"],
+                "with,comma,normal",
+            ),
+        ];
+
+        for (name, input, expected) in cases_str {
+            let out = super::vec_to_string_or_default(input);
+            assert_eq!(out, *expected, "&str case '{name}' failed: input={input:?}");
+        }
+    }
+
+    /// Table-driven tests for `to_string_or_empty` with various types and edge cases
+    #[test]
+    fn to_string_or_empty_edge_cases() {
+        use std::net::IpAddr;
+
+        // 1) None path
+        assert_eq!(super::to_string_or_empty::<i64>(None), "-");
+
+        // 2) Some path (numeric)
+        assert_eq!(super::to_string_or_empty(Some(0_i64)), "0");
+
+        // 3) Some path (String)
+        assert_eq!(super::to_string_or_empty(Some("test".to_string())), "test");
+
+        // 4) Some path (non-numeric Display type)
+        assert_eq!(
+            super::to_string_or_empty(Some("127.0.0.1".parse::<IpAddr>().unwrap())),
+            "127.0.0.1"
+        );
     }
 }
