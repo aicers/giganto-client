@@ -123,6 +123,10 @@ pub async fn server_handshake(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use tokio::sync::Barrier;
+
     use super::HandshakeError;
     use crate::frame;
     use crate::test::{TOKEN, channel};
@@ -176,12 +180,42 @@ mod tests {
                 async move { super::client_handshake(&client.conn, client_version).await },
             );
 
-        super::server_handshake(&server.conn, fixture.server_version_req)
-            .await
-            .unwrap();
+        let server_result = super::server_handshake(&server.conn, fixture.server_version_req).await;
+        assert!(
+            server_result.is_ok(),
+            "Server handshake should succeed, got {server_result:?}"
+        );
 
-        let res = tokio::join!(handle).0.unwrap();
-        assert!(res.is_ok());
+        let (mut server_send, mut server_recv) = server_result.unwrap();
+
+        let client_result = tokio::join!(handle).0.unwrap();
+        assert!(
+            client_result.is_ok(),
+            "Client handshake should succeed, got {client_result:?}"
+        );
+
+        let (mut client_send, mut client_recv) = client_result.unwrap();
+
+        // Validate stream validity with a simple send/recv roundtrip
+        let test_message = b"handshake-validation-ping";
+        client_send.write_all(test_message).await.unwrap();
+
+        let mut recv_buf = vec![0u8; test_message.len()];
+        server_recv.read_exact(&mut recv_buf).await.unwrap();
+        assert_eq!(
+            &recv_buf, test_message,
+            "Server should receive the message sent by client"
+        );
+
+        let response_message = b"handshake-validation-pong";
+        server_send.write_all(response_message).await.unwrap();
+
+        let mut response_buf = vec![0u8; response_message.len()];
+        client_recv.read_exact(&mut response_buf).await.unwrap();
+        assert_eq!(
+            &response_buf, response_message,
+            "Client should receive the response sent by server"
+        );
     }
 
     // =========================================================================
@@ -225,27 +259,40 @@ mod tests {
             .server_version_req(">=0.7.0")
             .client_version("not-a-version");
 
-        let client_version = fixture.client_version;
-        let handle =
-            tokio::spawn(
-                async move { super::client_handshake(&client.conn, client_version).await },
-            );
+        // Use a barrier to synchronize: server signals after completing handshake,
+        // ensuring deterministic ordering.
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_clone = Arc::clone(&barrier);
 
-        let server_res = super::server_handshake(&server.conn, fixture.server_version_req).await;
+        let client_version = fixture.client_version;
+        let server_version_req = fixture.server_version_req;
+
+        // Server task: perform handshake and signal when done
+        let server_handle = tokio::spawn(async move {
+            let res = super::server_handshake(&server.conn, server_version_req).await;
+            barrier_clone.wait().await;
+            res
+        });
+
+        // Client performs handshake
+        let client_res = super::client_handshake(&client.conn, client_version).await;
+        barrier.wait().await;
+
+        let server_res = server_handle.await.unwrap();
+
+        // Server should get IncompatibleProtocol because the version string is not valid semver.
+        // Note: Version::parse fails early, so the server returns IncompatibleProtocol
+        // WITHOUT sending a response to the client.
         assert!(
             matches!(server_res, Err(HandshakeError::IncompatibleProtocol(ref v)) if v == "not-a-version"),
             "Expected IncompatibleProtocol(\"not-a-version\"), got {server_res:?}"
         );
 
-        let client_res = tokio::join!(handle).0.unwrap();
-        // Client may get IncompatibleProtocol or ConnectionClosed depending on timing
-        // (server finishes stream after sending None response)
+        // Client gets ConnectionClosed because the server returns early (on Version::parse failure)
+        // without sending any response. The stream is closed when the server-side drops.
         assert!(
-            matches!(
-                client_res,
-                Err(HandshakeError::IncompatibleProtocol(_) | HandshakeError::ConnectionClosed)
-            ),
-            "Expected client IncompatibleProtocol or ConnectionClosed, got {client_res:?}"
+            matches!(client_res, Err(HandshakeError::ConnectionClosed)),
+            "Expected client ConnectionClosed (server returns early without response), got {client_res:?}"
         );
     }
 
@@ -280,17 +327,37 @@ mod tests {
         let (server, client) = (channel.server, channel.client);
         let fixture = HandshakeFixture::new();
 
-        drop(server);
+        // Use a barrier to synchronize: server accepts the bi-stream, reads the
+        // client handshake, then finishes the send stream without sending a response.
+        // This deterministically triggers ConnectionClosed on the client.
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_clone = Arc::clone(&barrier);
+
+        let server_handle = tokio::spawn(async move {
+            let (mut send, mut recv) = server.conn.accept_bi().await.unwrap();
+            // Read the client's handshake message
+            let mut buf = Vec::new();
+            frame::recv_handshake(&mut recv, &mut buf).await.ok();
+            // Finish the stream without sending any response
+            send.finish().ok();
+            // Signal that we're done
+            barrier_clone.wait().await;
+        });
 
         let client_version = fixture.client_version;
-        let res = super::client_handshake(&client.conn, client_version).await;
-        // When server drops before handshake, the connection is lost and we get ReadError
+
+        // Client opens bi-stream and sends handshake, then waits for response
+        let client_res = super::client_handshake(&client.conn, client_version).await;
+
+        // Wait for server to complete
+        barrier.wait().await;
+        let _ = server_handle.await;
+
+        // When server finishes stream without response, client gets ConnectionClosed
+        // (FinishedEarly is mapped to ConnectionClosed in client_handshake)
         assert!(
-            matches!(
-                res,
-                Err(HandshakeError::ReadError(_) | HandshakeError::ConnectionClosed)
-            ),
-            "Expected ReadError or ConnectionClosed when server drops early, got {res:?}"
+            matches!(client_res, Err(HandshakeError::ConnectionClosed)),
+            "Expected ConnectionClosed when server drops early, got {client_res:?}"
         );
     }
 
@@ -402,6 +469,11 @@ mod tests {
         let channel = channel().await;
         let (server, client) = (channel.server, channel.client);
 
+        // Use a barrier to synchronize: server signals after resetting the stream,
+        // ensuring the client reads after the reset has been applied.
+        let barrier = Arc::new(Barrier::new(2));
+        let barrier_clone = Arc::clone(&barrier);
+
         let handle = tokio::spawn(async move {
             let (mut send, mut recv) = server.conn.accept_bi().await.unwrap();
             let mut buf = Vec::new();
@@ -410,9 +482,13 @@ mod tests {
             let len_header: u64 = resp.len() as u64;
             send.write_all(&len_header.to_le_bytes()).await.unwrap();
             send.reset(quinn::VarInt::from_u32(1)).ok();
+            // Signal that the stream has been reset
+            barrier_clone.wait().await;
         });
 
         let res = super::client_handshake(&client.conn, "0.7.0").await;
+        // Wait for server to complete the reset
+        barrier.wait().await;
         let _ = handle.await;
 
         assert!(
