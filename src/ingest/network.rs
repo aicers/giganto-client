@@ -1854,15 +1854,19 @@ mod tests {
             resp_pkts: 1,
             orig_l2_bytes: 100,
             resp_l2_bytes: 100,
-            rtt: 10,
-            named_pipe: "pipe".to_string(),
-            endpoint: "endpoint".to_string(),
-            operation: "op".to_string(),
+            context: vec![DceRpcContext {
+                id: 0,
+                abstract_syntax: 0x0883_AFE1_1F5D_C911_91A4_0800_2B14_A0FA,
+                abstract_major: 3,
+                abstract_minor: 0,
+                transfer_syntax: 0x045D_888A_EB1C_C911_9FE8_0800_2B10_4860,
+                transfer_major: 2,
+                transfer_minor: 0,
+                acceptance: 0,
+                reason: 0,
+            }],
+            request: vec!["0:0".to_string()],
         };
-        let display = format!("{dcerpc}");
-        assert!(display.contains("pipe"));
-        assert!(display.contains("endpoint"));
-        assert!(display.contains("op"));
 
         assert_response_data(&dcerpc, 1000, "dcerpc-sensor");
     }
