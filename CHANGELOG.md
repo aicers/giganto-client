@@ -8,6 +8,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- Modified `DceRpc` event structure.
 - Added runtime buffer sizing logic `prepare_buf` to prevent OOM during receive
   and safely handle variable frame sizes.
 

@@ -677,17 +677,28 @@ pub struct DceRpc {
     pub resp_pkts: u64,
     pub orig_l2_bytes: u64,
     pub resp_l2_bytes: u64,
-    pub rtt: i64,
-    pub named_pipe: String,
-    pub endpoint: String,
-    pub operation: String,
+    pub context: Vec<DceRpcContext>,
+    pub request: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DceRpcContext {
+    pub id: u16,
+    pub abstract_syntax: u128,
+    pub abstract_major: u16,
+    pub abstract_minor: u16,
+    pub transfer_syntax: u128,
+    pub transfer_major: u16,
+    pub transfer_minor: u16,
+    pub acceptance: u16,
+    pub reason: u16,
 }
 
 impl Display for DceRpc {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -699,10 +710,26 @@ impl Display for DceRpc {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            self.rtt,
-            as_str_or_default(&self.named_pipe),
-            as_str_or_default(&self.endpoint),
-            as_str_or_default(&self.operation),
+            vec_to_string_or_default(&self.context),
+            vec_to_string_or_default(&self.request),
+        )
+    }
+}
+
+impl Display for DceRpcContext {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "({},{:032X},{},{},{:032X},{},{},{},{})",
+            self.id,
+            self.abstract_syntax,
+            self.abstract_major,
+            self.abstract_minor,
+            self.transfer_syntax,
+            self.transfer_major,
+            self.transfer_minor,
+            self.acceptance,
+            self.reason,
         )
     }
 }
@@ -1827,15 +1854,19 @@ mod tests {
             resp_pkts: 1,
             orig_l2_bytes: 100,
             resp_l2_bytes: 100,
-            rtt: 10,
-            named_pipe: "pipe".to_string(),
-            endpoint: "endpoint".to_string(),
-            operation: "op".to_string(),
+            context: vec![DceRpcContext {
+                id: 0,
+                abstract_syntax: 0x0883_AFE1_1F5D_C911_91A4_0800_2B14_A0FA,
+                abstract_major: 3,
+                abstract_minor: 0,
+                transfer_syntax: 0x045D_888A_EB1C_C911_9FE8_0800_2B10_4860,
+                transfer_major: 2,
+                transfer_minor: 0,
+                acceptance: 0,
+                reason: 0,
+            }],
+            request: vec!["0:0".to_string()],
         };
-        let display = format!("{dcerpc}");
-        assert!(display.contains("pipe"));
-        assert!(display.contains("endpoint"));
-        assert!(display.contains("op"));
 
         assert_response_data(&dcerpc, 1000, "dcerpc-sensor");
     }
