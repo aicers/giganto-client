@@ -724,26 +724,42 @@ mod tests {
         assert_recv_err!(result, RecvError::ReadError(_));
     }
 
-    /// Tests that `RecvError::MessageTooLarge` is correctly returned when
-    /// `recv_handshake` receives a length header that exceeds capacity.
-    /// This variant is a unit variant (no inner data) unlike `SendError::MessageTooLarge`.
-    #[test]
-    fn recv_error_message_too_large_variant_exists() {
-        // RecvError::MessageTooLarge is a unit variant, verify it can be constructed
-        let recv_err = RecvError::MessageTooLarge;
-        assert!(
-            matches!(recv_err, RecvError::MessageTooLarge),
-            "expected MessageTooLarge, got {recv_err:?}"
-        );
+    /// Tests that `recv_handshake` returns `RecvError::MessageTooLarge` when
+    /// the 8-byte length header contains a value that exceeds allocatable capacity.
+    #[tokio::test]
+    async fn recv_handshake_returns_message_too_large_for_oversized_length() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send an 8-byte length header with u64::MAX, which exceeds any allocatable size
+        let oversized_len: u64 = u64::MAX;
+        channel
+            .server
+            .send
+            .write_all(&oversized_len.to_le_bytes())
+            .await
+            .unwrap();
+
+        // Attempt to receive - should fail with MessageTooLarge
+        let mut buf = Vec::new();
+        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+
+        assert_recv_err!(result, RecvError::MessageTooLarge);
     }
 
-    /// Tests that `send_raw` returns `MessageTooLarge` when the buffer length
-    /// exceeds `u32::MAX`.
+    /// Tests that `TryFromIntError` correctly converts to `SendError::MessageTooLarge`.
+    ///
+    /// This verifies the `From<TryFromIntError>` implementation that `send_raw` relies on
+    /// when `buf.len()` exceeds `u32::MAX`. We cannot practically allocate >4GB in a unit
+    /// test, so we test the conversion mechanism directly. The actual `send_raw` behavior
+    /// with oversized buffers is covered by the next test using an unsafe mock buffer.
     #[test]
-    fn send_raw_message_too_large_error_conversion() {
+    fn send_error_message_too_large_from_try_from_int_error() {
         use std::num::TryFromIntError;
 
-        // Attempt to convert a value larger than u32::MAX to u32
+        // Simulate the same conversion that send_raw performs: u32::try_from(buf.len())
         let large_len: usize = u32::MAX as usize + 1;
         let err: Result<u32, TryFromIntError> = large_len.try_into();
         let try_err = err.unwrap_err();
@@ -754,6 +770,31 @@ mod tests {
             matches!(send_err, SendError::MessageTooLarge(_)),
             "expected MessageTooLarge, got {send_err:?}"
         );
+    }
+
+    /// Tests that `send_raw` returns `SendError::MessageTooLarge` when provided
+    /// a buffer with length exceeding `u32::MAX`.
+    ///
+    /// This test uses an unsafe mock slice with a fabricated length to simulate
+    /// an oversized buffer without actually allocating >4GB of memory.
+    #[tokio::test]
+    async fn send_raw_returns_message_too_large_for_oversized_buffer() {
+        use crate::test::{TOKEN, channel};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Create a mock slice with a length exceeding u32::MAX.
+        // SAFETY: We never actually read from or dereference this slice;
+        // send_raw will fail at the length check before any I/O occurs.
+        let small_buf = [0u8; 8];
+        let oversized_slice: &[u8] =
+            unsafe { std::slice::from_raw_parts(small_buf.as_ptr(), u32::MAX as usize + 1) };
+
+        // Attempt to send - should fail with MessageTooLarge before any I/O
+        let result = super::send_raw(&mut channel.server.send, oversized_slice).await;
+
+        assert_send_err!(result, SendError::MessageTooLarge(_));
     }
 
     /// Tests that `send` returns `SerializationFailure` when bincode cannot
