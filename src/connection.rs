@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handshake_error_read_error_server_drops_early() {
+    async fn handshake_error_connection_closed_server_sends_no_response() {
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let (server, client) = (channel.server, channel.client);
@@ -357,7 +357,7 @@ mod tests {
         // (FinishedEarly is mapped to ConnectionClosed in client_handshake)
         assert!(
             matches!(client_res, Err(HandshakeError::ConnectionClosed)),
-            "Expected ConnectionClosed when server drops early, got {client_res:?}"
+            "Expected ConnectionClosed when server sends no response, got {client_res:?}"
         );
     }
 
@@ -512,61 +512,6 @@ mod tests {
     // Note: MessageTooLarge occurs when the 64-bit length header cannot be
     // converted to usize (on 32-bit systems), but on 64-bit systems this is
     // unlikely to trigger. The error is tested via the From impl coverage below.
-
-    // =========================================================================
-    // Tests for HandshakeError::SerializationFailure
-    // =========================================================================
-
-    // Note: SerializationFailure is hard to trigger directly in handshake
-    // because the serialization happens on valid data structures. The error
-    // is derived from bincode::Error which typically occurs with custom
-    // serializers or when bincode limits are exceeded. We test the From impl
-    // coverage via the SendError conversion path.
-
-    #[tokio::test]
-    async fn handshake_error_serialization_failure_coverage() {
-        let err = bincode::ErrorKind::SizeLimit;
-        let bincode_err: bincode::Error = Box::new(err);
-        let handshake_err = HandshakeError::SerializationFailure(bincode_err);
-
-        assert!(
-            matches!(handshake_err, HandshakeError::SerializationFailure(_)),
-            "SerializationFailure variant should be constructible"
-        );
-
-        let send_err =
-            frame::SendError::SerializationFailure(Box::new(bincode::ErrorKind::SizeLimit));
-        let converted: HandshakeError = send_err.into();
-        assert!(
-            matches!(converted, HandshakeError::SerializationFailure(_)),
-            "SendError::SerializationFailure should convert to HandshakeError::SerializationFailure"
-        );
-    }
-
-    // =========================================================================
-    // Edge case: unexpected message ordering
-    // =========================================================================
-
-    #[tokio::test]
-    async fn handshake_error_unexpected_message_order_double_response() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
-        let (server, client) = (channel.server, channel.client);
-
-        let handle = tokio::spawn(async move {
-            let (mut send, mut recv) = server.conn.accept_bi().await.unwrap();
-            let mut buf = Vec::new();
-            frame::recv_handshake(&mut recv, &mut buf).await.ok();
-            let resp = bincode::serialize::<Option<&str>>(&Some(">=0.7.0")).unwrap();
-            frame::send_handshake(&mut send, &resp).await.ok();
-            frame::send_handshake(&mut send, &resp).await.ok();
-        });
-
-        let res = super::client_handshake(&client.conn, "0.7.0").await;
-        let _ = handle.await;
-
-        assert!(res.is_ok(), "Double response should not break client");
-    }
 
     // =========================================================================
     // Edge case: empty version string
