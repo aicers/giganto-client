@@ -18,6 +18,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   Sub-second negative values (e.g. -1) now correctly preserve their sign instead
   of being rendered as a positive value.
 
+### Changed
+
+- Renamed `OpLog.agent_name` to `service_name` to align with the service naming
+  convention. This changes the public struct field name and the corresponding
+  serialized field key.
+
 ## [0.25.0] - 2025-11-26
 
 ### Changed
