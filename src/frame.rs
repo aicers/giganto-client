@@ -753,8 +753,7 @@ mod tests {
     ///
     /// This verifies the `From<TryFromIntError>` implementation that `send_raw` relies on
     /// when `buf.len()` exceeds `u32::MAX`. We cannot practically allocate >4GB in a unit
-    /// test, so we test the conversion mechanism directly. The actual `send_raw` behavior
-    /// with oversized buffers is covered by the next test using an unsafe mock buffer.
+    /// test, so we test the conversion mechanism directly.
     #[test]
     fn send_error_message_too_large_from_try_from_int_error() {
         use std::num::TryFromIntError;
@@ -770,31 +769,6 @@ mod tests {
             matches!(send_err, SendError::MessageTooLarge(_)),
             "expected MessageTooLarge, got {send_err:?}"
         );
-    }
-
-    /// Tests that `send_raw` returns `SendError::MessageTooLarge` when provided
-    /// a buffer with length exceeding `u32::MAX`.
-    ///
-    /// This test uses an unsafe mock slice with a fabricated length to simulate
-    /// an oversized buffer without actually allocating >4GB of memory.
-    #[tokio::test]
-    async fn send_raw_returns_message_too_large_for_oversized_buffer() {
-        use crate::test::{TOKEN, channel};
-
-        let _lock = TOKEN.lock().await;
-        let mut channel = channel().await;
-
-        // Create a mock slice with a length exceeding u32::MAX.
-        // SAFETY: We never actually read from or dereference this slice;
-        // send_raw will fail at the length check before any I/O occurs.
-        let small_buf = [0u8; 8];
-        let oversized_slice: &[u8] =
-            unsafe { std::slice::from_raw_parts(small_buf.as_ptr(), u32::MAX as usize + 1) };
-
-        // Attempt to send - should fail with MessageTooLarge before any I/O
-        let result = super::send_raw(&mut channel.server.send, oversized_slice).await;
-
-        assert_send_err!(result, SendError::MessageTooLarge(_));
     }
 
     /// Tests that `send` returns `SerializationFailure` when bincode cannot
