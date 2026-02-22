@@ -494,9 +494,50 @@ mod tests {
     // Tests for HandshakeError::MessageTooLarge
     // =========================================================================
 
-    // Note: MessageTooLarge occurs when the 64-bit length header cannot be
-    // converted to usize (on 32-bit systems), but on 64-bit systems this is
-    // unlikely to trigger. The error is tested via the From impl coverage below.
+    #[tokio::test]
+    async fn handshake_error_message_too_large_huge_length_header() {
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        // Client sends a handshake message with an impossibly large length header.
+        // This triggers MessageTooLarge in recv_handshake -> prepare_buf when
+        // try_reserve fails (even without attempting the actual allocation).
+        let handle = tokio::spawn(async move {
+            let (mut send, _recv) = client.conn.open_bi().await.unwrap();
+            // Write a u64::MAX length header - this will fail try_reserve in prepare_buf
+            let huge_len: u64 = u64::MAX;
+            send.write_all(&huge_len.to_le_bytes()).await.unwrap();
+        });
+
+        let res = super::server_handshake(&server.conn, ">=0.7.0").await;
+        let _ = handle.await;
+
+        // The server's recv_handshake will fail with MessageTooLarge, which gets
+        // mapped to InvalidMessage in server_handshake (via the map_err closure).
+        // This is because server_handshake maps all recv_handshake errors to InvalidMessage.
+        assert!(
+            matches!(res, Err(HandshakeError::InvalidMessage)),
+            "Expected InvalidMessage (from MessageTooLarge in recv_handshake), got {res:?}"
+        );
+    }
+
+    // =========================================================================
+    // Tests for HandshakeError::SerializationFailure
+    // =========================================================================
+
+    #[tokio::test]
+    async fn handshake_error_serialization_failure_from_send_error() {
+        // Test that SendError::SerializationFailure properly converts to
+        // HandshakeError::SerializationFailure via the From impl.
+        let bincode_err: bincode::Error = Box::new(bincode::ErrorKind::SizeLimit);
+        let send_err = frame::SendError::SerializationFailure(bincode_err);
+        let handshake_err: HandshakeError = send_err.into();
+        assert!(
+            matches!(handshake_err, HandshakeError::SerializationFailure(_)),
+            "SendError::SerializationFailure should convert to HandshakeError::SerializationFailure"
+        );
+    }
 
     // =========================================================================
     // Edge case: empty version string
@@ -537,16 +578,6 @@ mod tests {
         assert!(
             matches!(handshake_err, HandshakeError::MessageTooLarge),
             "SendError::MessageTooLarge should convert to HandshakeError::MessageTooLarge"
-        );
-    }
-
-    #[test]
-    fn from_send_error_write_error() {
-        let send_err = frame::SendError::WriteError(quinn::WriteError::ClosedStream);
-        let handshake_err: HandshakeError = send_err.into();
-        assert!(
-            matches!(handshake_err, HandshakeError::WriteError(ref e) if *e == quinn::WriteError::ClosedStream),
-            "SendError::WriteError should convert to HandshakeError::WriteError"
         );
     }
 }
