@@ -477,8 +477,11 @@ mod tests {
         let _ = handle.await;
 
         assert!(
-            matches!(res, Err(HandshakeError::ReadError(_))),
-            "Expected ReadError when stream is reset, got {res:?}"
+            matches!(
+                res,
+                Err(HandshakeError::ReadError(quinn::ReadError::Reset(_)))
+            ),
+            "Expected ReadError::Reset when stream is reset, got {res:?}"
         );
     }
 
@@ -491,11 +494,11 @@ mod tests {
     // for WriteError is tested via the SendError conversion test below.
 
     // =========================================================================
-    // Tests for HandshakeError::MessageTooLarge
+    // Tests for InvalidMessage mapping from lower-level size errors
     // =========================================================================
 
     #[tokio::test]
-    async fn handshake_error_message_too_large_huge_length_header() {
+    async fn handshake_error_invalid_message_from_huge_length_header() {
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let (server, client) = (channel.server, channel.client);
@@ -526,8 +529,8 @@ mod tests {
     // Tests for HandshakeError::SerializationFailure
     // =========================================================================
 
-    #[tokio::test]
-    async fn handshake_error_serialization_failure_from_send_error() {
+    #[test]
+    fn handshake_error_serialization_failure_from_send_error() {
         // Test that SendError::SerializationFailure properly converts to
         // HandshakeError::SerializationFailure via the From impl.
         let bincode_err: bincode::Error = Box::new(bincode::ErrorKind::SizeLimit);
