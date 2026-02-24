@@ -247,7 +247,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handshake_error_incompatible_protocol_invalid_version_string_server() {
+    async fn handshake_error_incompatible_protocol_invalid_client_version_string() {
         let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let (server, client) = (channel.server, channel.client);
