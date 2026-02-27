@@ -322,7 +322,7 @@ pub async fn receive_raw_events(
 /// * `PublishError::WriteError`: if the extract request data could not be written
 /// * `PublishError::ReadError`: if the extract request ack data could not be read
 /// * `PublishError::SerialDeserialFailure`: if the extract request ack data could not be deserialized
-/// * `PublishError::RequestFail`: if the extract request ack data is Err
+/// * `PublishError::PcapRequestFail`: if the extract request ack data is Err
 /// * `PublishError::CloseStreamError`: if duplicate stream close calls are requested.
 pub async fn pcap_extract_request(
     conn: &Connection,
