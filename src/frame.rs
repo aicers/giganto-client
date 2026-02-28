@@ -543,8 +543,13 @@ mod tests {
             .stop(quinn::VarInt::from_u32(42))
             .unwrap();
 
-        // Give the stop signal time to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Wait for the stop signal to propagate (event-driven, no fixed sleep)
+        channel
+            .server
+            .send
+            .stopped()
+            .await
+            .expect("stop signal should propagate");
 
         // Attempt to send - should fail because stream was stopped
         let mut buf = Vec::new();
@@ -572,8 +577,13 @@ mod tests {
             .stop(quinn::VarInt::from_u32(100))
             .unwrap();
 
-        // Give the stop signal time to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Wait for the stop signal to propagate (event-driven, no fixed sleep)
+        channel
+            .server
+            .send
+            .stopped()
+            .await
+            .expect("stop signal should propagate");
 
         // Attempt to send raw - should fail
         let result = super::send_raw(&mut channel.server.send, b"hello world").await;
@@ -595,8 +605,13 @@ mod tests {
             .stop(quinn::VarInt::from_u32(200))
             .unwrap();
 
-        // Give the stop signal time to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Wait for the stop signal to propagate (event-driven, no fixed sleep)
+        channel
+            .server
+            .send
+            .stopped()
+            .await
+            .expect("stop signal should propagate");
 
         // Attempt to send bytes - should fail
         let result = super::send_bytes(&mut channel.server.send, b"hello").await;
@@ -618,8 +633,13 @@ mod tests {
             .stop(quinn::VarInt::from_u32(300))
             .unwrap();
 
-        // Give the stop signal time to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Wait for the stop signal to propagate (event-driven, no fixed sleep)
+        channel
+            .server
+            .send
+            .stopped()
+            .await
+            .expect("stop signal should propagate");
 
         // Attempt to send handshake - should fail
         let result = super::send_handshake(&mut channel.server.send, b"handshake data").await;
@@ -640,8 +660,8 @@ mod tests {
             .conn
             .close(quinn::VarInt::from_u32(0), b"closing");
 
-        // Give the close signal time to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Wait for the close signal to propagate (event-driven, no fixed sleep)
+        channel.server.conn.closed().await;
 
         // Attempt to send - should fail because connection closed
         let mut buf = Vec::new();
@@ -672,8 +692,8 @@ mod tests {
             .conn
             .close(quinn::VarInt::from_u32(0), b"closing");
 
-        // Give the close signal time to propagate
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        // Wait for the close signal to propagate (event-driven, no fixed sleep)
+        channel.client.conn.closed().await;
 
         // Attempt to receive - should fail because connection closed
         let mut buf = Vec::new();
