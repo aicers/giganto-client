@@ -5,7 +5,6 @@ pub mod stream;
 
 use std::{mem, net::IpAddr};
 
-use anyhow::Result;
 use quinn::{Connection, ConnectionError, RecvStream, SendStream};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
@@ -323,7 +322,7 @@ pub async fn receive_raw_events(
 /// * `PublishError::WriteError`: if the extract request data could not be written
 /// * `PublishError::ReadError`: if the extract request ack data could not be read
 /// * `PublishError::SerialDeserialFailure`: if the extract request ack data could not be deserialized
-/// * `PublishError::RequestFail`: if the extract request ack data is Err
+/// * `PublishError::PcapRequestFail`: if the extract request ack data is Err
 /// * `PublishError::CloseStreamError`: if duplicate stream close calls are requested.
 pub async fn pcap_extract_request(
     conn: &Connection,
@@ -434,17 +433,146 @@ mod tests {
     use crate::publish::{PublishError, recv_ack_response};
     use crate::test::{TOKEN, channel};
 
+    // =========================================================================
+    // Test Helpers / Builders
+    // =========================================================================
+
+    /// Helper to create a sample `PcapFilter` for testing.
+    fn sample_pcap_filter() -> super::PcapFilter {
+        super::PcapFilter {
+            start_time: 12345,
+            sensor: "test-sensor".to_string(),
+            src_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+            src_port: 46378,
+            dst_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+            dst_port: 80,
+            proto: 6,
+            end_time: 67890,
+        }
+    }
+
+    /// Builder for `RequestSemiSupervisedStream` payloads.
+    struct SemiSupervisedStreamBuilder {
+        start: i64,
+        sensor: Option<Vec<String>>,
+    }
+
+    impl SemiSupervisedStreamBuilder {
+        fn new() -> Self {
+            Self {
+                start: 0,
+                sensor: None,
+            }
+        }
+
+        fn build(self) -> super::stream::RequestSemiSupervisedStream {
+            super::stream::RequestSemiSupervisedStream {
+                start: self.start,
+                sensor: self.sensor,
+            }
+        }
+    }
+
+    /// Builder for `RequestRange` payloads.
+    struct RequestRangeBuilder {
+        sensor: String,
+        kind: String,
+        start: i64,
+        end: i64,
+        count: usize,
+    }
+
+    impl RequestRangeBuilder {
+        fn new() -> Self {
+            Self {
+                sensor: "test-sensor".to_string(),
+                kind: "conn".to_string(),
+                start: 0,
+                end: 100,
+                count: 10,
+            }
+        }
+
+        fn start(mut self, start: i64) -> Self {
+            self.start = start;
+            self
+        }
+
+        fn end(mut self, end: i64) -> Self {
+            self.end = end;
+            self
+        }
+
+        fn count(mut self, count: usize) -> Self {
+            self.count = count;
+            self
+        }
+
+        fn build(self) -> super::range::RequestRange {
+            super::range::RequestRange {
+                sensor: self.sensor,
+                kind: self.kind,
+                start: self.start,
+                end: self.end,
+                count: self.count,
+            }
+        }
+    }
+
+    fn sample_conn() -> Conn {
+        Conn {
+            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            orig_port: 46378,
+            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+            resp_port: 80,
+            proto: 6,
+            conn_state: String::new(),
+            start_time: 500,
+            duration: 500,
+            service: "-".to_string(),
+            orig_bytes: 77,
+            resp_bytes: 295,
+            orig_pkts: 397,
+            resp_pkts: 511,
+            orig_l2_bytes: 21515,
+            resp_l2_bytes: 27889,
+        }
+    }
+
+    struct BadSerialize;
+
+    impl serde::Serialize for BadSerialize {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("forced serialization error"))
+        }
+    }
+
+    struct BadResponseData;
+
+    impl super::range::ResponseRangeData for BadResponseData {
+        fn response_data(&self, _timestamp: i64, _sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+            bincode::deserialize::<u64>(&[0xFF]).map(|_| Vec::new())
+        }
+    }
+
+    struct BadResponseDone;
+
+    impl super::range::ResponseRangeData for BadResponseDone {
+        fn response_data(&self, _timestamp: i64, _sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+            Ok(Vec::new())
+        }
+
+        fn response_done() -> Result<Vec<u8>, bincode::Error> {
+            bincode::deserialize::<u64>(&[0xFF]).map(|_| Vec::new())
+        }
+    }
+
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
-    async fn publish_send_recv() {
-        use crate::frame::send_bytes;
-        use crate::publish::{
-            PcapFilter,
-            range::ResponseRangeData,
-            stream::{
-                RequestSemiSupervisedStream, RequestTimeSeriesGeneratorStream, StreamRequestPayload,
-            },
-        };
+    async fn test_stream_request_semi_supervised_roundtrip() {
+        use crate::publish::stream::{RequestSemiSupervisedStream, StreamRequestPayload};
 
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
@@ -466,6 +594,14 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(received_payload, payload);
+    }
+
+    #[tokio::test]
+    async fn test_stream_request_time_series_roundtrip() {
+        use crate::publish::stream::{RequestTimeSeriesGeneratorStream, StreamRequestPayload};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
         // send/recv time series generator stream request
         let time_series_generator_req = RequestTimeSeriesGeneratorStream {
@@ -487,6 +623,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(received_payload, payload);
+    }
+
+    #[tokio::test]
+    async fn test_stream_start_messages_roundtrip() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
         // send/recv semi_supervised stream start message
         super::send_semi_supervised_stream_start_message(
@@ -511,26 +653,18 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(policy_id, "1".parse::<u32>().unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_receive_semi_supervised_data_roundtrip() {
+        use crate::frame::send_bytes;
 
         // send/recv stream data with semi-supervised (semi-supervised's stream data use send_bytes
         // function)
-        let conn = Conn {
-            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            orig_port: 46378,
-            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            resp_port: 80,
-            proto: 6,
-            conn_state: String::new(),
-            start_time: 500,
-            duration: 500,
-            service: "-".to_string(),
-            orig_bytes: 77,
-            resp_bytes: 295,
-            orig_pkts: 397,
-            resp_pkts: 511,
-            orig_l2_bytes: 21515,
-            resp_l2_bytes: 27889,
-        };
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let conn = sample_conn();
         let raw_event = bincode::serialize(&conn).unwrap();
         let sensor = bincode::serialize(&"hello").unwrap();
         let raw_len = u32::try_from(raw_event.len()).unwrap().to_le_bytes();
@@ -553,8 +687,15 @@ mod tests {
         result_buf.extend_from_slice(&sensor);
         result_buf.extend_from_slice(&raw_event);
         assert_eq!(data, result_buf);
+    }
+
+    #[tokio::test]
+    async fn test_receive_time_series_generator_data_roundtrip() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
         // recv time series generator stream data
+        let conn = sample_conn();
         frame::send_bytes(&mut channel.server.send, &7777_i64.to_le_bytes())
             .await
             .unwrap();
@@ -567,6 +708,12 @@ mod tests {
             .unwrap();
         assert_eq!(timestamp, 7777);
         assert_eq!(data, bincode::serialize(&conn).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_range_data_request_roundtrip() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
 
         // send/recv range data request
         let req_range = super::range::RequestRange {
@@ -588,22 +735,14 @@ mod tests {
             .unwrap();
         assert_eq!(msg_code, super::range::MessageCode::ReqRange);
         assert_eq!(data, bincode::serialize(&req_range).unwrap());
+    }
 
-        // send/recv range data
-        super::send_range_data(
-            &mut channel.server.send,
-            Some((conn.clone(), 33333, "world")),
-        )
-        .await
-        .unwrap();
-        let data =
-            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
-                .await
-                .unwrap();
-        assert_eq!(
-            bincode::serialize::<Option<(i64, String, Vec<u8>)>>(&data).unwrap(),
-            conn.response_data(33333, "world").unwrap()
-        );
+    #[tokio::test]
+    async fn test_pcap_extract_roundtrip() {
+        use crate::publish::PcapFilter;
+
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
 
         // send/recv pcap extract request
         let p_filter = PcapFilter {
@@ -631,7 +770,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_ok() {
+    async fn test_send_ok_ack_response() {
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -645,7 +784,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_err() {
+    async fn test_send_err_ack_response() {
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -664,7 +803,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn send_recv_raw_events() {
+    async fn test_send_recv_raw_events() {
         use crate::RawEventKind;
         use crate::publish::range::{MessageCode, RequestRawData};
         use crate::publish::{receive_raw_events, send_raw_events};
@@ -673,23 +812,7 @@ mod tests {
 
         let msg_code = MessageCode::RawData;
 
-        let conn = Conn {
-            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            orig_port: 46378,
-            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            resp_port: 80,
-            proto: 6,
-            conn_state: String::new(),
-            start_time: 500,
-            duration: 500,
-            service: "-".to_string(),
-            orig_bytes: 77,
-            resp_bytes: 295,
-            orig_pkts: 397,
-            resp_pkts: 511,
-            orig_l2_bytes: 21515,
-            resp_l2_bytes: 27889,
-        };
+        let conn = sample_conn();
         let raw_event = bincode::serialize(&conn).unwrap();
 
         let sensor1 = "src 1";
@@ -731,17 +854,128 @@ mod tests {
             (ts1, sensor2.to_string(), raw_event),
         ];
 
-        send_raw_events(&mut channel.server.send, value_with_sensors)
+        send_raw_events(&mut channel.server.send, value_with_sensors.clone())
             .await
             .unwrap();
 
         let recv_data = receive_raw_events(&mut channel.client.recv).await.unwrap();
 
         assert_eq!(recv_data.len(), 4);
+        assert_eq!(recv_data, value_with_sensors);
     }
 
     #[tokio::test]
-    async fn publish_pcap_extract_response_err() {
+    async fn test_send_stream_request_closed_stream_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel.client.send.finish().ok();
+
+        let payload = super::stream::StreamRequestPayload::new_semi_supervised(
+            super::stream::RequestStreamRecord::Conn,
+            SemiSupervisedStreamBuilder::new().build(),
+        );
+
+        let res = super::send_stream_request(&mut channel.client.send, payload).await;
+        assert!(matches!(res, Err(PublishError::WriteError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_semi_supervised_stream_start_message_closed_stream_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel.server.send.finish().ok();
+
+        let res = super::send_semi_supervised_stream_start_message(
+            &mut channel.server.send,
+            super::stream::RequestStreamRecord::Conn,
+        )
+        .await;
+        assert!(matches!(res, Err(PublishError::WriteError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_range_data_request_serialization_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let res = super::send_range_data_request(
+            &mut channel.client.send,
+            super::range::MessageCode::ReqRange,
+            BadSerialize,
+        )
+        .await;
+
+        assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_range_data_request_closed_stream_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel.client.send.finish().ok();
+
+        let request = RequestRangeBuilder::new().build();
+        let res = super::send_range_data_request(
+            &mut channel.client.send,
+            super::range::MessageCode::ReqRange,
+            request,
+        )
+        .await;
+
+        assert!(matches!(res, Err(PublishError::WriteError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_range_data_response_data_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let res =
+            super::send_range_data(&mut channel.server.send, Some((BadResponseData, 1, "s1")))
+                .await;
+
+        assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_range_data_response_done_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let res = super::send_range_data::<BadResponseDone>(&mut channel.server.send, None).await;
+
+        assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_range_data_closed_stream_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel.server.send.finish().ok();
+
+        let res =
+            super::send_range_data(&mut channel.server.send, Some((sample_conn(), 1, "s1"))).await;
+
+        assert!(matches!(res, Err(PublishError::WriteError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_raw_events_closed_stream_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel.server.send.finish().ok();
+
+        let res = super::send_raw_events(&mut channel.server.send, vec![]).await;
+        assert!(matches!(res, Err(PublishError::WriteError(_))));
+    }
+
+    #[tokio::test]
+    async fn test_pcap_extract_response_err() {
         let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
@@ -762,22 +996,10 @@ mod tests {
             .await
             .unwrap();
         let resp = bincode::deserialize::<Result<(), String>>(&ack_buf).unwrap();
-        assert!(resp.is_err());
-    }
-
-    #[test]
-    fn test_publish_error_conversion() {
-        let err = PublishError::MessageTooLarge;
-        assert_eq!(
-            err.to_string(),
-            "Message is too large, so type casting failed"
-        );
-
-        let err = PublishError::InvalidMessageType;
-        assert_eq!(err.to_string(), "Invalid message type");
-
-        let err = PublishError::InvalidMessageData;
-        assert_eq!(err.to_string(), "Invalid message data");
+        assert!(matches!(
+            resp,
+            Err(msg) if msg.contains("Failed deserializing message")
+        ));
     }
 
     #[tokio::test]
@@ -832,5 +1054,763 @@ mod tests {
 
         let res = super::receive_range_data_request(&mut channel.client.recv).await;
         assert!(matches!(res, Err(PublishError::InvalidMessageType)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_data_request_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&u32::to_le_bytes(123)[..2])
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res = super::receive_range_data_request(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_data_request_body_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let msg_code: u32 = super::range::MessageCode::ReqRange.into();
+        channel
+            .server
+            .send
+            .write_all(&msg_code.to_le_bytes())
+            .await
+            .unwrap();
+        channel
+            .server
+            .send
+            .write_all(&10u32.to_le_bytes())
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res = super::receive_range_data_request(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_truncated_bincode_payload() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Create a valid payload, serialize it, then truncate
+        let payload = super::stream::StreamRequestPayload::new_semi_supervised(
+            super::stream::RequestStreamRecord::Conn,
+            SemiSupervisedStreamBuilder::new().build(),
+        );
+        let serialized = bincode::serialize(&payload).unwrap();
+
+        // Truncate to half the size
+        let truncated = &serialized[..serialized.len() / 2];
+        frame::send_raw(&mut channel.server.send, truncated)
+            .await
+            .unwrap();
+
+        let res = super::receive_stream_request(&mut channel.client.recv).await;
+        assert!(
+            matches!(res, Err(PublishError::SerialDeserialFailure(_))),
+            "Expected SerialDeserialFailure for truncated payload, got {res:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_receive_stream_request_malformed_payload() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        frame::send_raw(&mut channel.server.send, b"not valid bincode")
+            .await
+            .unwrap();
+
+        let res = super::receive_stream_request(&mut channel.client.recv).await;
+        assert!(
+            matches!(res, Err(PublishError::SerialDeserialFailure(_))),
+            "Expected SerialDeserialFailure for malformed payload, got {res:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_data_deserialization_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        frame::send_raw(&mut channel.server.send, b"not valid bincode")
+            .await
+            .unwrap();
+
+        let res =
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
+                .await;
+        assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+    }
+
+    #[tokio::test]
+    async fn test_receive_raw_events_deserialization_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        frame::send_raw(&mut channel.server.send, b"not valid bincode")
+            .await
+            .unwrap();
+
+        let res = super::receive_raw_events(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_data_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&10u32.to_le_bytes())
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res =
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
+                .await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_raw_events_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&10u32.to_le_bytes())
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res = super::receive_raw_events(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+    #[tokio::test]
+    async fn test_receive_time_series_generator_data_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&1234_i64.to_le_bytes()[..4])
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res = super::receive_time_series_generator_data(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_stream_request_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&10u32.to_le_bytes())
+            .await
+            .unwrap();
+        channel
+            .server
+            .send
+            .write_all(&[1, 2, 3, 4, 5])
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res = super::receive_stream_request(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_time_series_generator_stream_start_message_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&4u32.to_le_bytes())
+            .await
+            .unwrap();
+        channel.server.send.write_all(b"12").await.unwrap();
+        channel.server.send.finish().ok();
+
+        let res =
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
+                .await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_semi_supervised_data_short_read_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        channel
+            .server
+            .send
+            .write_all(&1234_i64.to_le_bytes())
+            .await
+            .unwrap();
+        channel
+            .server
+            .send
+            .write_all(&u32::to_le_bytes(10)[..2])
+            .await
+            .unwrap();
+        channel.server.send.finish().ok();
+
+        let res = super::receive_semi_supervised_data(&mut channel.client.recv).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+    }
+
+    #[tokio::test]
+    async fn test_pcap_extract_request_ack_err() {
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let server_conn = channel.server.conn.clone();
+
+        let handle = tokio::spawn(async move {
+            let (mut send, mut recv) = server_conn.accept_bi().await.unwrap();
+            let mut buf = Vec::new();
+            frame::recv::<super::PcapFilter>(&mut recv, &mut buf)
+                .await
+                .unwrap();
+            super::send_err(&mut send, &mut buf, "boom").await.unwrap();
+        });
+
+        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        assert!(matches!(
+            res,
+            Err(PublishError::PcapRequestFail(msg)) if msg.contains("boom")
+        ));
+
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_pcap_extract_request_connection_closed_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+
+        channel.client.conn.close(0u32.into(), b"closed");
+
+        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        assert!(matches!(res, Err(PublishError::ConnectionLost(_))));
+    }
+
+    #[tokio::test]
+    async fn test_pcap_extract_request_ack_read_error_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let server_conn = channel.server.conn.clone();
+
+        let handle = tokio::spawn(async move {
+            let (_send, mut recv) = server_conn.accept_bi().await.unwrap();
+            let mut buf = Vec::new();
+            frame::recv::<super::PcapFilter>(&mut recv, &mut buf)
+                .await
+                .unwrap();
+            server_conn.close(0u32.into(), b"no-ack");
+        });
+
+        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        assert!(matches!(res, Err(PublishError::ReadError(_))));
+
+        handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_pcap_extract_request_close_stream_returns_error() {
+        let _lock = TOKEN.lock().await;
+        let channel = channel().await;
+        let server_conn = channel.server.conn.clone();
+
+        let handle = tokio::spawn(async move {
+            let (_send, mut recv) = server_conn.accept_bi().await.unwrap();
+            let _ = recv.stop(0u32.into());
+        });
+
+        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+
+        handle.await.unwrap();
+    }
+
+    /// Tests that corrupted bincode for range data returns appropriate error.
+    #[tokio::test]
+    async fn test_malformed_range_data_payload_deserialize_fails() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send valid message code, followed by garbage payload
+        let msg_code: u32 = super::range::MessageCode::ReqRange.into();
+        frame::send_bytes(&mut channel.server.send, &msg_code.to_le_bytes())
+            .await
+            .unwrap();
+        frame::send_raw(&mut channel.server.send, b"garbage data not valid bincode")
+            .await
+            .unwrap();
+
+        let (code, data) = super::receive_range_data_request(&mut channel.client.recv)
+            .await
+            .unwrap();
+        assert_eq!(code, super::range::MessageCode::ReqRange);
+
+        // Attempting to deserialize should fail
+        let deser_result = bincode::deserialize::<super::range::RequestRange>(&data);
+        assert!(deser_result.is_err(), "Expected deserialization to fail");
+    }
+
+    /// Tests range requests with boundary values (zero, negative, max values).
+    #[tokio::test]
+    async fn test_range_boundary_values() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Test with zero values
+        let zero_range = RequestRangeBuilder::new().start(0).end(0).count(0).build();
+        super::send_range_data_request(
+            &mut channel.client.send,
+            super::range::MessageCode::ReqRange,
+            zero_range.clone(),
+        )
+        .await
+        .unwrap();
+        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
+        assert_eq!(received.start, 0);
+        assert_eq!(received.end, 0);
+        assert_eq!(received.count, 0);
+
+        // Test with negative timestamps
+        let negative_range = RequestRangeBuilder::new()
+            .start(-1000)
+            .end(-1)
+            .count(10)
+            .build();
+        super::send_range_data_request(
+            &mut channel.client.send,
+            super::range::MessageCode::ReqRange,
+            negative_range.clone(),
+        )
+        .await
+        .unwrap();
+        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
+        assert_eq!(received.start, -1000);
+        assert_eq!(received.end, -1);
+
+        // Test with large values
+        let max_range = RequestRangeBuilder::new()
+            .start(i64::MIN)
+            .end(i64::MAX)
+            .count(usize::MAX)
+            .build();
+        super::send_range_data_request(
+            &mut channel.client.send,
+            super::range::MessageCode::ReqRange,
+            max_range.clone(),
+        )
+        .await
+        .unwrap();
+        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
+        assert_eq!(received.start, i64::MIN);
+        assert_eq!(received.end, i64::MAX);
+        assert_eq!(received.count, usize::MAX);
+    }
+
+    /// Tests range requests where start > end (inverted range).
+    #[tokio::test]
+    async fn test_inverted_range() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Inverted range (start > end) - the protocol should still
+        // transmit this; validation is application-level
+        let inverted_range = RequestRangeBuilder::new()
+            .start(1000)
+            .end(100)
+            .count(50)
+            .build();
+        super::send_range_data_request(
+            &mut channel.client.send,
+            super::range::MessageCode::ReqRange,
+            inverted_range.clone(),
+        )
+        .await
+        .unwrap();
+        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
+        assert_eq!(received.start, 1000);
+        assert_eq!(received.end, 100);
+        assert!(
+            received.start > received.end,
+            "Inverted range should preserve start > end"
+        );
+    }
+
+    /// Tests empty sensor list in raw data requests.
+    #[tokio::test]
+    async fn test_empty_raw_data_input() {
+        use super::range::{MessageCode, RequestRawData};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Empty input list
+        let empty_request = RequestRawData {
+            kind: "conn".to_string(),
+            input: vec![],
+        };
+        super::send_range_data_request(
+            &mut channel.client.send,
+            MessageCode::RawData,
+            empty_request.clone(),
+        )
+        .await
+        .unwrap();
+        let (code, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        assert_eq!(code, MessageCode::RawData);
+        let received: RequestRawData = bincode::deserialize(&data).unwrap();
+        assert!(received.input.is_empty());
+    }
+
+    /// Tests raw data request with empty timestamp vectors.
+    #[tokio::test]
+    async fn test_raw_data_empty_timestamps() {
+        use super::range::{MessageCode, RequestRawData};
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Sensor with empty timestamp list
+        let request = RequestRawData {
+            kind: "dns".to_string(),
+            input: vec![
+                ("sensor1".to_string(), vec![]),
+                ("sensor2".to_string(), vec![1, 2, 3]),
+            ],
+        };
+        super::send_range_data_request(&mut channel.client.send, MessageCode::RawData, request)
+            .await
+            .unwrap();
+        let (code, data) = super::receive_range_data_request(&mut channel.server.recv)
+            .await
+            .unwrap();
+        assert_eq!(code, MessageCode::RawData);
+        let received: RequestRawData = bincode::deserialize(&data).unwrap();
+        assert_eq!(received.input.len(), 2);
+        assert!(received.input[0].1.is_empty());
+        assert_eq!(received.input[1].1.len(), 3);
+    }
+
+    /// Tests `send_range_data` with `None` data, which should send a
+    /// `response_done()` signal.
+    #[tokio::test]
+    async fn test_send_range_data_none_response_done() {
+        use super::range::ResponseRangeData;
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send None, which triggers the response_done() path
+        super::send_range_data::<Conn>(&mut channel.server.send, None)
+            .await
+            .unwrap();
+
+        // Receive and verify it matches the response_done() format
+        let received =
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
+                .await
+                .unwrap();
+
+        // response_done() serializes None, so received should be None
+        assert!(
+            received.is_none(),
+            "Expected None for response_done signal, got {received:?}"
+        );
+
+        // Also verify that the raw bytes match the response_done() output
+        super::send_range_data::<Conn>(&mut channel.server.send, None)
+            .await
+            .unwrap();
+
+        let mut raw_buf = Vec::new();
+        frame::recv_raw(&mut channel.client.recv, &mut raw_buf)
+            .await
+            .unwrap();
+
+        let expected_done = Conn::response_done().unwrap();
+        assert_eq!(
+            raw_buf, expected_done,
+            "Raw bytes should match response_done() output"
+        );
+    }
+
+    /// Tests `send_range_data` with `Some` data and validates raw bytes.
+    #[tokio::test]
+    async fn test_send_range_data_some_raw_bytes() {
+        use super::range::ResponseRangeData;
+
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let conn = sample_conn();
+        super::send_range_data(
+            &mut channel.server.send,
+            Some((conn.clone(), 33333, "world")),
+        )
+        .await
+        .unwrap();
+
+        let mut raw_buf = Vec::new();
+        frame::recv_raw(&mut channel.client.recv, &mut raw_buf)
+            .await
+            .unwrap();
+
+        let expected = conn.response_data(33333, "world").unwrap();
+        assert_eq!(
+            raw_buf, expected,
+            "Raw bytes should match response_data() output"
+        );
+    }
+
+    /// Tests sending and receiving empty raw events list.
+    #[tokio::test]
+    async fn test_send_recv_empty_raw_events() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        let empty_events: Vec<(i64, String, Vec<u8>)> = vec![];
+        super::send_raw_events(&mut channel.server.send, empty_events)
+            .await
+            .unwrap();
+
+        let received = super::receive_raw_events(&mut channel.client.recv)
+            .await
+            .unwrap();
+        assert!(received.is_empty());
+    }
+
+    /// Tests `recv_ack_response` with malformed response.
+    #[tokio::test]
+    async fn test_recv_ack_response_malformed() {
+        let _lock = TOKEN.lock().await;
+        let mut channel = channel().await;
+
+        // Send malformed data that cannot be deserialized as Result<(), &str>
+        frame::send_raw(&mut channel.server.send, b"not valid bincode")
+            .await
+            .unwrap();
+
+        let res = recv_ack_response(&mut channel.client.recv).await;
+        assert!(
+            matches!(res, Err(PublishError::SerialDeserialFailure(_))),
+            "Expected SerialDeserialFailure for malformed ack, got {res:?}"
+        );
+    }
+
+    /// Tests all `PublishError` variants display correctly.
+    #[test]
+    fn test_all_publish_error_display() {
+        assert_eq!(
+            PublishError::ConnectionClosed.to_string(),
+            "Connection closed by peer"
+        );
+        assert_eq!(
+            PublishError::MessageTooLarge.to_string(),
+            "Message is too large, so type casting failed"
+        );
+        assert_eq!(
+            PublishError::InvalidMessageType.to_string(),
+            "Invalid message type"
+        );
+        assert_eq!(
+            PublishError::InvalidMessageData.to_string(),
+            "Invalid message data"
+        );
+        assert_eq!(
+            PublishError::PcapRequestFail("test error".to_string()).to_string(),
+            "Pcap request failed, because test error"
+        );
+    }
+
+    /// Tests `RecvError::DeserializationFailure` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_recv_error_deserialization_failure() {
+        let bincode_err = bincode::deserialize::<String>(&[0xFF, 0xFF]).unwrap_err();
+        let recv_err = frame::RecvError::DeserializationFailure(bincode_err);
+        let publish_err: PublishError = recv_err.into();
+        assert!(
+            matches!(publish_err, PublishError::SerialDeserialFailure(_)),
+            "Expected SerialDeserialFailure, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `RecvError::MessageTooLarge` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_recv_error_message_too_large() {
+        let too_large_err = frame::RecvError::MessageTooLarge;
+        let publish_err: PublishError = too_large_err.into();
+        assert!(
+            matches!(publish_err, PublishError::MessageTooLarge),
+            "Expected MessageTooLarge, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `RecvError::ReadError(FinishedEarly)` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_recv_error_finished_early() {
+        let finished_early_err = quinn::ReadExactError::FinishedEarly(0);
+        let recv_err = frame::RecvError::ReadError(finished_early_err);
+        let publish_err: PublishError = recv_err.into();
+        assert!(
+            matches!(publish_err, PublishError::ConnectionClosed),
+            "Expected ConnectionClosed for FinishedEarly, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `RecvError::ReadError(ReadError)` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_recv_error_read_error() {
+        let read_err = quinn::ReadError::ClosedStream;
+        let read_exact_err = quinn::ReadExactError::ReadError(read_err);
+        let recv_err = frame::RecvError::ReadError(read_exact_err);
+        let publish_err: PublishError = recv_err.into();
+        assert!(
+            matches!(publish_err, PublishError::ReadError(_)),
+            "Expected ReadError, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `SendError::SerializationFailure` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_send_error_serialization_failure() {
+        let ser_err = bincode::serialize(&BadSerialize).unwrap_err();
+        let send_err = frame::SendError::SerializationFailure(ser_err);
+        let publish_err: PublishError = send_err.into();
+        assert!(
+            matches!(publish_err, PublishError::SerialDeserialFailure(_)),
+            "Expected SerialDeserialFailure, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `SendError::MessageTooLarge` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_send_error_message_too_large() {
+        use std::num::TryFromIntError;
+
+        // Use i8::try_from to reliably produce TryFromIntError.
+        let try_from_err: TryFromIntError = i8::try_from(1000_i32).unwrap_err();
+        let too_large_err = frame::SendError::MessageTooLarge(try_from_err);
+        let publish_err: PublishError = too_large_err.into();
+        assert!(
+            matches!(publish_err, PublishError::MessageTooLarge),
+            "Expected MessageTooLarge, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `SendError::WriteError` conversion for `PublishError`.
+    #[test]
+    fn test_publish_error_from_send_error_write_error() {
+        let write_err = quinn::WriteError::ClosedStream;
+        let send_err = frame::SendError::WriteError(write_err);
+        let publish_err: PublishError = send_err.into();
+        assert!(
+            matches!(publish_err, PublishError::WriteError(_)),
+            "Expected WriteError, got {publish_err:?}"
+        );
+    }
+
+    /// Tests `PcapFilter` serialization and deserialization.
+    #[test]
+    fn test_pcap_filter_serde() {
+        let filter = sample_pcap_filter();
+
+        let serialized = bincode::serialize(&filter).unwrap();
+        let deserialized: super::PcapFilter = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(deserialized.start_time, filter.start_time);
+        assert_eq!(deserialized.end_time, filter.end_time);
+        assert_eq!(deserialized.sensor, filter.sensor);
+        assert_eq!(deserialized.src_addr, filter.src_addr);
+        assert_eq!(deserialized.src_port, filter.src_port);
+        assert_eq!(deserialized.dst_addr, filter.dst_addr);
+        assert_eq!(deserialized.dst_port, filter.dst_port);
+        assert_eq!(deserialized.proto, filter.proto);
+    }
+
+    /// Tests `PcapFilter` with IPv6 addresses.
+    #[test]
+    fn test_pcap_filter_ipv6() {
+        let filter = super::PcapFilter {
+            start_time: 1000,
+            sensor: "ipv6-sensor".to_string(),
+            src_addr: "2001:db8::1".parse().unwrap(),
+            src_port: 443,
+            dst_addr: "2001:db8::2".parse().unwrap(),
+            dst_port: 8443,
+            proto: 6,
+            end_time: 2000,
+        };
+
+        let serialized = bincode::serialize(&filter).unwrap();
+        let deserialized: super::PcapFilter = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(deserialized.src_addr, filter.src_addr);
+        assert_eq!(deserialized.dst_addr, filter.dst_addr);
+    }
+
+    /// Tests `PcapFilter` equality and hashing.
+    #[test]
+    fn test_pcap_filter_eq_hash() {
+        use std::collections::HashSet;
+
+        let filter1 = sample_pcap_filter();
+        let filter2 = sample_pcap_filter();
+        let filter3 = super::PcapFilter {
+            start_time: 99999,
+            ..sample_pcap_filter()
+        };
+
+        assert_eq!(filter1, filter2);
+        assert_ne!(filter1, filter3);
+
+        let mut set = HashSet::new();
+        set.insert(filter1.clone());
+        assert!(set.contains(&filter2));
+        assert!(!set.contains(&filter3));
     }
 }
