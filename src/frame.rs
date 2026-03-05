@@ -204,6 +204,21 @@ mod tests {
         };
     }
 
+    const EVENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
+
+    async fn wait_for_stop_signal(send: &mut quinn::SendStream) {
+        tokio::time::timeout(EVENT_WAIT_TIMEOUT, send.stopped())
+            .await
+            .expect("timed out while waiting for peer STOP_SENDING")
+            .expect("waiting for peer STOP_SENDING failed");
+    }
+
+    async fn wait_for_connection_close(conn: &quinn::Connection) {
+        tokio::time::timeout(EVENT_WAIT_TIMEOUT, conn.closed())
+            .await
+            .expect("timed out waiting for connection close");
+    }
+
     #[tokio::test]
     async fn frame_send_and_recv() {
         use crate::test::{TOKEN, channel};
@@ -544,12 +559,7 @@ mod tests {
             .unwrap();
 
         // Wait for the stop signal to propagate (event-driven, no fixed sleep)
-        channel
-            .server
-            .send
-            .stopped()
-            .await
-            .expect("stop signal should propagate");
+        wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send - should fail because stream was stopped
         let mut buf = Vec::new();
@@ -578,12 +588,7 @@ mod tests {
             .unwrap();
 
         // Wait for the stop signal to propagate (event-driven, no fixed sleep)
-        channel
-            .server
-            .send
-            .stopped()
-            .await
-            .expect("stop signal should propagate");
+        wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send raw - should fail
         let result = super::send_raw(&mut channel.server.send, b"hello world").await;
@@ -606,12 +611,7 @@ mod tests {
             .unwrap();
 
         // Wait for the stop signal to propagate (event-driven, no fixed sleep)
-        channel
-            .server
-            .send
-            .stopped()
-            .await
-            .expect("stop signal should propagate");
+        wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send bytes - should fail
         let result = super::send_bytes(&mut channel.server.send, b"hello").await;
@@ -634,12 +634,7 @@ mod tests {
             .unwrap();
 
         // Wait for the stop signal to propagate (event-driven, no fixed sleep)
-        channel
-            .server
-            .send
-            .stopped()
-            .await
-            .expect("stop signal should propagate");
+        wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send handshake - should fail
         let result = super::send_handshake(&mut channel.server.send, b"handshake data").await;
@@ -661,7 +656,7 @@ mod tests {
             .close(quinn::VarInt::from_u32(0), b"closing");
 
         // Wait for the close signal to propagate (event-driven, no fixed sleep)
-        channel.server.conn.closed().await;
+        wait_for_connection_close(&channel.server.conn).await;
 
         // Attempt to send - should fail because connection closed
         let mut buf = Vec::new();
@@ -693,7 +688,7 @@ mod tests {
             .close(quinn::VarInt::from_u32(0), b"closing");
 
         // Wait for the close signal to propagate (event-driven, no fixed sleep)
-        channel.client.conn.closed().await;
+        wait_for_connection_close(&channel.client.conn).await;
 
         // Attempt to receive - should fail because connection closed
         let mut buf = Vec::new();
