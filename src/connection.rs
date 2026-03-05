@@ -123,463 +123,543 @@ pub async fn server_handshake(
 
 #[cfg(test)]
 mod tests {
-    use super::HandshakeError;
+    use quinn::VarInt;
+    use tokio::{
+        sync::oneshot,
+        time::{Duration, timeout},
+    };
+
+    use super::{HandshakeError, client_handshake, server_handshake};
     use crate::frame;
-    use crate::test::{TOKEN, channel};
+    mod fixture {
+        use std::future::Future;
 
-    // =========================================================================
-    // Shared test helpers / fixtures
-    // =========================================================================
+        use quinn::{Connection, ReadError, RecvStream, SendStream, VarInt};
+        use tokio::{sync::MutexGuard, task::JoinHandle};
 
-    /// Handshake test fixture builder to simplify test setup.
-    struct HandshakeFixture {
-        server_version_req: &'static str,
-        client_version: &'static str,
-    }
+        use super::{HandshakeError, client_handshake};
+        use crate::{
+            frame,
+            test::{Channel, TOKEN, channel},
+        };
 
-    impl HandshakeFixture {
-        /// Creates a new fixture with default compatible versions.
-        fn new() -> Self {
-            Self {
-                server_version_req: ">=0.7.0, <=0.8.0-alpha.1",
-                client_version: "0.7.0",
+        pub(super) type HandshakeResult = Result<(SendStream, RecvStream), HandshakeError>;
+
+        pub(super) const DEFAULT_SERVER_VERSION_REQ: &str = ">=0.7.0, <=0.8.0-alpha.1";
+        pub(super) const DEFAULT_CLIENT_VERSION: &str = "0.7.0";
+
+        pub(super) async fn setup_channel() -> (MutexGuard<'static, u32>, Channel) {
+            let lock = TOKEN.lock().await;
+            let channel = channel().await;
+            (lock, channel)
+        }
+
+        pub(super) fn spawn_client_handshake(
+            conn: Connection,
+            version: &'static str,
+        ) -> JoinHandle<HandshakeResult> {
+            tokio::spawn(async move { client_handshake(&conn, version).await })
+        }
+
+        pub(super) fn spawn_client_open_bi_send_handshake(
+            conn: Connection,
+            payload: Vec<u8>,
+            stop_code: Option<VarInt>,
+        ) -> JoinHandle<()> {
+            tokio::spawn(async move {
+                let (mut send, mut recv) = conn.open_bi().await.unwrap();
+                if let Some(code) = stop_code {
+                    recv.stop(code).unwrap();
+                }
+                frame::send_handshake(&mut send, &payload).await.unwrap();
+            })
+        }
+
+        pub(super) fn spawn_client_open_bi_raw_write_and_finish(
+            conn: Connection,
+            payload: Vec<u8>,
+        ) -> JoinHandle<()> {
+            tokio::spawn(async move {
+                let (mut send, _recv) = conn.open_bi().await.unwrap();
+                send.write_all(&payload).await.unwrap();
+                send.finish().unwrap();
+            })
+        }
+
+        pub(super) fn spawn_client_open_bi_raw_write_without_finish(
+            conn: Connection,
+            payload: Vec<u8>,
+        ) -> JoinHandle<()> {
+            tokio::spawn(async move {
+                let (mut send, _recv) = conn.open_bi().await.unwrap();
+                send.write_all(&payload).await.unwrap();
+            })
+        }
+
+        pub(super) fn spawn_server_accept_bi_recv_handshake_then<F, Fut>(
+            conn: Connection,
+            then: F,
+        ) -> JoinHandle<()>
+        where
+            F: FnOnce(SendStream) -> Fut + Send + 'static,
+            Fut: Future<Output = ()> + Send + 'static,
+        {
+            tokio::spawn(async move {
+                let (send, mut recv) = conn.accept_bi().await.unwrap();
+                let mut buf = Vec::new();
+                frame::recv_handshake(&mut recv, &mut buf).await.unwrap();
+                then(send).await;
+            })
+        }
+
+        pub(super) fn is_incompatible_protocol(result: &HandshakeResult, expected: &str) -> bool {
+            match result {
+                Err(HandshakeError::IncompatibleProtocol(version)) => version == expected,
+                _ => false,
             }
         }
 
-        /// Sets the server's version requirement.
-        fn server_version_req(mut self, version: &'static str) -> Self {
-            self.server_version_req = version;
-            self
+        pub(super) fn is_connection_closed(result: &HandshakeResult) -> bool {
+            matches!(result, Err(HandshakeError::ConnectionClosed))
         }
 
-        /// Sets the client's version string.
-        fn client_version(mut self, version: &'static str) -> Self {
-            self.client_version = version;
-            self
+        pub(super) fn is_invalid_message(result: &HandshakeResult) -> bool {
+            matches!(result, Err(HandshakeError::InvalidMessage))
+        }
+
+        pub(super) fn is_message_too_large(result: &HandshakeResult) -> bool {
+            matches!(result, Err(HandshakeError::MessageTooLarge))
+        }
+
+        pub(super) fn is_read_error_reset(result: &HandshakeResult, code: VarInt) -> bool {
+            matches!(result, Err(HandshakeError::ReadError(ReadError::Reset(reset_code))) if *reset_code == code)
+        }
+
+        pub(super) fn is_write_error_stopped(result: &HandshakeResult, code: VarInt) -> bool {
+            matches!(result, Err(HandshakeError::WriteError(quinn::WriteError::Stopped(stop_code))) if *stop_code == code)
         }
     }
 
-    // =========================================================================
-    // Basic handshake success test
-    // =========================================================================
+    use fixture::{
+        DEFAULT_CLIENT_VERSION, DEFAULT_SERVER_VERSION_REQ, is_connection_closed,
+        is_incompatible_protocol, is_invalid_message, is_message_too_large, is_read_error_reset,
+        is_write_error_stopped, setup_channel, spawn_client_handshake,
+        spawn_client_open_bi_raw_write_and_finish, spawn_client_open_bi_raw_write_without_finish,
+        spawn_client_open_bi_send_handshake, spawn_server_accept_bi_recv_handshake_then,
+    };
 
     #[tokio::test]
-    async fn handshake() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    #[allow(clippy::similar_names)]
+    async fn handshake_success_roundtrip_streams() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
-        let fixture = HandshakeFixture::new();
 
-        let client_version = fixture.client_version;
-        let handle =
-            tokio::spawn(
-                async move { super::client_handshake(&client.conn, client_version).await },
-            );
-
-        let server_result = super::server_handshake(&server.conn, fixture.server_version_req).await;
+        let client_task = spawn_client_handshake(client.conn, DEFAULT_CLIENT_VERSION);
+        let server_result = server_handshake(&server.conn, DEFAULT_SERVER_VERSION_REQ).await;
         assert!(
             server_result.is_ok(),
             "Server handshake should succeed, got {server_result:?}"
         );
-
         let (mut server_send, mut server_recv) = server_result.unwrap();
 
-        let client_result = handle.await.unwrap();
+        let client_result = client_task.await.unwrap();
         assert!(
             client_result.is_ok(),
             "Client handshake should succeed, got {client_result:?}"
         );
-
         let (mut client_send, mut client_recv) = client_result.unwrap();
 
-        // Validate stream validity with a simple send/recv roundtrip
-        let test_message = b"handshake-validation-ping";
-        client_send.write_all(test_message).await.unwrap();
+        let ping = b"handshake-validation-ping";
+        client_send.write_all(ping).await.unwrap();
+        let mut ping_recv = vec![0u8; ping.len()];
+        server_recv.read_exact(&mut ping_recv).await.unwrap();
+        assert_eq!(&ping_recv, ping, "Server did not receive the ping payload");
 
-        let mut recv_buf = vec![0u8; test_message.len()];
-        server_recv.read_exact(&mut recv_buf).await.unwrap();
-        assert_eq!(
-            &recv_buf, test_message,
-            "Server should receive the message sent by client"
-        );
-
-        let response_message = b"handshake-validation-pong";
-        server_send.write_all(response_message).await.unwrap();
-
-        let mut response_buf = vec![0u8; response_message.len()];
-        client_recv.read_exact(&mut response_buf).await.unwrap();
-        assert_eq!(
-            &response_buf, response_message,
-            "Client should receive the response sent by server"
-        );
+        let pong = b"handshake-validation-pong";
+        server_send.write_all(pong).await.unwrap();
+        let mut pong_recv = vec![0u8; pong.len()];
+        client_recv.read_exact(&mut pong_recv).await.unwrap();
+        assert_eq!(&pong_recv, pong, "Client did not receive the pong payload");
     }
 
-    // =========================================================================
-    // Tests for HandshakeError::IncompatibleProtocol
-    // =========================================================================
-
     #[tokio::test]
-    async fn handshake_error_incompatible_protocol_version_mismatch() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_incompatible_protocol_on_version_mismatch() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
-        let fixture = HandshakeFixture::new()
-            .server_version_req(">=0.7.0, <=0.8.0-alpha.1")
-            .client_version("0.9.0");
 
-        let client_version = fixture.client_version;
-        let handle =
-            tokio::spawn(
-                async move { super::client_handshake(&client.conn, client_version).await },
-            );
-
-        let server_res = super::server_handshake(&server.conn, fixture.server_version_req).await;
+        let client_task = spawn_client_handshake(client.conn, "0.9.0");
+        let server_result = server_handshake(&server.conn, DEFAULT_SERVER_VERSION_REQ).await;
         assert!(
-            matches!(server_res, Err(HandshakeError::IncompatibleProtocol(ref v)) if v == "0.9.0"),
-            "Expected IncompatibleProtocol(\"0.9.0\"), got {server_res:?}"
+            is_incompatible_protocol(&server_result, "0.9.0"),
+            "Expected IncompatibleProtocol(\"0.9.0\"), got {server_result:?}"
         );
 
-        let client_res = tokio::join!(handle).0.unwrap();
+        let client_result = client_task.await.unwrap();
         assert!(
-            matches!(client_res, Err(HandshakeError::IncompatibleProtocol(ref v)) if v == "0.9.0"),
-            "Expected client IncompatibleProtocol(\"0.9.0\"), got {client_res:?}"
+            is_incompatible_protocol(&client_result, "0.9.0"),
+            "Expected client IncompatibleProtocol(\"0.9.0\"), got {client_result:?}"
         );
     }
 
     #[tokio::test]
-    async fn handshake_error_incompatible_protocol_invalid_client_version_string() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_connection_closed_on_server_invalid_version() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
-        let fixture = HandshakeFixture::new()
-            .server_version_req(">=0.7.0")
-            .client_version("not-a-version");
 
-        let client_version = fixture.client_version;
-        let server_version_req = fixture.server_version_req;
-
-        let client_handle =
-            tokio::spawn(
-                async move { super::client_handshake(&client.conn, client_version).await },
-            );
-
-        let server_res = super::server_handshake(&server.conn, server_version_req).await;
-        let _ = client_handle.await.unwrap();
+        let server_task =
+            tokio::spawn(async move { server_handshake(&server.conn, ">=0.7.0").await });
+        let client_result = client_handshake(&client.conn, "not-a-version").await;
+        let server_result = server_task.await.unwrap();
 
         assert!(
-            matches!(server_res, Err(HandshakeError::IncompatibleProtocol(ref v)) if v == "not-a-version"),
-            "Expected IncompatibleProtocol(\"not-a-version\"), got {server_res:?}"
+            is_connection_closed(&client_result),
+            "Expected client ConnectionClosed, got {client_result:?}"
+        );
+        assert!(
+            is_incompatible_protocol(&server_result, "not-a-version"),
+            "Expected server IncompatibleProtocol(\"not-a-version\"), got {server_result:?}"
         );
     }
 
     #[tokio::test]
-    async fn client_connection_closed_when_server_rejects_invalid_version() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
-        let (server, client) = (channel.server, channel.client);
-        let fixture = HandshakeFixture::new()
-            .server_version_req(">=0.7.0")
-            .client_version("not-a-version");
-
-        let client_version = fixture.client_version;
-        let server_version_req = fixture.server_version_req;
-
-        // Server task: perform handshake and signal when done.
-        let server_handle =
-            tokio::spawn(
-                async move { super::server_handshake(&server.conn, server_version_req).await },
-            );
-
-        let client_res = super::client_handshake(&client.conn, client_version).await;
-        let _ = server_handle.await.unwrap();
-
-        // Client gets ConnectionClosed because the server returns early (on Version::parse failure)
-        // without sending any response. The stream is closed when the server-side drops.
-        assert!(
-            matches!(client_res, Err(HandshakeError::ConnectionClosed)),
-            "Expected client ConnectionClosed (server returns early without response), got {client_res:?}"
-        );
-    }
-
-    // =========================================================================
-    // Tests for HandshakeError::ConnectionClosed
-    // =========================================================================
-
-    #[tokio::test]
-    async fn handshake_error_connection_closed_server_closes_stream_early() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_connection_closed_on_server_early_finish() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
 
-        let handle = tokio::spawn(async move {
+        let server_task = tokio::spawn(async move {
             let (mut send, _recv) = server.conn.accept_bi().await.unwrap();
-            send.finish().ok();
+            send.finish().unwrap();
         });
 
-        let res = super::client_handshake(&client.conn, "0.7.0").await;
-        let _ = handle.await;
+        let client_result = client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await;
+        server_task.await.unwrap();
 
         assert!(
-            matches!(res, Err(HandshakeError::ConnectionClosed)),
-            "Expected ConnectionClosed when server finishes stream early, got {res:?}"
+            is_connection_closed(&client_result),
+            "Expected ConnectionClosed when server finishes immediately, got {client_result:?}"
         );
     }
 
     #[tokio::test]
-    async fn handshake_error_connection_closed_server_sends_no_response() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_connection_closed_on_server_finish_after_read() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
-        let fixture = HandshakeFixture::new();
 
-        let server_handle = tokio::spawn(async move {
-            let (mut send, mut recv) = server.conn.accept_bi().await.unwrap();
-            // Read the client's handshake message
-            let mut buf = Vec::new();
-            frame::recv_handshake(&mut recv, &mut buf).await.ok();
-            // Finish the stream without sending any response
-            send.finish().ok();
-        });
+        let server_task =
+            spawn_server_accept_bi_recv_handshake_then(server.conn, |mut send| async move {
+                send.finish().unwrap();
+            });
 
-        let client_version = fixture.client_version;
+        let client_result = client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await;
+        server_task.await.unwrap();
 
-        // Client opens bi-stream and sends handshake, then waits for response
-        let client_res = super::client_handshake(&client.conn, client_version).await;
-
-        let _ = server_handle.await;
-
-        // When server finishes stream without response, client gets ConnectionClosed
-        // (FinishedEarly is mapped to ConnectionClosed in client_handshake)
         assert!(
-            matches!(client_res, Err(HandshakeError::ConnectionClosed)),
-            "Expected ConnectionClosed when server sends no response, got {client_res:?}"
+            is_connection_closed(&client_result),
+            "Expected ConnectionClosed when server sends no response, got {client_result:?}"
         );
     }
 
-    // =========================================================================
-    // Tests for HandshakeError::ConnectionLost
-    // =========================================================================
-
     #[tokio::test]
-    async fn handshake_error_connection_lost_client_drops_before_server_accepts() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_connection_lost_on_client_drop_before_accept() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
-
         drop(client);
 
-        let res = super::server_handshake(&server.conn, ">=0.7.0").await;
+        let result = server_handshake(&server.conn, ">=0.7.0").await;
         assert!(
-            matches!(res, Err(HandshakeError::ConnectionLost(_))),
-            "Expected ConnectionLost, got {res:?}"
-        );
-    }
-
-    // =========================================================================
-    // Tests for HandshakeError::InvalidMessage
-    // =========================================================================
-
-    #[tokio::test]
-    async fn handshake_error_invalid_message_malformed_handshake_non_utf8() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
-        let (server, client) = (channel.server, channel.client);
-
-        let handle = tokio::spawn(async move {
-            let (mut send, _recv) = client.conn.open_bi().await.unwrap();
-            let invalid_utf8: &[u8] = &[0x80, 0x81, 0x82, 0xff];
-            frame::send_handshake(&mut send, invalid_utf8)
-                .await
-                .unwrap();
-        });
-
-        let res = super::server_handshake(&server.conn, ">=0.7.0").await;
-        let _ = handle.await;
-
-        assert!(
-            matches!(res, Err(HandshakeError::InvalidMessage)),
-            "Expected InvalidMessage for non-UTF8 data, got {res:?}"
+            matches!(result, Err(HandshakeError::ConnectionLost(_))),
+            "Expected ConnectionLost, got {result:?}"
         );
     }
 
     #[tokio::test]
-    async fn handshake_error_invalid_message_malformed_response_from_server() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_invalid_message_on_non_utf8_version() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
 
-        let handle = tokio::spawn(async move {
-            let (mut send, mut recv) = server.conn.accept_bi().await.unwrap();
-            let mut buf = Vec::new();
-            frame::recv_handshake(&mut recv, &mut buf).await.ok();
-            // Send data that cannot be deserialized as Option<&str>
-            // bincode expects a discriminant byte for Option (0=None, 1=Some)
-            // followed by length-prefixed string data for Some.
-            // Sending invalid data that claims to be Some with invalid string length.
-            let malformed_response: &[u8] = &[0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
-            frame::send_handshake(&mut send, malformed_response)
-                .await
-                .ok();
-        });
+        let client_task =
+            spawn_client_open_bi_send_handshake(client.conn, vec![0x80, 0x81, 0x82, 0xff], None);
 
-        let res = super::client_handshake(&client.conn, "0.7.0").await;
-        let _ = handle.await;
+        let result = server_handshake(&server.conn, ">=0.7.0").await;
+        client_task.await.unwrap();
 
         assert!(
-            matches!(res, Err(HandshakeError::InvalidMessage)),
-            "Expected InvalidMessage for malformed server response, got {res:?}"
+            is_invalid_message(&result),
+            "Expected InvalidMessage for non-UTF8 payload, got {result:?}"
         );
     }
 
     #[tokio::test]
-    async fn handshake_error_invalid_message_truncated_handshake() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_invalid_message_on_malformed_server_response() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
 
-        let handle = tokio::spawn(async move {
-            let (mut send, _recv) = client.conn.open_bi().await.unwrap();
-            let len_header: u64 = 100;
-            send.write_all(&len_header.to_le_bytes()).await.unwrap();
-            send.write_all(b"short").await.unwrap();
-            send.finish().ok();
-        });
+        let server_task =
+            spawn_server_accept_bi_recv_handshake_then(server.conn, |mut send| async move {
+                let malformed_response: &[u8] =
+                    &[0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+                frame::send_handshake(&mut send, malformed_response)
+                    .await
+                    .unwrap();
+            });
 
-        let res = super::server_handshake(&server.conn, ">=0.7.0").await;
-        let _ = handle.await;
+        let result = client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await;
+        server_task.await.unwrap();
 
         assert!(
-            matches!(res, Err(HandshakeError::InvalidMessage)),
-            "Expected InvalidMessage for truncated handshake, got {res:?}"
+            is_invalid_message(&result),
+            "Expected InvalidMessage for malformed server response, got {result:?}"
         );
     }
 
-    // =========================================================================
-    // Tests for HandshakeError::ReadError
-    // =========================================================================
-
     #[tokio::test]
-    async fn handshake_error_read_error_stream_reset() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_invalid_message_on_truncated_handshake_body() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
 
-        let handle = tokio::spawn(async move {
-            let (mut send, mut recv) = server.conn.accept_bi().await.unwrap();
-            let mut buf = Vec::new();
-            frame::recv_handshake(&mut recv, &mut buf).await.ok();
-            let len_header: u64 = 1;
-            send.write_all(&len_header.to_le_bytes()).await.unwrap();
-            send.reset(quinn::VarInt::from_u32(1)).ok();
-        });
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&100u64.to_le_bytes());
+        payload.extend_from_slice(b"short");
+        let client_task = spawn_client_open_bi_raw_write_and_finish(client.conn, payload);
 
-        let res = super::client_handshake(&client.conn, "0.7.0").await;
-        let _ = handle.await;
+        let result = server_handshake(&server.conn, ">=0.7.0").await;
+        client_task.await.unwrap();
+
+        assert!(
+            is_invalid_message(&result),
+            "Expected InvalidMessage for truncated handshake, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handshake_error_read_reset_on_stream_reset() {
+        let (_lock, channel) = setup_channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        let (header_written_tx, header_written_rx) = oneshot::channel::<()>();
+        let (reset_now_tx, reset_now_rx) = oneshot::channel::<()>();
+
+        let server_task =
+            spawn_server_accept_bi_recv_handshake_then(server.conn, move |mut send| async move {
+                let len_header: u64 = 1;
+                send.write_all(&len_header.to_le_bytes()).await.unwrap();
+                let _ = header_written_tx.send(());
+                let _ = reset_now_rx.await;
+                send.reset(VarInt::from_u32(1)).unwrap();
+            });
+
+        let client_task =
+            tokio::spawn(
+                async move { client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await },
+            );
+        let _ = header_written_rx.await;
+        let _ = reset_now_tx.send(());
+        let result = client_task.await.unwrap();
+        server_task.await.unwrap();
+
+        assert!(
+            is_read_error_reset(&result, VarInt::from_u32(1)),
+            "Expected ReadError::Reset when stream is reset, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handshake_error_read_connection_lost_on_server_close_during_response() {
+        let (_lock, channel) = setup_channel().await;
+        let (server, client) = (channel.server, channel.client);
+        let close_conn = server.conn.clone();
+
+        let server_task =
+            spawn_server_accept_bi_recv_handshake_then(server.conn, move |_send| async move {
+                close_conn.close(VarInt::from_u32(99), b"close-during-handshake-response");
+            });
+
+        let result = client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await;
+        server_task.await.unwrap();
 
         assert!(
             matches!(
-                res,
-                Err(HandshakeError::ReadError(quinn::ReadError::Reset(_)))
+                result,
+                Err(HandshakeError::ReadError(quinn::ReadError::ConnectionLost(
+                    _
+                )))
             ),
-            "Expected ReadError::Reset when stream is reset, got {res:?}"
+            "Expected ReadError::ConnectionLost when server closes connection, got {result:?}"
         );
     }
-
-    // =========================================================================
-    // Tests for HandshakeError::WriteError
-    // =========================================================================
-
-    // Note: WriteError is difficult to trigger reliably in tests because quinn
-    // may complete the write before the stop signal is processed. The From impl
-    // for WriteError is tested via the SendError conversion test below.
-
-    // =========================================================================
-    // Tests for InvalidMessage mapping from lower-level size errors
-    // =========================================================================
 
     #[tokio::test]
-    async fn handshake_error_invalid_message_from_huge_length_header() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_write_stopped_on_peer_stop() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
 
-        // Client sends a handshake message with an impossibly large length header.
-        // This triggers MessageTooLarge in recv_handshake -> prepare_buf when
-        // try_reserve fails (even without attempting the actual allocation).
-        let handle = tokio::spawn(async move {
-            let (mut send, _recv) = client.conn.open_bi().await.unwrap();
-            // Write a u64::MAX length header - this will fail try_reserve in prepare_buf
-            let huge_len: u64 = u64::MAX;
-            send.write_all(&huge_len.to_le_bytes()).await.unwrap();
+        let server_task = tokio::spawn(async move {
+            let (_send, mut recv) = server.conn.accept_bi().await.unwrap();
+            recv.stop(VarInt::from_u32(7)).unwrap();
         });
 
-        let res = super::server_handshake(&server.conn, ">=0.7.0").await;
-        let _ = handle.await;
+        let (mut send, _recv) = client.conn.open_bi().await.unwrap();
+        // Make the stream visible to the peer before waiting on `stopped()`.
+        let _ = send.write_all(b"probe").await;
 
-        // The server's recv_handshake will fail with MessageTooLarge, which gets
-        // mapped to InvalidMessage in server_handshake (via the map_err closure).
-        // This is because server_handshake maps all recv_handshake errors to InvalidMessage.
+        let stopped = timeout(Duration::from_secs(3), send.stopped())
+            .await
+            .expect("Timed out waiting for STOP_SENDING")
+            .unwrap();
+        assert_eq!(
+            stopped,
+            Some(VarInt::from_u32(7)),
+            "Expected STOP_SENDING code 7, got {stopped:?}"
+        );
+
+        let send_result = frame::send_handshake(&mut send, DEFAULT_CLIENT_VERSION.as_bytes()).await;
         assert!(
-            matches!(res, Err(HandshakeError::InvalidMessage)),
-            "Expected InvalidMessage (from MessageTooLarge in recv_handshake), got {res:?}"
+            matches!(
+                send_result,
+                Err(frame::SendError::WriteError(quinn::WriteError::Stopped(code)))
+                    if code == VarInt::from_u32(7)
+            ),
+            "Expected SendError::WriteError after STOP_SENDING, got {send_result:?}"
+        );
+
+        let handshake_error: HandshakeError = send_result.unwrap_err().into();
+        assert!(
+            matches!(
+                handshake_error,
+                HandshakeError::WriteError(quinn::WriteError::Stopped(code))
+                    if code == VarInt::from_u32(7)
+            ),
+            "Expected HandshakeError::WriteError conversion, got {handshake_error:?}"
+        );
+
+        server_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn handshake_error_message_too_large_on_huge_server_header() {
+        let (_lock, channel) = setup_channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        let server_task =
+            spawn_server_accept_bi_recv_handshake_then(server.conn, |mut send| async move {
+                let huge_len: u64 = u64::MAX;
+                send.write_all(&huge_len.to_le_bytes()).await.unwrap();
+            });
+
+        let result = client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await;
+        server_task.await.unwrap();
+
+        assert!(
+            is_message_too_large(&result),
+            "Expected MessageTooLarge for huge server response header, got {result:?}"
         );
     }
 
-    // =========================================================================
-    // Tests for HandshakeError::SerializationFailure
-    // =========================================================================
+    #[tokio::test]
+    async fn handshake_error_write_stopped_on_client_stop_before_server_reply() {
+        let (_lock, channel) = setup_channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        let server_task = tokio::spawn(async move {
+            // Control stream synchronization:
+            // wait for "go" from client, then run server_handshake on the next bi stream.
+            let (_control_send, mut control_recv) = server.conn.accept_bi().await.unwrap();
+            let mut go = [0u8; 2];
+            control_recv.read_exact(&mut go).await.unwrap();
+            assert_eq!(&go, b"go");
+            server_handshake(&server.conn, ">=0.7.0").await
+        });
+
+        let (mut control_send, _control_recv) = client.conn.open_bi().await.unwrap();
+        let client_data_task = spawn_client_open_bi_send_handshake(
+            client.conn,
+            DEFAULT_CLIENT_VERSION.as_bytes().to_vec(),
+            Some(VarInt::from_u32(11)),
+        );
+        client_data_task.await.unwrap();
+        control_send.write_all(b"go").await.unwrap();
+
+        let server_result = server_task.await.unwrap();
+        assert!(
+            is_write_error_stopped(&server_result, VarInt::from_u32(11)),
+            "Expected server WriteError when client stops response stream, got {server_result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handshake_error_invalid_message_on_huge_length_header() {
+        let (_lock, channel) = setup_channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        let client_task = spawn_client_open_bi_raw_write_without_finish(
+            client.conn,
+            u64::MAX.to_le_bytes().to_vec(),
+        );
+
+        let result = server_handshake(&server.conn, ">=0.7.0").await;
+        client_task.await.unwrap();
+
+        assert!(
+            is_invalid_message(&result),
+            "Expected InvalidMessage (from oversized length header), got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn handshake_error_connection_lost_on_open_bi_after_close() {
+        let (_lock, channel) = setup_channel().await;
+        let (server, client) = (channel.server, channel.client);
+
+        server
+            .conn
+            .close(VarInt::from_u32(42), b"test-close-before-open-bi");
+        let _ = client.conn.closed().await;
+
+        let result = client_handshake(&client.conn, DEFAULT_CLIENT_VERSION).await;
+        assert!(
+            matches!(result, Err(HandshakeError::ConnectionLost(_))),
+            "Expected ConnectionLost from open_bi on closed connection, got {result:?}"
+        );
+    }
 
     #[test]
     fn handshake_error_serialization_failure_from_send_error() {
-        // Test that SendError::SerializationFailure properly converts to
-        // HandshakeError::SerializationFailure via the From impl.
-        let bincode_err: bincode::Error = Box::new(bincode::ErrorKind::SizeLimit);
-        let send_err = frame::SendError::SerializationFailure(bincode_err);
-        let handshake_err: HandshakeError = send_err.into();
+        let bincode_error: bincode::Error = Box::new(bincode::ErrorKind::SizeLimit);
+        let send_error = frame::SendError::SerializationFailure(bincode_error);
+        let handshake_error: HandshakeError = send_error.into();
+
         assert!(
-            matches!(handshake_err, HandshakeError::SerializationFailure(_)),
+            matches!(handshake_error, HandshakeError::SerializationFailure(_)),
             "SendError::SerializationFailure should convert to HandshakeError::SerializationFailure"
         );
     }
 
-    // =========================================================================
-    // Edge case: empty version string
-    // =========================================================================
-
     #[tokio::test]
-    async fn handshake_error_empty_version_string() {
-        let _lock = TOKEN.lock().await;
-        let channel = channel().await;
+    async fn handshake_error_incompatible_protocol_on_empty_version() {
+        let (_lock, channel) = setup_channel().await;
         let (server, client) = (channel.server, channel.client);
 
-        let handle = tokio::spawn(async move {
-            let (mut send, _recv) = client.conn.open_bi().await.unwrap();
-            frame::send_handshake(&mut send, b"").await.unwrap();
-        });
+        let client_task = spawn_client_open_bi_send_handshake(client.conn, Vec::new(), None);
 
-        let res = super::server_handshake(&server.conn, ">=0.7.0").await;
-        let _ = handle.await;
+        let result = server_handshake(&server.conn, ">=0.7.0").await;
+        client_task.await.unwrap();
 
         assert!(
-            matches!(res, Err(HandshakeError::IncompatibleProtocol(ref v)) if v.is_empty()),
-            "Expected IncompatibleProtocol with empty string, got {res:?}"
+            matches!(result, Err(HandshakeError::IncompatibleProtocol(ref version)) if version.is_empty()),
+            "Expected IncompatibleProtocol with an empty version, got {result:?}"
         );
     }
 
-    // =========================================================================
-    // From trait implementation tests
-    // =========================================================================
-
     #[test]
-    fn from_send_error_message_too_large() {
+    fn handshake_error_from_send_error_message_too_large() {
         use std::num::TryFromIntError;
 
-        // Create a TryFromIntError by attempting an impossible conversion
-        let try_err: TryFromIntError = u8::try_from(u16::MAX).unwrap_err();
-        let send_err = frame::SendError::MessageTooLarge(try_err);
-        let handshake_err: HandshakeError = send_err.into();
+        let try_error: TryFromIntError = u8::try_from(u16::MAX).unwrap_err();
+        let send_error = frame::SendError::MessageTooLarge(try_error);
+        let handshake_error: HandshakeError = send_error.into();
+
         assert!(
-            matches!(handshake_err, HandshakeError::MessageTooLarge),
+            matches!(handshake_error, HandshakeError::MessageTooLarge),
             "SendError::MessageTooLarge should convert to HandshakeError::MessageTooLarge"
         );
     }
