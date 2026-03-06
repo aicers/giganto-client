@@ -11,6 +11,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Renamed `OpLog.agent_name` to `service_name` to align with the service naming
   convention. This changes the public struct field name and the corresponding
   serialized field key.
+- Renamed Kerberos-related fields to use the official terminology:
+  - `client_name` -> `cname`
+  - `service_name` -> `sname`
+
+  This aligns the field names with the Kerberos specification, where `sname` and
+  `cname` are the standard terms.
 
 ## [0.26.0] - 2026-02-05
 
