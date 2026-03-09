@@ -1199,6 +1199,29 @@ impl ResponseRangeData for Bootp {
     }
 }
 
+fn display_dhcp_options(options: &[(u8, Vec<u8>)]) -> String {
+    use std::fmt::Write;
+
+    if options.is_empty() {
+        "-".to_string()
+    } else {
+        options
+            .iter()
+            .map(|(tag, value)| {
+                let hex =
+                    value
+                        .iter()
+                        .fold(String::with_capacity(value.len() * 2), |mut acc, b| {
+                            let _ = write!(acc, "{b:02x}");
+                            acc
+                        });
+                format!("{tag}:{hex}")
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Dhcp {
     pub orig_addr: IpAddr,
@@ -1230,13 +1253,14 @@ pub struct Dhcp {
     pub class_id: Vec<u8>,
     pub client_id_type: u8,
     pub client_id: Vec<u8>,
+    pub options: Vec<(u8, Vec<u8>)>,
 }
 
 impl Display for Dhcp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -1266,6 +1290,7 @@ impl Display for Dhcp {
             vec_to_string_or_default(&self.class_id),
             self.client_id_type,
             vec_to_string_or_default(&self.client_id),
+            display_dhcp_options(&self.options),
         )
     }
 }
@@ -2108,6 +2133,7 @@ mod tests {
             class_id: vec![1, 2, 3],
             client_id_type: 1,
             client_id: vec![0, 1, 2, 3, 4, 5],
+            options: vec![(12, b"myhost".to_vec()), (51, vec![0, 1, 81, 128])],
         };
 
         assert_response_data(&dhcp, 13_000, "dhcp-sensor");
