@@ -552,10 +552,10 @@ pub struct Kerberos {
     pub error_code: u32,
     pub client_realm: String,
     pub cname_type: u8,
-    pub client_name: Vec<String>,
+    pub cname: Vec<String>,
     pub realm: String,
     pub sname_type: u8,
-    pub service_name: Vec<String>,
+    pub sname: Vec<String>,
 }
 
 impl Display for Kerberos {
@@ -579,10 +579,10 @@ impl Display for Kerberos {
             self.error_code,
             as_str_or_default(&self.client_realm),
             self.cname_type,
-            vec_to_string_or_default(&self.client_name),
+            vec_to_string_or_default(&self.cname),
             as_str_or_default(&self.realm),
             self.sname_type,
-            vec_to_string_or_default(&self.service_name),
+            vec_to_string_or_default(&self.sname),
         )
     }
 }
@@ -1796,10 +1796,10 @@ mod tests {
             error_code: 0,
             client_realm: "EXAMPLE.COM".to_string(),
             cname_type: 1,
-            client_name: vec!["client".to_string()],
+            cname: vec!["client".to_string()],
             realm: "EXAMPLE.COM".to_string(),
             sname_type: 2,
-            service_name: vec!["krbtgt".to_string(), "EXAMPLE.COM".to_string()],
+            sname: vec!["krbtgt".to_string(), "EXAMPLE.COM".to_string()],
         };
 
         assert_response_data(&kerberos, 5_000, "kerberos-sensor");

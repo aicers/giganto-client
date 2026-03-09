@@ -30,7 +30,7 @@ impl ResponseRangeData for Log {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct OpLog {
     pub sensor: String,
-    pub agent_name: String,
+    pub service_name: String,
     pub log_level: OpLogLevel,
     pub contents: String,
     // Category, id
@@ -48,7 +48,7 @@ impl Display for OpLog {
         write!(
             f,
             "{}\t{}\t{:?}\t{}",
-            self.sensor, self.agent_name, self.log_level, self.contents
+            self.sensor, self.service_name, self.log_level, self.contents
         )
     }
 }
@@ -116,11 +116,11 @@ mod tests {
     fn test_op_log_display() {
         let op_log = OpLog {
             sensor: "sensor".to_string(),
-            agent_name: "agent".to_string(),
+            service_name: "giganto".to_string(),
             log_level: OpLogLevel::Info,
             contents: "content".to_string(),
         };
-        assert_eq!(format!("{op_log}"), "sensor\tagent\tInfo\tcontent");
+        assert_eq!(format!("{op_log}"), "sensor\tgiganto\tInfo\tcontent");
     }
 
     #[test]
