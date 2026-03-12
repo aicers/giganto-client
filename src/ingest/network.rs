@@ -2140,6 +2140,47 @@ mod tests {
     }
 
     #[test]
+    fn test_dhcp_display_empty_options() {
+        let dhcp = Dhcp {
+            orig_addr: "192.0.2.60".parse().unwrap(),
+            orig_port: 68,
+            resp_addr: "192.0.2.61".parse().unwrap(),
+            resp_port: 67,
+            proto: 17,
+            start_time: 13_000,
+            duration: 95,
+            orig_pkts: 21,
+            resp_pkts: 22,
+            orig_l2_bytes: 2_100,
+            resp_l2_bytes: 2_200,
+            msg_type: 5,
+            ciaddr: "0.0.0.0".parse().unwrap(),
+            yiaddr: "192.0.2.70".parse().unwrap(),
+            siaddr: "192.0.2.1".parse().unwrap(),
+            giaddr: "0.0.0.0".parse().unwrap(),
+            subnet_mask: "255.255.255.0".parse().unwrap(),
+            router: vec!["192.0.2.1".parse().unwrap()],
+            domain_name_server: vec!["192.0.2.2".parse().unwrap()],
+            req_ip_addr: "192.0.2.80".parse().unwrap(),
+            lease_time: 86_400,
+            server_id: "192.0.2.1".parse().unwrap(),
+            param_req_list: vec![1, 3, 6],
+            message: "dhcp offer".to_string(),
+            renewal_time: 43_200,
+            rebinding_time: 64_800,
+            class_id: vec![1, 2, 3],
+            client_id_type: 1,
+            client_id: vec![0, 1, 2, 3, 4, 5],
+            options: vec![],
+        };
+
+        let output = format!("{dhcp}");
+        // The last tab-separated field should be "-" for empty options
+        let last_field = output.split('\t').next_back().unwrap();
+        assert_eq!(last_field, "-");
+    }
+
+    #[test]
     fn test_radius_response_data() {
         let radius = Radius {
             orig_addr: "198.51.100.30".parse().unwrap(),
