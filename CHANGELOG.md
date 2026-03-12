@@ -6,6 +6,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Added `options` field (`Vec<(u8, Vec<u8>)>`) to the `Dhcp`
+  struct to store all DHCP option tag-value pairs, enabling
+  extensible option storage without requiring new fields.
+
 ### Changed
 
 - Renamed `OpLog.agent_name` to `service_name` to align with the service naming
