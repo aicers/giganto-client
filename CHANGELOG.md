@@ -8,9 +8,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
-- Added `options` field (`Vec<(u8, Vec<u8>)>`) to the `Dhcp`
-  struct to store all DHCP option tag-value pairs, enabling
-  extensible option storage without requiring new fields.
+- Added `options` field (`Vec<(u8, Vec<u8>)>`) to the `Dhcp` struct to store all
+  DHCP option tag-value pairs, enabling extensible option storage without
+  requiring new fields.
 
 ### Changed
 
