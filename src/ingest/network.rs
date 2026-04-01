@@ -1199,6 +1199,29 @@ impl ResponseRangeData for Bootp {
     }
 }
 
+fn display_dhcp_options(options: &[(u8, Vec<u8>)]) -> String {
+    use std::fmt::Write;
+
+    if options.is_empty() {
+        "-".to_string()
+    } else {
+        options
+            .iter()
+            .map(|(tag, value)| {
+                let hex =
+                    value
+                        .iter()
+                        .fold(String::with_capacity(value.len() * 2), |mut acc, b| {
+                            let _ = write!(acc, "{b:02x}");
+                            acc
+                        });
+                format!("{tag}:{hex}")
+            })
+            .collect::<Vec<_>>()
+            .join(",")
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Dhcp {
     pub orig_addr: IpAddr,
@@ -1230,13 +1253,14 @@ pub struct Dhcp {
     pub class_id: Vec<u8>,
     pub client_id_type: u8,
     pub client_id: Vec<u8>,
+    pub options: Vec<(u8, Vec<u8>)>,
 }
 
 impl Display for Dhcp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -1266,6 +1290,7 @@ impl Display for Dhcp {
             vec_to_string_or_default(&self.class_id),
             self.client_id_type,
             vec_to_string_or_default(&self.client_id),
+            display_dhcp_options(&self.options),
         )
     }
 }
@@ -1403,139 +1428,681 @@ impl ResponseRangeData for Icmp {
 #[cfg(test)]
 mod tests {
     use std::fmt::Display;
-    use std::net::IpAddr;
 
     use super::*;
 
-    fn assert_response_data<T>(value: &T, timestamp: i64, sensor: &str)
+    fn decode_response_data<T>(value: &T, timestamp: i64, sensor: &str) -> (i64, String, String)
     where
-        T: ResponseRangeData + Display,
+        T: ResponseRangeData,
     {
         let res = value.response_data(timestamp, sensor).unwrap();
         let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&res).unwrap();
         let (decoded_ts, decoded_sensor, decoded_csv) = decoded.expect("expected Some payload");
 
+        (
+            decoded_ts,
+            decoded_sensor,
+            String::from_utf8(decoded_csv).expect("expected UTF-8 CSV payload"),
+        )
+    }
+
+    fn assert_response_envelope<T>(value: &T, timestamp: i64, sensor: &str) -> String
+    where
+        T: ResponseRangeData,
+    {
+        let (decoded_ts, decoded_sensor, decoded_csv) =
+            decode_response_data(value, timestamp, sensor);
+
         assert_eq!(decoded_ts, timestamp);
         assert_eq!(decoded_sensor, sensor);
 
-        let expected_csv = format!("{}	{sensor}	{value}", convert_time_format(timestamp));
-        assert_eq!(decoded_csv, expected_csv.as_bytes());
+        decoded_csv
+    }
+
+    fn last_tab_field(output: &str) -> &str {
+        output.split('\t').next_back().unwrap()
+    }
+
+    fn display_fields<T>(value: &T) -> Vec<String>
+    where
+        T: Display,
+    {
+        format!("{value}").split('\t').map(str::to_owned).collect()
+    }
+
+    fn response_fields<T>(value: &T, timestamp: i64, sensor: &str) -> Vec<String>
+    where
+        T: ResponseRangeData,
+    {
+        assert_response_envelope(value, timestamp, sensor)
+            .split('\t')
+            .map(str::to_owned)
+            .collect()
+    }
+
+    fn assert_field_values(fields: &[String], expected: &[(usize, &str)]) {
+        for &(index, expected_value) in expected {
+            assert_eq!(
+                fields[index], expected_value,
+                "unexpected field value at index {index}"
+            );
+        }
+    }
+
+    fn assert_placeholder_fields(fields: &[String], indices: &[usize]) {
+        for &index in indices {
+            assert_eq!(
+                fields[index], "-",
+                "unexpected placeholder field at index {index}"
+            );
+        }
+    }
+
+    mod fixtures {
+        use std::net::IpAddr;
+
+        use super::*;
+
+        pub(super) fn conn() -> Conn {
+            Conn {
+                orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+                orig_port: 46_378,
+                resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
+                resp_port: 80,
+                proto: 6,
+                conn_state: "SF".to_string(),
+                start_time: 1_000,
+                duration: 500,
+                service: "http".to_string(),
+                orig_bytes: 77,
+                resp_bytes: 295,
+                orig_pkts: 397,
+                resp_pkts: 511,
+                orig_l2_bytes: 21_515,
+                resp_l2_bytes: 27_889,
+            }
+        }
+
+        pub(super) fn dns() -> Dns {
+            Dns {
+                orig_addr: "127.0.0.1".parse().unwrap(),
+                orig_port: 1234,
+                resp_addr: "127.0.0.1".parse().unwrap(),
+                resp_port: 53,
+                proto: 17,
+                start_time: 1_000,
+                duration: 100,
+                orig_pkts: 1,
+                resp_pkts: 1,
+                orig_l2_bytes: 100,
+                resp_l2_bytes: 100,
+                query: "example.com".to_string(),
+                answer: vec!["1.2.3.4".to_string()],
+                trans_id: 1,
+                rtt: 10,
+                qclass: 1,
+                qtype: 1,
+                rcode: 0,
+                aa_flag: true,
+                tc_flag: false,
+                rd_flag: true,
+                ra_flag: true,
+                ttl: vec![3600],
+            }
+        }
+
+        pub(super) fn dhcp(options: Vec<(u8, Vec<u8>)>) -> Dhcp {
+            Dhcp {
+                orig_addr: "192.0.2.60".parse().unwrap(),
+                orig_port: 68,
+                resp_addr: "192.0.2.61".parse().unwrap(),
+                resp_port: 67,
+                proto: 17,
+                start_time: 13_000,
+                duration: 95,
+                orig_pkts: 21,
+                resp_pkts: 22,
+                orig_l2_bytes: 2_100,
+                resp_l2_bytes: 2_200,
+                msg_type: 5,
+                ciaddr: "0.0.0.0".parse().unwrap(),
+                yiaddr: "192.0.2.70".parse().unwrap(),
+                siaddr: "192.0.2.1".parse().unwrap(),
+                giaddr: "0.0.0.0".parse().unwrap(),
+                subnet_mask: "255.255.255.0".parse().unwrap(),
+                router: vec!["192.0.2.1".parse().unwrap()],
+                domain_name_server: vec!["192.0.2.2".parse().unwrap()],
+                req_ip_addr: "192.0.2.80".parse().unwrap(),
+                lease_time: 86_400,
+                server_id: "192.0.2.1".parse().unwrap(),
+                param_req_list: vec![1, 3, 6],
+                message: "dhcp offer".to_string(),
+                renewal_time: 43_200,
+                rebinding_time: 64_800,
+                class_id: vec![1, 2, 3],
+                client_id_type: 1,
+                client_id: vec![0, 1, 2, 3, 4, 5],
+                options,
+            }
+        }
+
+        pub(super) fn http() -> Http {
+            Http {
+                orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+                orig_port: 80,
+                resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+                resp_port: 443,
+                proto: 6,
+                start_time: 1_000_000_000,
+                duration: 0,
+                orig_pkts: 1,
+                resp_pkts: 1,
+                orig_l2_bytes: 100,
+                resp_l2_bytes: 200,
+                method: "GET".to_string(),
+                host: "example.com".to_string(),
+                uri: "/path".to_string(),
+                referer: String::new(),
+                version: "1.1".to_string(),
+                user_agent: "Mozilla".to_string(),
+                request_len: 100,
+                response_len: 200,
+                status_code: 200,
+                status_msg: "OK".to_string(),
+                username: String::new(),
+                password: String::new(),
+                cookie: String::new(),
+                content_encoding: String::new(),
+                content_type: "text/html".to_string(),
+                cache_control: String::new(),
+                filenames: vec![],
+                mime_types: vec![],
+                body: vec![],
+                state: String::new(),
+            }
+        }
+
+        pub(super) fn rdp() -> Rdp {
+            Rdp {
+                orig_addr: "127.0.0.1".parse().unwrap(),
+                orig_port: 1234,
+                resp_addr: "127.0.0.1".parse().unwrap(),
+                resp_port: 3389,
+                proto: 6,
+                start_time: 1_000,
+                duration: 100,
+                orig_pkts: 1,
+                resp_pkts: 1,
+                orig_l2_bytes: 100,
+                resp_l2_bytes: 100,
+                cookie: "cookie".to_string(),
+            }
+        }
+
+        pub(super) fn icmp() -> Icmp {
+            Icmp {
+                orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
+                resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
+                proto: 1,
+                start_time: 1_000_000_000,
+                duration: 0,
+                orig_pkts: 1,
+                resp_pkts: 1,
+                orig_l2_bytes: 100,
+                resp_l2_bytes: 100,
+                icmp_type: 8,
+                icmp_code: 0,
+                id: 1234,
+                seq_num: 1,
+                data_len: 56,
+                payload: vec![0x08, 0x00, 0xff, 0xff],
+            }
+        }
+
+        pub(super) fn smtp() -> Smtp {
+            Smtp {
+                orig_addr: "192.0.2.1".parse().unwrap(),
+                orig_port: 25,
+                resp_addr: "192.0.2.2".parse().unwrap(),
+                resp_port: 2525,
+                proto: 6,
+                start_time: 3_000,
+                duration: 120,
+                orig_pkts: 4,
+                resp_pkts: 4,
+                orig_l2_bytes: 400,
+                resp_l2_bytes: 450,
+                mailfrom: "sender@example.com".to_string(),
+                date: "Fri, 05 Jan 2024 12:00:00 GMT".to_string(),
+                from: "Sender".to_string(),
+                to: "recipient@example.com".to_string(),
+                subject: "Hello".to_string(),
+                agent: "Postfix".to_string(),
+                state: "delivered".to_string(),
+            }
+        }
+
+        pub(super) fn ntlm() -> Ntlm {
+            Ntlm {
+                orig_addr: "203.0.113.1".parse().unwrap(),
+                orig_port: 139,
+                resp_addr: "203.0.113.2".parse().unwrap(),
+                resp_port: 445,
+                proto: 6,
+                start_time: 4_000,
+                duration: 60,
+                orig_pkts: 5,
+                resp_pkts: 5,
+                orig_l2_bytes: 500,
+                resp_l2_bytes: 600,
+                protocol: "NTLMSSP".to_string(),
+                username: "user".to_string(),
+                hostname: "host".to_string(),
+                domainname: "domain".to_string(),
+                success: "true".to_string(),
+            }
+        }
+
+        pub(super) fn kerberos() -> Kerberos {
+            Kerberos {
+                orig_addr: "198.51.100.1".parse().unwrap(),
+                orig_port: 88,
+                resp_addr: "198.51.100.2".parse().unwrap(),
+                resp_port: 88,
+                proto: 6,
+                start_time: 5_000,
+                duration: 70,
+                orig_pkts: 6,
+                resp_pkts: 7,
+                orig_l2_bytes: 600,
+                resp_l2_bytes: 700,
+                client_time: 1_000,
+                server_time: 2_000,
+                error_code: 0,
+                client_realm: "EXAMPLE.COM".to_string(),
+                cname_type: 1,
+                cname: vec!["client".to_string()],
+                realm: "EXAMPLE.COM".to_string(),
+                sname_type: 2,
+                sname: vec!["krbtgt".to_string(), "EXAMPLE.COM".to_string()],
+            }
+        }
+
+        pub(super) fn ssh() -> Ssh {
+            Ssh {
+                orig_addr: "127.0.0.1".parse().unwrap(),
+                orig_port: 1234,
+                resp_addr: "127.0.0.1".parse().unwrap(),
+                resp_port: 22,
+                proto: 6,
+                start_time: 1_000,
+                duration: 100,
+                orig_pkts: 1,
+                resp_pkts: 1,
+                orig_l2_bytes: 100,
+                resp_l2_bytes: 100,
+                client: "client".to_string(),
+                server: "server".to_string(),
+                cipher_alg: "alg".to_string(),
+                mac_alg: "mac".to_string(),
+                compression_alg: "comp".to_string(),
+                kex_alg: "kex".to_string(),
+                host_key_alg: "host".to_string(),
+                hassh_algorithms: "hassh".to_string(),
+                hassh: "hassh_val".to_string(),
+                hassh_server_algorithms: "hassh_srv".to_string(),
+                hassh_server: "hassh_srv_val".to_string(),
+                client_shka: "cshka".to_string(),
+                server_shka: "sshka".to_string(),
+            }
+        }
+
+        pub(super) fn dcerpc() -> DceRpc {
+            DceRpc {
+                orig_addr: "127.0.0.1".parse().unwrap(),
+                orig_port: 1234,
+                resp_addr: "127.0.0.1".parse().unwrap(),
+                resp_port: 135,
+                proto: 6,
+                start_time: 1_000,
+                duration: 100,
+                orig_pkts: 1,
+                resp_pkts: 1,
+                orig_l2_bytes: 100,
+                resp_l2_bytes: 100,
+                context: vec![DceRpcContext {
+                    id: 0,
+                    abstract_syntax: 0x0883_AFE1_1F5D_C911_91A4_0800_2B14_A0FA,
+                    abstract_major: 3,
+                    abstract_minor: 0,
+                    transfer_syntax: 0x045D_888A_EB1C_C911_9FE8_0800_2B10_4860,
+                    transfer_major: 2,
+                    transfer_minor: 0,
+                    acceptance: 0,
+                    reason: 0,
+                }],
+                request: vec!["0:0".to_string()],
+            }
+        }
+
+        pub(super) fn tls() -> Tls {
+            Tls {
+                orig_addr: "203.0.113.20".parse().unwrap(),
+                orig_port: 443,
+                resp_addr: "203.0.113.21".parse().unwrap(),
+                resp_port: 443,
+                proto: 6,
+                start_time: 9_000,
+                duration: 55,
+                orig_pkts: 13,
+                resp_pkts: 14,
+                orig_l2_bytes: 1_300,
+                resp_l2_bytes: 1_400,
+                server_name: "example.com".to_string(),
+                alpn_protocol: "h2".to_string(),
+                ja3: "ja3".to_string(),
+                version: "TLS1.3".to_string(),
+                client_cipher_suites: vec![4865, 4866],
+                client_extensions: vec![0, 11],
+                cipher: 4865,
+                extensions: vec![0, 23],
+                ja3s: "ja3s".to_string(),
+                serial: "serial".to_string(),
+                subject_country: "US".to_string(),
+                subject_org_name: "Org".to_string(),
+                subject_common_name: "example.com".to_string(),
+                validity_not_before: 1_700_000_000,
+                validity_not_after: 1_800_000_000,
+                subject_alt_name: "example.com".to_string(),
+                issuer_country: "US".to_string(),
+                issuer_org_name: "CA".to_string(),
+                issuer_org_unit_name: "Unit".to_string(),
+                issuer_common_name: "CA".to_string(),
+                last_alert: 0,
+            }
+        }
+
+        pub(super) fn radius() -> Radius {
+            Radius {
+                orig_addr: "198.51.100.30".parse().unwrap(),
+                orig_port: 1812,
+                resp_addr: "198.51.100.31".parse().unwrap(),
+                resp_port: 1812,
+                proto: 17,
+                start_time: 14_000,
+                duration: 105,
+                orig_pkts: 23,
+                resp_pkts: 24,
+                orig_l2_bytes: 2_300,
+                resp_l2_bytes: 2_400,
+                id: 1,
+                code: 1,
+                resp_code: 2,
+                auth: "auth".to_string(),
+                resp_auth: "resp_auth".to_string(),
+                user_name: b"user".to_vec(),
+                user_passwd: b"pass".to_vec(),
+                chap_passwd: b"chap".to_vec(),
+                nas_ip: "198.51.100.100".parse().unwrap(),
+                nas_port: 0,
+                state: b"state".to_vec(),
+                nas_id: b"nas-id".to_vec(),
+                nas_port_type: 5,
+                message: "ok".to_string(),
+            }
+        }
+
+        pub(super) fn ftp() -> Ftp {
+            Ftp {
+                orig_addr: "203.0.113.10".parse().unwrap(),
+                orig_port: 21,
+                resp_addr: "203.0.113.11".parse().unwrap(),
+                resp_port: 21,
+                proto: 6,
+                start_time: 6_000,
+                duration: 30,
+                orig_pkts: 7,
+                resp_pkts: 8,
+                orig_l2_bytes: 700,
+                resp_l2_bytes: 800,
+                user: "ftp_user".to_string(),
+                password: "ftp_pass".to_string(),
+                commands: vec![FtpCommand {
+                    command: "LIST".to_string(),
+                    reply_code: "150".to_string(),
+                    reply_msg: "Here comes the directory listing".to_string(),
+                    data_passive: true,
+                    data_orig_addr: "203.0.113.10".parse().unwrap(),
+                    data_resp_addr: "203.0.113.11".parse().unwrap(),
+                    data_resp_port: 2121,
+                    file: "file.txt".to_string(),
+                    file_size: 1024,
+                    file_id: "id123".to_string(),
+                }],
+            }
+        }
+
+        pub(super) fn mqtt() -> Mqtt {
+            Mqtt {
+                orig_addr: "192.0.2.10".parse().unwrap(),
+                orig_port: 1883,
+                resp_addr: "192.0.2.11".parse().unwrap(),
+                resp_port: 1883,
+                proto: 6,
+                start_time: 7_000,
+                duration: 40,
+                orig_pkts: 9,
+                resp_pkts: 10,
+                orig_l2_bytes: 900,
+                resp_l2_bytes: 1_000,
+                protocol: "MQTT".to_string(),
+                version: 5,
+                client_id: "client-id".to_string(),
+                connack_reason: 0,
+                subscribe: vec!["/topic".to_string()],
+                suback_reason: vec![0],
+            }
+        }
+
+        pub(super) fn ldap() -> Ldap {
+            Ldap {
+                orig_addr: "198.51.100.10".parse().unwrap(),
+                orig_port: 389,
+                resp_addr: "198.51.100.11".parse().unwrap(),
+                resp_port: 389,
+                proto: 6,
+                start_time: 8_000,
+                duration: 45,
+                orig_pkts: 11,
+                resp_pkts: 12,
+                orig_l2_bytes: 1_100,
+                resp_l2_bytes: 1_200,
+                message_id: 1,
+                version: 3,
+                opcode: vec!["bindRequest".to_string()],
+                result: vec!["success".to_string()],
+                diagnostic_message: vec!["diagnostic".to_string()],
+                object: vec!["cn=users,dc=example,dc=com".to_string()],
+                argument: vec!["arg".to_string()],
+            }
+        }
+
+        pub(super) fn nfs() -> Nfs {
+            Nfs {
+                orig_addr: "198.51.100.20".parse().unwrap(),
+                orig_port: 2049,
+                resp_addr: "198.51.100.21".parse().unwrap(),
+                resp_port: 2049,
+                proto: 6,
+                start_time: 11_000,
+                duration: 75,
+                orig_pkts: 17,
+                resp_pkts: 18,
+                orig_l2_bytes: 1_700,
+                resp_l2_bytes: 1_800,
+                read_files: vec!["/mnt/share/read.txt".to_string()],
+                write_files: vec!["/mnt/share/write.txt".to_string()],
+            }
+        }
+
+        pub(super) fn smb() -> Smb {
+            Smb {
+                orig_addr: "192.0.2.30".parse().unwrap(),
+                orig_port: 445,
+                resp_addr: "192.0.2.31".parse().unwrap(),
+                resp_port: 445,
+                proto: 6,
+                start_time: 10_000,
+                duration: 65,
+                orig_pkts: 15,
+                resp_pkts: 16,
+                orig_l2_bytes: 1_500,
+                resp_l2_bytes: 1_600,
+                command: 3,
+                path: r"\\server\share".to_string(),
+                service: "SMB".to_string(),
+                file_name: "file.txt".to_string(),
+                file_size: 2_048,
+                resource_type: 1,
+                fid: 2,
+                create_time: 1_700_000_000,
+                access_time: 1_700_000_100,
+                write_time: 1_700_000_200,
+                change_time: 1_700_000_300,
+            }
+        }
+
+        pub(super) fn bootp() -> Bootp {
+            Bootp {
+                orig_addr: "192.0.2.40".parse().unwrap(),
+                orig_port: 68,
+                resp_addr: "192.0.2.41".parse().unwrap(),
+                resp_port: 67,
+                proto: 17,
+                start_time: 12_000,
+                duration: 85,
+                orig_pkts: 19,
+                resp_pkts: 20,
+                orig_l2_bytes: 1_900,
+                resp_l2_bytes: 2_000,
+                op: 1,
+                htype: 1,
+                hops: 0,
+                xid: 0x1234_5678,
+                ciaddr: "0.0.0.0".parse().unwrap(),
+                yiaddr: "192.0.2.50".parse().unwrap(),
+                siaddr: "192.0.2.1".parse().unwrap(),
+                giaddr: "0.0.0.0".parse().unwrap(),
+                chaddr: vec![0, 1, 2, 3, 4, 5],
+                sname: "server".to_string(),
+                file: "bootfile".to_string(),
+            }
+        }
     }
 
     #[test]
-    fn conn_display() {
-        let conn = Conn {
-            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            orig_port: 46378,
-            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            resp_port: 80,
-            proto: 6,
-            conn_state: "SF".to_string(),
-            start_time: 1000,
-            duration: 500,
-            service: "http".to_string(),
-            orig_bytes: 77,
-            resp_bytes: 295,
-            orig_pkts: 397,
-            resp_pkts: 511,
-            orig_l2_bytes: 21515,
-            resp_l2_bytes: 27889,
-        };
-        let display = format!("{conn}");
-        assert!(display.contains("192.168.4.76"));
-        assert!(display.contains("46378"));
-        assert!(display.contains("SF"));
-        assert!(display.contains("http"));
+    fn test_conn_display_formats_core_fields_in_order() {
+        let conn = fixtures::conn();
+
+        let fields = display_fields(&conn);
+        assert_eq!(fields.len(), 15);
+        assert_field_values(
+            &fields,
+            &[
+                (0, "192.168.4.76"),
+                (1, "46378"),
+                (5, "SF"),
+                (6, "0.000001000"),
+                (8, "http"),
+                (14, "27889"),
+            ],
+        );
     }
 
     #[test]
-    fn test_conn_response_data_contents() {
-        let conn = Conn {
-            orig_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            orig_port: 46378,
-            resp_addr: "192.168.4.76".parse::<IpAddr>().unwrap(),
-            resp_port: 80,
-            proto: 6,
-            conn_state: "SF".to_string(),
-            start_time: 1000,
-            duration: 500,
-            service: "http".to_string(),
-            orig_bytes: 77,
-            resp_bytes: 295,
-            orig_pkts: 397,
-            resp_pkts: 511,
-            orig_l2_bytes: 21515,
-            resp_l2_bytes: 27889,
-        };
+    fn test_conn_response_data_envelope() {
+        let conn = fixtures::conn();
 
-        assert_response_data(&conn, 1_234_567_890, "conn-sensor");
+        let fields = response_fields(&conn, 1_234_567_890, "conn-sensor");
+        assert_eq!(fields.len(), 17);
+        assert_field_values(
+            &fields,
+            &[
+                (0, "1.234567890"),
+                (1, "conn-sensor"),
+                (2, "192.168.4.76"),
+                (7, "SF"),
+                (10, "http"),
+                (16, "27889"),
+            ],
+        );
     }
 
     #[test]
-    fn dns_display() {
+    fn test_dns_display_formats_query_and_answer_fields() {
+        let dns = fixtures::dns();
+
+        let fields = display_fields(&dns);
+        assert_eq!(fields.len(), 23);
+        assert_field_values(
+            &fields,
+            &[
+                (11, "example.com"),
+                (12, "1.2.3.4"),
+                (15, "C_INTERNET"),
+                (16, "A"),
+                (22, "3600"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_dns_display_formats_unknown_qclass_and_nsap_ptr_qtype() {
         let dns = Dns {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            orig_port: 1234,
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            resp_port: 53,
-            proto: 17,
-            start_time: 1000,
-            duration: 500,
-            orig_pkts: 10,
-            resp_pkts: 20,
-            orig_l2_bytes: 150,
-            resp_l2_bytes: 250,
-            query: "example.com".to_string(),
-            answer: vec!["1.2.3.4".to_string()],
-            trans_id: 1,
-            rtt: 100,
-            qclass: 1,
-            qtype: 1,
-            rcode: 0,
-            aa_flag: true,
-            tc_flag: false,
-            rd_flag: true,
-            ra_flag: true,
-            ttl: vec![3600],
+            qclass: 999,
+            qtype: 23,
+            ..fixtures::dns()
         };
-        let display = format!("{dns}");
-        assert!(display.contains("example.com"));
-        assert!(display.contains("1.2.3.4"));
+
+        let fields = display_fields(&dns);
+        assert_field_values(&fields, &[(15, "UNKNOWN"), (16, "NSAP-PTR")]);
     }
 
     #[test]
-    fn test_dns_response_data() {
+    fn test_dns_response_data_envelope() {
+        let dns = fixtures::dns();
+
+        let fields = response_fields(&dns, 1000, "dns-sensor");
+        assert_eq!(fields.len(), 25);
+        assert_field_values(
+            &fields,
+            &[
+                (0, "0.000001000"),
+                (1, "dns-sensor"),
+                (13, "example.com"),
+                (14, "1.2.3.4"),
+                (17, "C_INTERNET"),
+                (18, "A"),
+                (24, "3600"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_dns_display_uses_dash_for_empty_answer_and_ttl_vectors() {
         let dns = Dns {
-            orig_addr: "127.0.0.1".parse().unwrap(),
-            orig_port: 1234,
-            resp_addr: "127.0.0.1".parse().unwrap(),
-            resp_port: 53,
-            proto: 17,
-            start_time: 1000,
-            duration: 100,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 100,
-            query: "example.com".to_string(),
-            answer: vec!["1.2.3.4".to_string()],
-            trans_id: 1,
-            rtt: 10,
-            qclass: 1,
-            qtype: 1,
-            rcode: 0,
-            aa_flag: true,
-            tc_flag: false,
-            rd_flag: true,
-            ra_flag: true,
-            ttl: vec![3600],
+            answer: vec![],
+            ttl: vec![],
+            ..fixtures::dns()
         };
 
-        assert_response_data(&dns, 1000, "dns-sensor");
+        let fields = display_fields(&dns);
+        assert_eq!(fields.len(), 23);
+        assert_field_values(&fields, &[(12, "-"), (22, "-")]);
     }
 
     #[test]
-    fn test_malformed_dns_response_data() {
+    fn test_malformed_dns_response_data_envelope() {
         let malformed = MalformedDns {
             orig_addr: "10.0.0.1".parse().unwrap(),
             orig_port: 1111,
@@ -1562,401 +2129,347 @@ mod tests {
             resp_body: vec![b"resp".to_vec()],
         };
 
-        assert_response_data(&malformed, 9_999, "malformed-dns");
+        let fields = response_fields(&malformed, 9_999, "malformed-dns");
+        assert_eq!(fields.len(), 25);
+        assert_eq!(fields[0], "0.000009999");
+        assert_eq!(fields[1], "malformed-dns");
+        assert_eq!(fields[14], "4660");
+        assert_eq!(fields[19], "2");
+        assert_eq!(fields[20], "1");
+        assert_eq!(fields[23], "[[71, 75, 65, 72, 79]]");
+        assert_eq!(fields[24], "[[72, 65, 73, 70]]");
     }
 
     #[test]
-    fn http_csv_export_with_special_characters() {
+    fn test_http_display_sanitizes_special_characters() {
         let http = Http {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            orig_port: 80,
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            resp_port: 443,
-            proto: 6,
-            start_time: 1_000_000_000_000_000_000, // 1 second in nanoseconds
-            duration: 0,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 200,
-            method: "GET".to_string(),
-            host: "example.com".to_string(),
-            uri: "/path".to_string(),
-            referer: String::new(),
-            version: "1.1".to_string(),
             user_agent: "Mozilla/5.0\t(Windows NT\n10.0;\rWin64)".to_string(),
-            request_len: 100,
-            response_len: 200,
-            status_code: 200,
-            status_msg: "OK".to_string(),
-            username: String::new(),
-            password: String::new(),
-            cookie: String::new(),
-            content_encoding: String::new(),
-            content_type: "text/html".to_string(),
-            cache_control: String::new(),
-            filenames: vec![],
-            mime_types: vec![],
             body: b"username=test\tpassword=secret\nsubmit=true\r".to_vec(),
-            state: String::new(),
+            ..fixtures::http()
         };
 
         let csv_output = format!("{http}");
-
-        // Split by tabs to get individual fields and verify the specific fields
         let fields: Vec<&str> = csv_output.split('\t').collect();
 
-        // Verify that user_agent field has special characters replaced with spaces (at index 16)
+        assert_eq!(fields.len(), 31);
         assert_eq!(fields[16], "Mozilla/5.0 (Windows NT 10.0; Win64)");
-
-        // Verify that post_body field has special characters replaced with spaces (at index 29)
-        assert_eq!(fields[29], "username=test password=secret submit=true ");
-
-        // Verify the sanitized fields don't contain special characters
         assert!(!fields[16].contains('\n'));
         assert!(!fields[16].contains('\r'));
+        assert!(!fields[16].contains('\t'));
+
+        assert_eq!(fields[29], "username=test password=secret submit=true ");
         assert!(!fields[29].contains('\t'));
         assert!(!fields[29].contains('\n'));
         assert!(!fields[29].contains('\r'));
     }
 
     #[test]
-    fn http_csv_export_empty_fields() {
+    fn test_http_display_uses_dash_for_empty_user_agent_and_body() {
         let http = Http {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            orig_port: 80,
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            resp_port: 443,
-            proto: 6,
-            start_time: 1_000_000_000_000_000_000,
-            duration: 0,
-            orig_pkts: 0,
-            resp_pkts: 0,
-            orig_l2_bytes: 0,
-            resp_l2_bytes: 0,
-            method: String::new(),
-            host: String::new(),
-            uri: String::new(),
-            referer: String::new(),
-            version: String::new(),
             user_agent: String::new(),
-            request_len: 0,
-            response_len: 0,
-            status_code: 0,
-            status_msg: String::new(),
-            username: String::new(),
-            password: String::new(),
-            cookie: String::new(),
-            content_encoding: String::new(),
-            content_type: String::new(),
-            cache_control: String::new(),
-            filenames: vec![],
-            mime_types: vec![],
             body: vec![],
-            state: String::new(),
+            ..fixtures::http()
         };
 
         let csv_output = format!("{http}");
-
-        // Verify that empty user_agent and post_body fields are converted to "-"
         let fields: Vec<&str> = csv_output.split('\t').collect();
-        // user_agent is at index 16, post_body is at index 29
+
+        assert_eq!(fields.len(), 31);
         assert_eq!(fields[16], "-");
         assert_eq!(fields[29], "-");
     }
 
     #[test]
-    fn test_http_response_data() {
+    fn test_http_response_data_envelope() {
         let http = Http {
             orig_addr: "127.0.0.1".parse().unwrap(),
             orig_port: 1234,
             resp_addr: "127.0.0.1".parse().unwrap(),
             resp_port: 80,
-            proto: 6,
             start_time: 1000,
             duration: 100,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
             resp_l2_bytes: 100,
-            method: "GET".to_string(),
-            host: "example.com".to_string(),
             uri: "/".to_string(),
-            referer: String::new(),
-            version: "1.1".to_string(),
-            user_agent: "Mozilla".to_string(),
-            request_len: 100,
             response_len: 100,
-            status_code: 200,
-            status_msg: "OK".to_string(),
-            username: String::new(),
-            password: String::new(),
-            cookie: String::new(),
-            content_encoding: String::new(),
-            content_type: String::new(),
-            cache_control: String::new(),
-            filenames: vec![],
-            mime_types: vec![],
-            body: vec![],
-            state: String::new(),
+            ..fixtures::http()
         };
 
-        assert_response_data(&http, 1000, "http-sensor");
+        let fields = response_fields(&http, 1000, "http-sensor");
+        assert_eq!(fields.len(), 33);
+        assert_eq!(fields[0], "0.000001000");
+        assert_eq!(fields[1], "http-sensor");
+        assert_eq!(fields[2], "127.0.0.1");
+        assert_eq!(fields[5], "80");
+        assert_eq!(fields[15], "/");
+        assert_eq!(fields[20], "100");
+        assert_eq!(fields[31], "-");
     }
 
     #[test]
-    fn test_rdp_response_data_contents() {
-        let rdp = Rdp {
-            orig_addr: "127.0.0.1".parse().unwrap(),
-            orig_port: 1234,
-            resp_addr: "127.0.0.1".parse().unwrap(),
-            resp_port: 3389,
-            proto: 6,
-            start_time: 1000,
-            duration: 100,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 100,
-            cookie: "cookie".to_string(),
-        };
+    fn test_rdp_display_and_response_envelope() {
+        let rdp = fixtures::rdp();
 
-        let display = format!("{rdp}");
-        assert!(display.contains("cookie"));
+        let display = display_fields(&rdp);
+        assert_eq!(display.len(), 12);
+        assert_field_values(&display, &[(5, "0.000001000"), (11, "cookie")]);
 
-        assert_response_data(&rdp, 2_000, "rdp-sensor");
+        let fields = response_fields(&rdp, 2_000, "rdp-sensor");
+        assert_eq!(fields.len(), 14);
+        assert_field_values(
+            &fields,
+            &[(0, "0.000002000"), (1, "rdp-sensor"), (13, "cookie")],
+        );
     }
 
     #[test]
-    fn test_smtp_response_data() {
-        let smtp = Smtp {
-            orig_addr: "192.0.2.1".parse().unwrap(),
-            orig_port: 25,
-            resp_addr: "192.0.2.2".parse().unwrap(),
-            resp_port: 2525,
-            proto: 6,
-            start_time: 3_000,
-            duration: 120,
-            orig_pkts: 4,
-            resp_pkts: 4,
-            orig_l2_bytes: 400,
-            resp_l2_bytes: 450,
-            mailfrom: "sender@example.com".to_string(),
-            date: "Fri, 05 Jan 2024 12:00:00 GMT".to_string(),
-            from: "Sender".to_string(),
-            to: "recipient@example.com".to_string(),
-            subject: "Hello".to_string(),
-            agent: "Postfix".to_string(),
-            state: "delivered".to_string(),
-        };
+    fn test_smtp_response_data_envelope() {
+        let smtp = fixtures::smtp();
 
-        assert_response_data(&smtp, 3_000, "smtp-sensor");
+        let fields = response_fields(&smtp, 3_000, "smtp-sensor");
+        assert_eq!(fields.len(), 20);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "smtp-sensor"),
+                (2, "192.0.2.1"),
+                (3, "25"),
+                (4, "192.0.2.2"),
+                (5, "2525"),
+                (7, "0.000003000"),
+                (13, "sender@example.com"),
+                (14, "Fri, 05 Jan 2024 12:00:00 GMT"),
+                (15, "Sender"),
+                (16, "recipient@example.com"),
+                (17, "Hello"),
+                (18, "Postfix"),
+                (19, "delivered"),
+            ],
+        );
     }
 
     #[test]
-    fn test_ntlm_response_data() {
-        let ntlm = Ntlm {
-            orig_addr: "203.0.113.1".parse().unwrap(),
-            orig_port: 139,
-            resp_addr: "203.0.113.2".parse().unwrap(),
-            resp_port: 445,
-            proto: 6,
-            start_time: 4_000,
-            duration: 60,
-            orig_pkts: 5,
-            resp_pkts: 5,
-            orig_l2_bytes: 500,
-            resp_l2_bytes: 600,
-            protocol: "NTLMSSP".to_string(),
-            username: "user".to_string(),
-            hostname: "host".to_string(),
-            domainname: "domain".to_string(),
-            success: "true".to_string(),
-        };
+    fn test_ntlm_response_data_envelope() {
+        let ntlm = fixtures::ntlm();
 
-        assert_response_data(&ntlm, 4_000, "ntlm-sensor");
+        let fields = response_fields(&ntlm, 4_000, "ntlm-sensor");
+        assert_eq!(fields.len(), 18);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "ntlm-sensor"),
+                (2, "203.0.113.1"),
+                (3, "139"),
+                (4, "203.0.113.2"),
+                (5, "445"),
+                (7, "0.000004000"),
+                (13, "NTLMSSP"),
+                (14, "user"),
+                (15, "host"),
+                (16, "domain"),
+                (17, "true"),
+            ],
+        );
     }
 
     #[test]
-    fn test_kerberos_response_data() {
+    fn test_kerberos_response_data_envelope() {
+        let kerberos = fixtures::kerberos();
+
+        let fields = response_fields(&kerberos, 5_000, "kerberos-sensor");
+        assert_eq!(fields.len(), 22);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "kerberos-sensor"),
+                (13, "0.000001000"),
+                (14, "0.000002000"),
+                (16, "EXAMPLE.COM"),
+                (18, "client"),
+                (21, "krbtgt,EXAMPLE.COM"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_kerberos_display_uses_dash_for_empty_string_and_vector_fields() {
         let kerberos = Kerberos {
-            orig_addr: "198.51.100.1".parse().unwrap(),
-            orig_port: 88,
-            resp_addr: "198.51.100.2".parse().unwrap(),
-            resp_port: 88,
-            proto: 6,
-            start_time: 5_000,
-            duration: 70,
-            orig_pkts: 6,
-            resp_pkts: 7,
-            orig_l2_bytes: 600,
-            resp_l2_bytes: 700,
-            client_time: 1_000,
-            server_time: 2_000,
-            error_code: 0,
-            client_realm: "EXAMPLE.COM".to_string(),
-            cname_type: 1,
-            cname: vec!["client".to_string()],
-            realm: "EXAMPLE.COM".to_string(),
-            sname_type: 2,
-            sname: vec!["krbtgt".to_string(), "EXAMPLE.COM".to_string()],
+            client_realm: String::new(),
+            cname: vec![],
+            realm: String::new(),
+            sname: vec![],
+            ..fixtures::kerberos()
         };
 
-        assert_response_data(&kerberos, 5_000, "kerberos-sensor");
+        let fields = display_fields(&kerberos);
+        assert_eq!(fields.len(), 20);
+        assert_field_values(&fields, &[(14, "-"), (16, "-"), (17, "-"), (19, "-")]);
     }
 
     #[test]
-    fn ssh_display_and_response_data() {
+    fn test_ssh_display_and_response_envelope() {
+        let ssh = fixtures::ssh();
+
+        let display = display_fields(&ssh);
+        assert_eq!(display.len(), 24);
+        assert_field_values(
+            &display,
+            &[
+                (11, "client"),
+                (12, "server"),
+                (18, "hassh"),
+                (20, "hassh_srv"),
+                (23, "sshka"),
+            ],
+        );
+
+        let fields = response_fields(&ssh, 1000, "ssh-sensor");
+        assert_eq!(fields.len(), 26);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "ssh-sensor"),
+                (13, "client"),
+                (14, "server"),
+                (20, "hassh"),
+                (22, "hassh_srv"),
+                (25, "sshka"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_ssh_display_uses_dash_for_empty_string_fields() {
         let ssh = Ssh {
-            orig_addr: "127.0.0.1".parse().unwrap(),
-            orig_port: 1234,
-            resp_addr: "127.0.0.1".parse().unwrap(),
-            resp_port: 22,
-            proto: 6,
-            start_time: 1000,
-            duration: 100,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 100,
-            client: "client".to_string(),
-            server: "server".to_string(),
-            cipher_alg: "alg".to_string(),
-            mac_alg: "mac".to_string(),
-            compression_alg: "comp".to_string(),
-            kex_alg: "kex".to_string(),
-            host_key_alg: "host".to_string(),
-            hassh_algorithms: "hassh".to_string(),
-            hassh: "hassh_val".to_string(),
-            hassh_server_algorithms: "hassh_srv".to_string(),
-            hassh_server: "hassh_srv_val".to_string(),
-            client_shka: "cshka".to_string(),
-            server_shka: "sshka".to_string(),
+            client: String::new(),
+            server: String::new(),
+            cipher_alg: String::new(),
+            mac_alg: String::new(),
+            compression_alg: String::new(),
+            kex_alg: String::new(),
+            host_key_alg: String::new(),
+            hassh_algorithms: String::new(),
+            hassh: String::new(),
+            hassh_server_algorithms: String::new(),
+            hassh_server: String::new(),
+            client_shka: String::new(),
+            server_shka: String::new(),
+            ..fixtures::ssh()
         };
-        let display = format!("{ssh}");
-        assert!(display.contains("client"));
-        assert!(display.contains("server"));
 
-        assert_response_data(&ssh, 1000, "ssh-sensor");
+        let fields = display_fields(&ssh);
+        assert_eq!(fields.len(), 24);
+        for (index, _) in fields.iter().enumerate().take(23 + 1).skip(11) {
+            assert_eq!(
+                fields[index], "-",
+                "unexpected SSH placeholder field at index {index}"
+            );
+        }
     }
 
     #[test]
-    fn dcerpc_display() {
+    fn test_dcerpc_display_and_response_envelope() {
+        let dcerpc = fixtures::dcerpc();
+
+        let display = display_fields(&dcerpc);
+        assert_eq!(display.len(), 13);
+        assert_field_values(
+            &display,
+            &[
+                (
+                    11,
+                    "(0,0883AFE11F5DC91191A408002B14A0FA,3,0,045D888AEB1CC9119FE808002B104860,2,0,0,0)",
+                ),
+                (12, "0:0"),
+            ],
+        );
+
+        let fields = response_fields(&dcerpc, 1000, "dcerpc-sensor");
+        assert_eq!(fields.len(), 15);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "dcerpc-sensor"),
+                (7, "0.000001000"),
+                (
+                    13,
+                    "(0,0883AFE11F5DC91191A408002B14A0FA,3,0,045D888AEB1CC9119FE808002B104860,2,0,0,0)",
+                ),
+                (14, "0:0"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_dcerpc_display_uses_dash_for_empty_vectors() {
         let dcerpc = DceRpc {
-            orig_addr: "127.0.0.1".parse().unwrap(),
-            orig_port: 1234,
-            resp_addr: "127.0.0.1".parse().unwrap(),
-            resp_port: 135,
-            proto: 6,
-            start_time: 1000,
-            duration: 100,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 100,
-            context: vec![DceRpcContext {
-                id: 0,
-                abstract_syntax: 0x0883_AFE1_1F5D_C911_91A4_0800_2B14_A0FA,
-                abstract_major: 3,
-                abstract_minor: 0,
-                transfer_syntax: 0x045D_888A_EB1C_C911_9FE8_0800_2B10_4860,
-                transfer_major: 2,
-                transfer_minor: 0,
-                acceptance: 0,
-                reason: 0,
-            }],
-            request: vec!["0:0".to_string()],
+            context: vec![],
+            request: vec![],
+            ..fixtures::dcerpc()
         };
 
-        assert_response_data(&dcerpc, 1000, "dcerpc-sensor");
+        let fields = display_fields(&dcerpc);
+        assert_eq!(fields.len(), 13);
+        assert_field_values(&fields, &[(11, "-"), (12, "-")]);
     }
 
     #[test]
-    fn test_ftp_response_data() {
-        let ftp = Ftp {
-            orig_addr: "203.0.113.10".parse().unwrap(),
-            orig_port: 21,
-            resp_addr: "203.0.113.11".parse().unwrap(),
-            resp_port: 21,
-            proto: 6,
-            start_time: 6_000,
-            duration: 30,
-            orig_pkts: 7,
-            resp_pkts: 8,
-            orig_l2_bytes: 700,
-            resp_l2_bytes: 800,
-            user: "ftp_user".to_string(),
-            password: "ftp_pass".to_string(),
-            commands: vec![FtpCommand {
-                command: "LIST".to_string(),
-                reply_code: "150".to_string(),
-                reply_msg: "Here comes the directory listing".to_string(),
-                data_passive: true,
-                data_orig_addr: "203.0.113.10".parse().unwrap(),
-                data_resp_addr: "203.0.113.11".parse().unwrap(),
-                data_resp_port: 2121,
-                file: "file.txt".to_string(),
-                file_size: 1024,
-                file_id: "id123".to_string(),
-            }],
-        };
+    fn test_ftp_response_data_envelope() {
+        let ftp = fixtures::ftp();
 
-        assert_response_data(&ftp, 6_000, "ftp-sensor");
+        let fields = response_fields(&ftp, 6_000, "ftp-sensor");
+        assert_eq!(fields.len(), 16);
+        assert_eq!(fields[1], "ftp-sensor");
+        assert_eq!(fields[13], "ftp_user");
+        assert_eq!(fields[14], "ftp_pass");
+        assert_eq!(
+            fields[15],
+            "(LIST,150,Here comes the directory listing,true,203.0.113.10,203.0.113.11,2121,file.txt,1024,id123)"
+        );
     }
 
     #[test]
-    fn test_mqtt_response_data() {
-        let mqtt = Mqtt {
-            orig_addr: "192.0.2.10".parse().unwrap(),
-            orig_port: 1883,
-            resp_addr: "192.0.2.11".parse().unwrap(),
-            resp_port: 1883,
-            proto: 6,
-            start_time: 7_000,
-            duration: 40,
-            orig_pkts: 9,
-            resp_pkts: 10,
-            orig_l2_bytes: 900,
-            resp_l2_bytes: 1_000,
-            protocol: "MQTT".to_string(),
-            version: 5,
-            client_id: "client-id".to_string(),
-            connack_reason: 0,
-            subscribe: vec!["/topic".to_string()],
-            suback_reason: vec![0],
-        };
+    fn test_mqtt_response_data_envelope() {
+        let mqtt = fixtures::mqtt();
 
-        assert_response_data(&mqtt, 7_000, "mqtt-sensor");
+        let fields = response_fields(&mqtt, 7_000, "mqtt-sensor");
+        assert_eq!(fields.len(), 19);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "mqtt-sensor"),
+                (2, "192.0.2.10"),
+                (3, "1883"),
+                (4, "192.0.2.11"),
+                (5, "1883"),
+                (7, "0.000007000"),
+                (13, "MQTT"),
+                (14, "5"),
+                (15, "client-id"),
+                (16, "0"),
+                (17, "/topic"),
+                (18, "0"),
+            ],
+        );
     }
 
     #[test]
-    fn test_ldap_response_data() {
-        let ldap = Ldap {
-            orig_addr: "198.51.100.10".parse().unwrap(),
-            orig_port: 389,
-            resp_addr: "198.51.100.11".parse().unwrap(),
-            resp_port: 389,
-            proto: 6,
-            start_time: 8_000,
-            duration: 45,
-            orig_pkts: 11,
-            resp_pkts: 12,
-            orig_l2_bytes: 1_100,
-            resp_l2_bytes: 1_200,
-            message_id: 1,
-            version: 3,
-            opcode: vec!["bindRequest".to_string()],
-            result: vec!["success".to_string()],
-            diagnostic_message: vec![String::new()],
-            object: vec!["cn=users,dc=example,dc=com".to_string()],
-            argument: vec!["arg".to_string()],
-        };
+    fn test_ldap_response_data_envelope() {
+        let ldap = fixtures::ldap();
 
-        assert_response_data(&ldap, 8_000, "ldap-sensor");
+        let fields = response_fields(&ldap, 8_000, "ldap-sensor");
+        assert_eq!(fields.len(), 20);
+        assert_eq!(fields[1], "ldap-sensor");
+        assert_eq!(fields[13], "1");
+        assert_eq!(fields[14], "3");
+        assert_eq!(fields[15], "bindRequest");
+        assert_eq!(fields[16], "success");
+        assert_eq!(fields[17], "diagnostic");
+        assert_eq!(fields[18], "cn=users,dc=example,dc=com");
+        assert_eq!(fields[19], "arg");
     }
 
     #[test]
-    fn test_tls_response_data() {
+    fn test_tls_response_data_envelope() {
         let tls = Tls {
             orig_addr: "203.0.113.20".parse().unwrap(),
             orig_port: 443,
@@ -1992,179 +2505,175 @@ mod tests {
             last_alert: 0,
         };
 
-        assert_response_data(&tls, 9_000, "tls-sensor");
+        let fields = response_fields(&tls, 9_000, "tls-sensor");
+        assert_eq!(fields.len(), 34);
+        assert_eq!(fields[1], "tls-sensor");
+        assert_eq!(fields[13], "example.com");
+        assert_eq!(fields[14], "h2");
+        assert_eq!(fields[17], "4865,4866");
+        assert_eq!(fields[18], "0,11");
+        assert_eq!(fields[19], "4865");
+        assert_eq!(fields[20], "0,23");
+        assert_eq!(fields[26], "1.700000000");
+        assert_eq!(fields[27], "1.800000000");
+        assert_eq!(fields[33], "0");
     }
 
     #[test]
-    fn test_smb_response_data() {
+    fn test_smb_response_data_envelope() {
+        let smb = fixtures::smb();
+
+        let fields = response_fields(&smb, 10_000, "smb-sensor");
+        assert_eq!(fields.len(), 24);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "smb-sensor"),
+                (13, "3"),
+                (14, r"\\server\share"),
+                (15, "SMB"),
+                (16, "file.txt"),
+                (21, "1700000100"),
+                (23, "1700000300"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_smb_display_uses_dash_for_empty_string_fields() {
         let smb = Smb {
-            orig_addr: "192.0.2.30".parse().unwrap(),
-            orig_port: 445,
-            resp_addr: "192.0.2.31".parse().unwrap(),
-            resp_port: 445,
-            proto: 6,
-            start_time: 10_000,
-            duration: 65,
-            orig_pkts: 15,
-            resp_pkts: 16,
-            orig_l2_bytes: 1_500,
-            resp_l2_bytes: 1_600,
-            command: 3,
-            path: r"\\server\share".to_string(),
-            service: "SMB".to_string(),
-            file_name: "file.txt".to_string(),
-            file_size: 2_048,
-            resource_type: 1,
-            fid: 2,
-            create_time: 1_700_000_000,
-            access_time: 1_700_000_100,
-            write_time: 1_700_000_200,
-            change_time: 1_700_000_300,
+            path: String::new(),
+            service: String::new(),
+            file_name: String::new(),
+            ..fixtures::smb()
         };
 
-        assert_response_data(&smb, 10_000, "smb-sensor");
+        let fields = display_fields(&smb);
+        assert_eq!(fields.len(), 22);
+        assert_field_values(&fields, &[(12, "-"), (13, "-"), (14, "-")]);
     }
 
     #[test]
-    fn test_nfs_response_data() {
-        let nfs = Nfs {
-            orig_addr: "198.51.100.20".parse().unwrap(),
-            orig_port: 2049,
-            resp_addr: "198.51.100.21".parse().unwrap(),
-            resp_port: 2049,
-            proto: 6,
-            start_time: 11_000,
-            duration: 75,
-            orig_pkts: 17,
-            resp_pkts: 18,
-            orig_l2_bytes: 1_700,
-            resp_l2_bytes: 1_800,
-            read_files: vec!["/mnt/share/read.txt".to_string()],
-            write_files: vec!["/mnt/share/write.txt".to_string()],
-        };
+    fn test_nfs_response_data_envelope() {
+        let nfs = fixtures::nfs();
 
-        assert_response_data(&nfs, 11_000, "nfs-sensor");
+        let fields = response_fields(&nfs, 11_000, "nfs-sensor");
+        assert_eq!(fields.len(), 15);
+        assert_eq!(fields[1], "nfs-sensor");
+        assert_eq!(fields[13], "/mnt/share/read.txt");
+        assert_eq!(fields[14], "/mnt/share/write.txt");
     }
 
     #[test]
-    fn test_bootp_response_data() {
-        let bootp = Bootp {
-            orig_addr: "192.0.2.40".parse().unwrap(),
-            orig_port: 68,
-            resp_addr: "192.0.2.41".parse().unwrap(),
-            resp_port: 67,
-            proto: 17,
-            start_time: 12_000,
-            duration: 85,
-            orig_pkts: 19,
-            resp_pkts: 20,
-            orig_l2_bytes: 1_900,
-            resp_l2_bytes: 2_000,
-            op: 1,
-            htype: 1,
-            hops: 0,
-            xid: 0x1234_5678,
-            ciaddr: "0.0.0.0".parse().unwrap(),
-            yiaddr: "192.0.2.50".parse().unwrap(),
-            siaddr: "192.0.2.1".parse().unwrap(),
-            giaddr: "0.0.0.0".parse().unwrap(),
-            chaddr: vec![0, 1, 2, 3, 4, 5],
-            sname: "server".to_string(),
-            file: "bootfile".to_string(),
-        };
+    fn test_bootp_response_data_envelope() {
+        let bootp = fixtures::bootp();
 
-        assert_response_data(&bootp, 12_000, "bootp-sensor");
+        let fields = response_fields(&bootp, 12_000, "bootp-sensor");
+        assert_eq!(fields.len(), 24);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "bootp-sensor"),
+                (2, "192.0.2.40"),
+                (3, "68"),
+                (4, "192.0.2.41"),
+                (5, "67"),
+                (7, "0.000012000"),
+                (13, "1"),
+                (14, "1"),
+                (15, "0"),
+                (16, "305419896"),
+                (17, "0.0.0.0"),
+                (18, "192.0.2.50"),
+                (19, "192.0.2.1"),
+                (20, "0.0.0.0"),
+                (21, "0,1,2,3,4,5"),
+                (22, "server"),
+                (23, "bootfile"),
+            ],
+        );
     }
 
     #[test]
-    fn test_dhcp_response_data() {
-        let dhcp = Dhcp {
-            orig_addr: "192.0.2.60".parse().unwrap(),
-            orig_port: 68,
-            resp_addr: "192.0.2.61".parse().unwrap(),
-            resp_port: 67,
-            proto: 17,
-            start_time: 13_000,
-            duration: 95,
-            orig_pkts: 21,
-            resp_pkts: 22,
-            orig_l2_bytes: 2_100,
-            resp_l2_bytes: 2_200,
-            msg_type: 5,
-            ciaddr: "0.0.0.0".parse().unwrap(),
-            yiaddr: "192.0.2.70".parse().unwrap(),
-            siaddr: "192.0.2.1".parse().unwrap(),
-            giaddr: "0.0.0.0".parse().unwrap(),
-            subnet_mask: "255.255.255.0".parse().unwrap(),
-            router: vec!["192.0.2.1".parse().unwrap()],
-            domain_name_server: vec!["192.0.2.2".parse().unwrap()],
-            req_ip_addr: "192.0.2.80".parse().unwrap(),
-            lease_time: 86_400,
-            server_id: "192.0.2.1".parse().unwrap(),
-            param_req_list: vec![1, 3, 6],
-            message: "dhcp offer".to_string(),
-            renewal_time: 43_200,
-            rebinding_time: 64_800,
-            class_id: vec![1, 2, 3],
-            client_id_type: 1,
-            client_id: vec![0, 1, 2, 3, 4, 5],
-        };
+    fn test_dhcp_response_data_includes_formatted_options() {
+        let dhcp = fixtures::dhcp(vec![(12, b"myhost".to_vec()), (51, vec![0, 1, 81, 128])]);
 
-        assert_response_data(&dhcp, 13_000, "dhcp-sensor");
+        let csv = assert_response_envelope(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(last_tab_field(&csv), "12:6d79686f7374,51:00015180");
     }
 
     #[test]
-    fn test_radius_response_data() {
-        let radius = Radius {
-            orig_addr: "198.51.100.30".parse().unwrap(),
-            orig_port: 1812,
-            resp_addr: "198.51.100.31".parse().unwrap(),
-            resp_port: 1812,
-            proto: 17,
-            start_time: 14_000,
-            duration: 105,
-            orig_pkts: 23,
-            resp_pkts: 24,
-            orig_l2_bytes: 2_300,
-            resp_l2_bytes: 2_400,
-            id: 1,
-            code: 1,
-            resp_code: 2,
-            auth: "auth".to_string(),
-            resp_auth: "resp_auth".to_string(),
-            user_name: b"user".to_vec(),
-            user_passwd: b"pass".to_vec(),
-            chap_passwd: b"chap".to_vec(),
-            nas_ip: "198.51.100.100".parse().unwrap(),
-            nas_port: 0,
-            state: b"state".to_vec(),
-            nas_id: b"nas-id".to_vec(),
-            nas_port_type: 5,
-            message: "ok".to_string(),
-        };
+    fn test_dhcp_display_empty_options() {
+        let dhcp = fixtures::dhcp(vec![]);
 
-        assert_response_data(&radius, 14_000, "radius-sensor");
+        let output = format!("{dhcp}");
+        assert_eq!(last_tab_field(&output), "-");
     }
 
     #[test]
-    fn icmp_display() {
-        let icmp = Icmp {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            proto: 1,
-            start_time: 1_000_000_000_000_000_000,
-            duration: 0,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 100,
-            icmp_type: 8,
-            icmp_code: 0,
-            id: 1234,
-            seq_num: 1,
-            data_len: 56,
-            payload: vec![0x08, 0x00, 0xff, 0xff],
-        };
+    fn test_dhcp_display_formats_options_as_tag_and_lowercase_hex() {
+        let dhcp = fixtures::dhcp(vec![
+            (12, b"myhost".to_vec()),
+            (53, vec![5]),
+            (61, vec![0xde, 0xad, 0xbe, 0xef]),
+        ]);
+
+        let output = format!("{dhcp}");
+        assert_eq!(last_tab_field(&output), "12:6d79686f7374,53:05,61:deadbeef");
+    }
+
+    #[test]
+    fn test_dhcp_display_supports_empty_option_values() {
+        let dhcp = fixtures::dhcp(vec![(0, vec![]), (255, vec![])]);
+
+        let output = format!("{dhcp}");
+        assert_eq!(last_tab_field(&output), "0:,255:");
+    }
+
+    #[test]
+    fn test_dhcp_response_data_with_empty_options_uses_dash_placeholder() {
+        let dhcp = fixtures::dhcp(vec![]);
+
+        let csv = assert_response_envelope(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(last_tab_field(&csv), "-");
+    }
+
+    #[test]
+    fn test_radius_response_data_envelope() {
+        let radius = fixtures::radius();
+
+        let fields = response_fields(&radius, 14_000, "radius-sensor");
+        assert_eq!(fields.len(), 27);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "radius-sensor"),
+                (2, "198.51.100.30"),
+                (3, "1812"),
+                (4, "198.51.100.31"),
+                (5, "1812"),
+                (7, "0.000014000"),
+                (13, "1"),
+                (14, "1"),
+                (15, "2"),
+                (16, "auth"),
+                (17, "resp_auth"),
+                (18, "117,115,101,114"),
+                (19, "112,97,115,115"),
+                (20, "99,104,97,112"),
+                (21, "198.51.100.100"),
+                (22, "0"),
+                (23, "115,116,97,116,101"),
+                (24, "110,97,115,45,105,100"),
+                (25, "5"),
+                (26, "ok"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_icmp_display_formats_payload_and_fields() {
+        let icmp = fixtures::icmp();
 
         let csv_output = format!("{icmp}");
         let fields: Vec<&str> = csv_output.split('\t').collect();
@@ -2186,25 +2695,170 @@ mod tests {
     }
 
     #[test]
-    fn icmp_response_data() {
-        let icmp = Icmp {
-            orig_addr: "192.168.1.1".parse::<IpAddr>().unwrap(),
-            resp_addr: "192.168.1.2".parse::<IpAddr>().unwrap(),
-            proto: 1,
-            start_time: 1_000_000_000_000_000_000,
-            duration: 0,
-            orig_pkts: 1,
-            resp_pkts: 1,
-            orig_l2_bytes: 100,
-            resp_l2_bytes: 100,
-            icmp_type: 8,
-            icmp_code: 0,
-            id: 1234,
-            seq_num: 1,
-            data_len: 56,
-            payload: vec![0x08, 0x00, 0xff, 0xff],
+    fn test_icmp_response_data_envelope() {
+        let icmp = fixtures::icmp();
+
+        let fields = response_fields(&icmp, 1_000_000_000, "icmp-sensor");
+        assert_eq!(fields.len(), 17);
+        assert_eq!(fields[0], "1.000000000");
+        assert_eq!(fields[1], "icmp-sensor");
+        assert_eq!(fields[11], "8");
+        assert_eq!(fields[12], "0");
+        assert_eq!(fields[16], "[8, 0, ff, ff]");
+    }
+
+    #[test]
+    fn test_smtp_display_uses_dash_for_empty_string_fields() {
+        let smtp = Smtp {
+            mailfrom: String::new(),
+            date: String::new(),
+            from: String::new(),
+            to: String::new(),
+            subject: String::new(),
+            agent: String::new(),
+            state: String::new(),
+            ..fixtures::smtp()
         };
 
-        assert_response_data(&icmp, 1_000_000_000_000_000_000, "icmp-sensor");
+        let fields = display_fields(&smtp);
+        assert_eq!(fields.len(), 18);
+        assert_placeholder_fields(&fields, &[11, 12, 13, 14, 15, 16, 17]);
+    }
+
+    #[test]
+    fn test_ntlm_display_uses_dash_for_empty_string_fields() {
+        let ntlm = Ntlm {
+            protocol: String::new(),
+            username: String::new(),
+            hostname: String::new(),
+            domainname: String::new(),
+            success: String::new(),
+            ..fixtures::ntlm()
+        };
+
+        let fields = display_fields(&ntlm);
+        assert_eq!(fields.len(), 16);
+        assert_placeholder_fields(&fields, &[11, 12, 13, 14, 15]);
+    }
+
+    #[test]
+    fn test_tls_display_uses_dash_for_empty_strings_and_vectors() {
+        let tls = Tls {
+            server_name: String::new(),
+            alpn_protocol: String::new(),
+            ja3: String::new(),
+            version: String::new(),
+            client_cipher_suites: vec![],
+            client_extensions: vec![],
+            extensions: vec![],
+            ja3s: String::new(),
+            serial: String::new(),
+            subject_country: String::new(),
+            subject_org_name: String::new(),
+            subject_common_name: String::new(),
+            subject_alt_name: String::new(),
+            issuer_country: String::new(),
+            issuer_org_name: String::new(),
+            issuer_org_unit_name: String::new(),
+            issuer_common_name: String::new(),
+            ..fixtures::tls()
+        };
+
+        let fields = display_fields(&tls);
+        assert_eq!(fields.len(), 32);
+        assert_placeholder_fields(
+            &fields,
+            &[
+                11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 26, 27, 28, 29, 30,
+            ],
+        );
+    }
+
+    #[test]
+    fn test_radius_display_uses_dash_for_empty_byte_vectors() {
+        let radius = Radius {
+            user_name: vec![],
+            user_passwd: vec![],
+            chap_passwd: vec![],
+            state: vec![],
+            nas_id: vec![],
+            ..fixtures::radius()
+        };
+
+        let fields = display_fields(&radius);
+        assert_eq!(fields.len(), 25);
+        assert_placeholder_fields(&fields, &[16, 17, 18, 21, 22]);
+    }
+
+    #[test]
+    fn test_ftp_display_uses_dash_for_empty_strings_and_commands() {
+        let ftp = Ftp {
+            user: String::new(),
+            password: String::new(),
+            commands: vec![],
+            ..fixtures::ftp()
+        };
+
+        let fields = display_fields(&ftp);
+        assert_eq!(fields.len(), 14);
+        assert_placeholder_fields(&fields, &[11, 12, 13]);
+    }
+
+    #[test]
+    fn test_mqtt_display_uses_dash_for_empty_strings_and_vectors() {
+        let mqtt = Mqtt {
+            protocol: String::new(),
+            client_id: String::new(),
+            subscribe: vec![],
+            suback_reason: vec![],
+            ..fixtures::mqtt()
+        };
+
+        let fields = display_fields(&mqtt);
+        assert_eq!(fields.len(), 17);
+        assert_placeholder_fields(&fields, &[11, 13, 15, 16]);
+    }
+
+    #[test]
+    fn test_ldap_display_uses_dash_for_empty_vectors() {
+        let ldap = Ldap {
+            opcode: vec![],
+            result: vec![],
+            diagnostic_message: vec![],
+            object: vec![],
+            argument: vec![],
+            ..fixtures::ldap()
+        };
+
+        let fields = display_fields(&ldap);
+        assert_eq!(fields.len(), 18);
+        assert_placeholder_fields(&fields, &[13, 14, 15, 16, 17]);
+    }
+
+    #[test]
+    fn test_nfs_display_uses_dash_for_empty_vectors() {
+        let nfs = Nfs {
+            read_files: vec![],
+            write_files: vec![],
+            ..fixtures::nfs()
+        };
+
+        let fields = display_fields(&nfs);
+        assert_eq!(fields.len(), 13);
+        assert_placeholder_fields(&fields, &[11, 12]);
+    }
+
+    #[test]
+    fn test_bootp_display_uses_dash_for_empty_chaddr_and_optional_text_fields() {
+        let bootp = Bootp {
+            chaddr: vec![],
+            sname: String::new(),
+            file: String::new(),
+            ..fixtures::bootp()
+        };
+
+        let fields = display_fields(&bootp);
+        assert_eq!(fields.len(), 22);
+        assert_placeholder_fields(&fields, &[19, 20, 21]);
     }
 }
