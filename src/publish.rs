@@ -1809,7 +1809,7 @@ mod tests {
         assert_ne!(filter1, filter3);
 
         let mut set = HashSet::new();
-        set.insert(filter1.clone());
+        set.insert(filter1);
         assert!(set.contains(&filter2));
         assert!(!set.contains(&filter3));
     }
