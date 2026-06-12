@@ -374,9 +374,8 @@ mod tests {
                 continue;
             }
 
-            let parsed = DateTime::parse_from_rfc3339(&formatted).unwrap_or_else(|err| {
-                panic!("failed to parse {formatted} with chrono: {err}")
-            });
+            let parsed = DateTime::parse_from_rfc3339(&formatted)
+                .unwrap_or_else(|err| panic!("failed to parse {formatted} with chrono: {err}"));
             assert_eq!(
                 parsed.timestamp_nanos_opt().unwrap(),
                 *input,
@@ -408,9 +407,9 @@ mod tests {
                 continue;
             }
 
-            let parsed: jiff::Timestamp = formatted.parse().unwrap_or_else(|err| {
-                panic!("failed to parse {formatted} with jiff: {err}")
-            });
+            let parsed: jiff::Timestamp = formatted
+                .parse()
+                .unwrap_or_else(|err| panic!("failed to parse {formatted} with jiff: {err}"));
             assert_eq!(
                 i64::try_from(parsed.as_nanosecond()).unwrap(),
                 *input,

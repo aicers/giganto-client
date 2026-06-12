@@ -2220,10 +2220,7 @@ mod tests {
 
         let fields = response_fields(&rdp, 2_000, "rdp-sensor");
         assert_eq!(fields.len(), 14);
-        assert_field_values(
-            &fields,
-            &[(1, "rdp-sensor"), (13, "cookie")],
-        );
+        assert_field_values(&fields, &[(1, "rdp-sensor"), (13, "cookie")]);
         assert_eq!(fields[0], fmt_time(2_000));
     }
 
