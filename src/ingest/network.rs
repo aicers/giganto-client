@@ -1489,6 +1489,10 @@ mod tests {
         }
     }
 
+    fn fmt_time(ts: i64) -> String {
+        convert_time_format(ts)
+    }
+
     fn assert_placeholder_fields(fields: &[String], indices: &[usize]) {
         for &index in indices {
             assert_eq!(
@@ -2012,11 +2016,11 @@ mod tests {
                 (0, "192.168.4.76"),
                 (1, "46378"),
                 (5, "SF"),
-                (6, "0.000001000"),
                 (8, "http"),
                 (14, "27889"),
             ],
         );
+        assert_eq!(fields[6], fmt_time(conn.start_time));
     }
 
     #[test]
@@ -2028,7 +2032,6 @@ mod tests {
         assert_field_values(
             &fields,
             &[
-                (0, "1.234567890"),
                 (1, "conn-sensor"),
                 (2, "192.168.4.76"),
                 (7, "SF"),
@@ -2036,6 +2039,7 @@ mod tests {
                 (16, "27889"),
             ],
         );
+        assert_eq!(fields[0], fmt_time(1_234_567_890));
     }
 
     #[test]
@@ -2077,7 +2081,6 @@ mod tests {
         assert_field_values(
             &fields,
             &[
-                (0, "0.000001000"),
                 (1, "dns-sensor"),
                 (13, "example.com"),
                 (14, "1.2.3.4"),
@@ -2086,6 +2089,7 @@ mod tests {
                 (24, "3600"),
             ],
         );
+        assert_eq!(fields[0], fmt_time(1_000));
     }
 
     #[test]
@@ -2131,7 +2135,7 @@ mod tests {
 
         let fields = response_fields(&malformed, 9_999, "malformed-dns");
         assert_eq!(fields.len(), 25);
-        assert_eq!(fields[0], "0.000009999");
+        assert_eq!(fields[0], fmt_time(9_999));
         assert_eq!(fields[1], "malformed-dns");
         assert_eq!(fields[14], "4660");
         assert_eq!(fields[19], "2");
@@ -2196,7 +2200,7 @@ mod tests {
 
         let fields = response_fields(&http, 1000, "http-sensor");
         assert_eq!(fields.len(), 33);
-        assert_eq!(fields[0], "0.000001000");
+        assert_eq!(fields[0], fmt_time(1_000));
         assert_eq!(fields[1], "http-sensor");
         assert_eq!(fields[2], "127.0.0.1");
         assert_eq!(fields[5], "80");
@@ -2211,14 +2215,16 @@ mod tests {
 
         let display = display_fields(&rdp);
         assert_eq!(display.len(), 12);
-        assert_field_values(&display, &[(5, "0.000001000"), (11, "cookie")]);
+        assert_field_values(&display, &[(11, "cookie")]);
+        assert_eq!(display[5], fmt_time(rdp.start_time));
 
         let fields = response_fields(&rdp, 2_000, "rdp-sensor");
         assert_eq!(fields.len(), 14);
         assert_field_values(
             &fields,
-            &[(0, "0.000002000"), (1, "rdp-sensor"), (13, "cookie")],
+            &[(1, "rdp-sensor"), (13, "cookie")],
         );
+        assert_eq!(fields[0], fmt_time(2_000));
     }
 
     #[test]
@@ -2235,7 +2241,6 @@ mod tests {
                 (3, "25"),
                 (4, "192.0.2.2"),
                 (5, "2525"),
-                (7, "0.000003000"),
                 (13, "sender@example.com"),
                 (14, "Fri, 05 Jan 2024 12:00:00 GMT"),
                 (15, "Sender"),
@@ -2245,6 +2250,7 @@ mod tests {
                 (19, "delivered"),
             ],
         );
+        assert_eq!(fields[7], fmt_time(3_000));
     }
 
     #[test]
@@ -2261,7 +2267,6 @@ mod tests {
                 (3, "139"),
                 (4, "203.0.113.2"),
                 (5, "445"),
-                (7, "0.000004000"),
                 (13, "NTLMSSP"),
                 (14, "user"),
                 (15, "host"),
@@ -2269,6 +2274,7 @@ mod tests {
                 (17, "true"),
             ],
         );
+        assert_eq!(fields[7], fmt_time(4_000));
     }
 
     #[test]
@@ -2281,13 +2287,13 @@ mod tests {
             &fields,
             &[
                 (1, "kerberos-sensor"),
-                (13, "0.000001000"),
-                (14, "0.000002000"),
                 (16, "EXAMPLE.COM"),
                 (18, "client"),
                 (21, "krbtgt,EXAMPLE.COM"),
             ],
         );
+        assert_eq!(fields[13], fmt_time(1_000));
+        assert_eq!(fields[14], fmt_time(2_000));
     }
 
     #[test]
@@ -2389,7 +2395,6 @@ mod tests {
             &fields,
             &[
                 (1, "dcerpc-sensor"),
-                (7, "0.000001000"),
                 (
                     13,
                     "(0,0883AFE11F5DC91191A408002B14A0FA,3,0,045D888AEB1CC9119FE808002B104860,2,0,0,0)",
@@ -2397,6 +2402,7 @@ mod tests {
                 (14, "0:0"),
             ],
         );
+        assert_eq!(fields[7], fmt_time(1_000));
     }
 
     #[test]
@@ -2441,7 +2447,6 @@ mod tests {
                 (3, "1883"),
                 (4, "192.0.2.11"),
                 (5, "1883"),
-                (7, "0.000007000"),
                 (13, "MQTT"),
                 (14, "5"),
                 (15, "client-id"),
@@ -2450,6 +2455,7 @@ mod tests {
                 (18, "0"),
             ],
         );
+        assert_eq!(fields[7], fmt_time(7_000));
     }
 
     #[test]
@@ -2514,8 +2520,8 @@ mod tests {
         assert_eq!(fields[18], "0,11");
         assert_eq!(fields[19], "4865");
         assert_eq!(fields[20], "0,23");
-        assert_eq!(fields[26], "1.700000000");
-        assert_eq!(fields[27], "1.800000000");
+        assert_eq!(fields[26], fmt_time(1_700_000_000));
+        assert_eq!(fields[27], fmt_time(1_800_000_000));
         assert_eq!(fields[33], "0");
     }
 
@@ -2578,7 +2584,6 @@ mod tests {
                 (3, "68"),
                 (4, "192.0.2.41"),
                 (5, "67"),
-                (7, "0.000012000"),
                 (13, "1"),
                 (14, "1"),
                 (15, "0"),
@@ -2592,6 +2597,7 @@ mod tests {
                 (23, "bootfile"),
             ],
         );
+        assert_eq!(fields[7], fmt_time(12_000));
     }
 
     #[test]
@@ -2652,7 +2658,6 @@ mod tests {
                 (3, "1812"),
                 (4, "198.51.100.31"),
                 (5, "1812"),
-                (7, "0.000014000"),
                 (13, "1"),
                 (14, "1"),
                 (15, "2"),
@@ -2669,6 +2674,7 @@ mod tests {
                 (26, "ok"),
             ],
         );
+        assert_eq!(fields[7], fmt_time(14_000));
     }
 
     #[test]
@@ -2700,7 +2706,7 @@ mod tests {
 
         let fields = response_fields(&icmp, 1_000_000_000, "icmp-sensor");
         assert_eq!(fields.len(), 17);
-        assert_eq!(fields[0], "1.000000000");
+        assert_eq!(fields[0], fmt_time(1_000_000_000));
         assert_eq!(fields[1], "icmp-sensor");
         assert_eq!(fields[11], "8");
         assert_eq!(fields[12], "0");
