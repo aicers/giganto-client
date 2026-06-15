@@ -9,7 +9,6 @@ pub mod timeseries;
 
 use std::fmt::Display;
 
-use chrono::{DateTime, SecondsFormat};
 use quinn::{RecvStream, SendStream};
 use serde::{Deserialize, Serialize};
 
@@ -93,24 +92,19 @@ pub async fn receive_ack_timestamp(recv: &mut RecvStream) -> Result<i64, RecvErr
     Ok(timestamp)
 }
 
-/// Canonical strftime-style format for range-data datetime fields.
+/// Canonical strftime format for range-data datetime fields.
 ///
-/// Serialized values use RFC 3339 with a fixed `+00:00` UTC offset (not `Z`).
+/// Serialized values are RFC 3339 with a fixed `+00:00` UTC offset (not `Z`).
+/// Sub-second digits use variable width (`%.f`): trailing zeros are trimmed and
+/// the fractional part is omitted entirely when the sub-second value is zero.
 pub const RFC3339_RANGE_DATA_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.f%:z";
 
 /// Converts a nanosecond timestamp to the canonical range-data RFC 3339 string.
 #[must_use]
 pub(crate) fn convert_time_format(timestamp: i64) -> String {
-    const NS_PER_SEC: i64 = 1_000_000_000;
-
-    let secs = timestamp.div_euclid(NS_PER_SEC);
-    let Ok(nanos) = u32::try_from(timestamp.rem_euclid(NS_PER_SEC)) else {
-        return format!("INVALID_TIMESTAMP({timestamp})");
-    };
-
-    DateTime::from_timestamp(secs, nanos).map_or_else(
-        || format!("INVALID_TIMESTAMP({timestamp})"),
-        |dt| dt.to_rfc3339_opts(SecondsFormat::Nanos, false),
+    jiff::Timestamp::from_nanosecond(i128::from(timestamp)).map_or_else(
+        |_| format!("INVALID_TIMESTAMP({timestamp})"),
+        |ts| ts.strftime(RFC3339_RANGE_DATA_FORMAT).to_string(),
     )
 }
 
@@ -302,31 +296,27 @@ mod tests {
     }
 
     // ==================== Edge Case Tests ====================
+    // `%.f` emits variable-width sub-seconds: trailing zeros are trimmed and the
+    // fractional part is dropped entirely when the sub-second value is zero.
     const CONVERT_TIME_FORMAT_CASES: &[(i64, &str)] = &[
-        (0, "1970-01-01T00:00:00.000000000+00:00"),
+        (0, "1970-01-01T00:00:00+00:00"),
         (1, "1970-01-01T00:00:00.000000001+00:00"),
         (-1, "1969-12-31T23:59:59.999999999+00:00"),
         (999_999_999, "1970-01-01T00:00:00.999999999+00:00"),
-        (1_000_000_000, "1970-01-01T00:00:01.000000000+00:00"),
+        (1_000_000_000, "1970-01-01T00:00:01+00:00"),
         (1_000_000_001, "1970-01-01T00:00:01.000000001+00:00"),
         (-999_999_999, "1969-12-31T23:59:59.000000001+00:00"),
-        (-1_000_000_000, "1969-12-31T23:59:59.000000000+00:00"),
+        (-1_000_000_000, "1969-12-31T23:59:59+00:00"),
         (-1_000_000_001, "1969-12-31T23:59:58.999999999+00:00"),
         (1_999_999_999, "1970-01-01T00:00:01.999999999+00:00"),
         (2_000_000_001, "1970-01-01T00:00:02.000000001+00:00"),
         (-1_999_999_999, "1969-12-31T23:59:58.000000001+00:00"),
         (-2_000_000_001, "1969-12-31T23:59:57.999999999+00:00"),
-        (
-            123_456_789_000_000_000,
-            "1973-11-29T21:33:09.000000000+00:00",
-        ),
-        (
-            -123_456_789_000_000_000,
-            "1966-02-02T02:26:51.000000000+00:00",
-        ),
+        (123_456_789_000_000_000, "1973-11-29T21:33:09+00:00"),
+        (-123_456_789_000_000_000, "1966-02-02T02:26:51+00:00"),
         (
             1_773_586_804_043_577_000,
-            "2026-03-15T15:00:04.043577000+00:00",
+            "2026-03-15T15:00:04.043577+00:00",
         ),
     ];
 

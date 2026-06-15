@@ -8,7 +8,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0"
 bincode = "1"
-chrono = { version = "0.4.45", features = ["clock"] }
+jiff = "0.2"
 num_enum = "0.7"
 quinn = "0.11"
 semver = "1"
@@ -19,8 +19,8 @@ thiserror = "2"
 tokio = "1"
 
 [dev-dependencies]
+chrono = "0.4"
 futures = "0.3"
-jiff = "0.2.28"
 quinn = { version = "0.11", features = ["ring"] }
 rcgen = "0.13"
 rustls = { version = "0.23", default-features = false, features = [
