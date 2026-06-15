@@ -96,3 +96,29 @@ pub(crate) async fn channel() -> Channel {
         },
     }
 }
+
+/// Asserts that a serialized range-data datetime field is in the canonical
+/// RFC 3339 contract format and decodes back to `expected_ns`.
+///
+/// The field is parsed independently of `convert_time_format` (via `jiff`), so
+/// this pins the actual wire format instead of echoing the producer: a
+/// regression to the old epoch-decimal text would fail to parse here.
+pub(crate) fn assert_canonical_time(field: &str, expected_ns: i64) {
+    assert!(
+        field.ends_with("+00:00"),
+        "expected numeric +00:00 offset, got {field}"
+    );
+    assert!(
+        !field.ends_with('Z'),
+        "expected +00:00 offset, not Z: {field}"
+    );
+
+    let parsed: jiff::Timestamp = field
+        .parse()
+        .unwrap_or_else(|err| panic!("field is not RFC 3339: {field}: {err}"));
+    assert_eq!(
+        i64::try_from(parsed.as_nanosecond()).unwrap(),
+        expected_ns,
+        "decoded timestamp mismatch for {field}"
+    );
+}

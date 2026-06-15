@@ -1489,8 +1489,15 @@ mod tests {
         }
     }
 
+    /// Formats `ts` with the production serializer and asserts the result is in
+    /// the canonical RFC 3339 contract format. Callers compare a record field
+    /// against the return value, so each assertion verifies both field
+    /// placement and the canonical wire format (not just that the field echoes
+    /// `convert_time_format`).
     fn fmt_time(ts: i64) -> String {
-        convert_time_format(ts)
+        let formatted = convert_time_format(ts);
+        crate::test::assert_canonical_time(&formatted, ts);
+        formatted
     }
 
     fn assert_placeholder_fields(fields: &[String], indices: &[usize]) {
