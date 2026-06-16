@@ -243,6 +243,9 @@ mod tests {
 
         let expected_csv = format!("{}\t{nf5}", convert_time_format(timestamp));
         assert_eq!(decoded_csv, expected_csv.as_bytes());
+
+        let row = String::from_utf8(decoded_csv).unwrap();
+        crate::test::assert_canonical_time(row.split('\t').next().unwrap(), timestamp);
     }
 
     #[test]
@@ -270,6 +273,9 @@ mod tests {
 
         let expected_csv = format!("{}\t{nf9}", convert_time_format(timestamp));
         assert_eq!(decoded_csv, expected_csv.as_bytes());
+
+        let row = String::from_utf8(decoded_csv).unwrap();
+        crate::test::assert_canonical_time(row.split('\t').next().unwrap(), timestamp);
     }
 
     #[test]

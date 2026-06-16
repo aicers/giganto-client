@@ -92,25 +92,20 @@ pub async fn receive_ack_timestamp(recv: &mut RecvStream) -> Result<i64, RecvErr
     Ok(timestamp)
 }
 
-/// Converts a timestamp to a string in the format of "%s%.9f", which is the format used by Zeek.
+/// Canonical strftime format for range-data datetime fields.
+///
+/// Serialized values are RFC 3339 with a fixed `+00:00` UTC offset (not `Z`).
+/// Sub-second digits use variable width (`%.f`): trailing zeros are trimmed and
+/// the fractional part is omitted entirely when the sub-second value is zero.
+pub const RFC3339_RANGE_DATA_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.f%:z";
+
+/// Converts a nanosecond timestamp to the canonical range-data RFC 3339 string.
 #[must_use]
-fn convert_time_format(timestamp: i64) -> String {
-    const A_BILLION: u64 = 1_000_000_000;
-
-    // Keep the sign, but format using absolute magnitude.
-    let neg = timestamp < 0;
-
-    // Use unsigned_abs() to avoid overflow on i64::MIN
-    let abs: u64 = timestamp.unsigned_abs();
-
-    let secs: u64 = abs / A_BILLION;
-    let nanos: u64 = abs % A_BILLION;
-
-    if neg {
-        format!("-{secs}.{nanos:09}")
-    } else {
-        format!("{secs}.{nanos:09}")
-    }
+pub(crate) fn convert_time_format(timestamp: i64) -> String {
+    jiff::Timestamp::from_nanosecond(i128::from(timestamp)).map_or_else(
+        |_| format!("INVALID_TIMESTAMP({timestamp})"),
+        |ts| ts.strftime(RFC3339_RANGE_DATA_FORMAT).to_string(),
+    )
 }
 
 fn as_str_or_default(s: &str) -> &str {
@@ -158,6 +153,7 @@ fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
     #[tokio::test]
     async fn ingest_send_recv() {
         use std::{mem, net::IpAddr};
@@ -300,24 +296,28 @@ mod tests {
     }
 
     // ==================== Edge Case Tests ====================
+    // `%.f` emits variable-width sub-seconds: trailing zeros are trimmed and the
+    // fractional part is dropped entirely when the sub-second value is zero.
     const CONVERT_TIME_FORMAT_CASES: &[(i64, &str)] = &[
-        (0, "0.000000000"),
-        (1, "0.000000001"),
-        (-1, "-0.000000001"),
-        (999_999_999, "0.999999999"),
-        (1_000_000_000, "1.000000000"),
-        (1_000_000_001, "1.000000001"),
-        (-999_999_999, "-0.999999999"),
-        (-1_000_000_000, "-1.000000000"),
-        (-1_000_000_001, "-1.000000001"),
-        (1_999_999_999, "1.999999999"),
-        (2_000_000_001, "2.000000001"),
-        (-1_999_999_999, "-1.999999999"),
-        (-2_000_000_001, "-2.000000001"),
-        (123_456_789_000_000_000, "123456789.000000000"),
-        (-123_456_789_000_000_000, "-123456789.000000000"),
-        (i64::MAX, "9223372036.854775807"),
-        (i64::MIN, "-9223372036.854775808"),
+        (0, "1970-01-01T00:00:00+00:00"),
+        (1, "1970-01-01T00:00:00.000000001+00:00"),
+        (-1, "1969-12-31T23:59:59.999999999+00:00"),
+        (999_999_999, "1970-01-01T00:00:00.999999999+00:00"),
+        (1_000_000_000, "1970-01-01T00:00:01+00:00"),
+        (1_000_000_001, "1970-01-01T00:00:01.000000001+00:00"),
+        (-999_999_999, "1969-12-31T23:59:59.000000001+00:00"),
+        (-1_000_000_000, "1969-12-31T23:59:59+00:00"),
+        (-1_000_000_001, "1969-12-31T23:59:58.999999999+00:00"),
+        (1_999_999_999, "1970-01-01T00:00:01.999999999+00:00"),
+        (2_000_000_001, "1970-01-01T00:00:02.000000001+00:00"),
+        (-1_999_999_999, "1969-12-31T23:59:58.000000001+00:00"),
+        (-2_000_000_001, "1969-12-31T23:59:57.999999999+00:00"),
+        (123_456_789_000_000_000, "1973-11-29T21:33:09+00:00"),
+        (-123_456_789_000_000_000, "1966-02-02T02:26:51+00:00"),
+        (
+            1_773_586_804_043_577_000,
+            "2026-03-15T15:00:04.043577+00:00",
+        ),
     ];
 
     #[test]
@@ -325,6 +325,86 @@ mod tests {
         for (input, expected) in CONVERT_TIME_FORMAT_CASES {
             let result = super::convert_time_format(*input);
             assert_eq!(result, *expected);
+            assert!(
+                result.ends_with("+00:00"),
+                "expected numeric UTC offset, got {result}"
+            );
+            assert!(!result.ends_with('Z'), "expected +00:00 offset, not Z");
+        }
+    }
+
+    #[test]
+    fn convert_time_format_extreme_values_do_not_panic() {
+        for input in [i64::MAX, i64::MIN] {
+            let result = super::convert_time_format(input);
+            assert!(result.ends_with("+00:00") || result.starts_with("INVALID_TIMESTAMP"));
+        }
+    }
+
+    #[test]
+    fn convert_time_format_round_trip_chrono() {
+        let cases: &[i64] = &[
+            0,
+            1,
+            -1,
+            999_999_999,
+            1_000_000_000,
+            1_000_000_001,
+            -999_999_999,
+            -1_000_000_000,
+            -1_000_000_001,
+            1_773_586_804_043_577_000,
+            i64::MAX,
+            i64::MIN,
+        ];
+
+        for input in cases {
+            let formatted = super::convert_time_format(*input);
+            if formatted.starts_with("INVALID_TIMESTAMP") {
+                continue;
+            }
+
+            let parsed = DateTime::parse_from_rfc3339(&formatted)
+                .unwrap_or_else(|err| panic!("failed to parse {formatted} with chrono: {err}"));
+            assert_eq!(
+                parsed.timestamp_nanos_opt().unwrap(),
+                *input,
+                "chrono round-trip failed for {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn convert_time_format_round_trip_jiff() {
+        let cases: &[i64] = &[
+            0,
+            1,
+            -1,
+            999_999_999,
+            1_000_000_000,
+            1_000_000_001,
+            -999_999_999,
+            -1_000_000_000,
+            -1_000_000_001,
+            1_773_586_804_043_577_000,
+            i64::MAX,
+            i64::MIN,
+        ];
+
+        for input in cases {
+            let formatted = super::convert_time_format(*input);
+            if formatted.starts_with("INVALID_TIMESTAMP") {
+                continue;
+            }
+
+            let parsed: jiff::Timestamp = formatted
+                .parse()
+                .unwrap_or_else(|err| panic!("failed to parse {formatted} with jiff: {err}"));
+            assert_eq!(
+                i64::try_from(parsed.as_nanosecond()).unwrap(),
+                *input,
+                "jiff round-trip failed for {input}"
+            );
         }
     }
 

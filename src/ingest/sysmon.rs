@@ -649,6 +649,27 @@ mod tests {
 
         let expected_csv = format!("{}\t{sensor}\t{value}", convert_time_format(timestamp));
         assert_eq!(decoded_csv, expected_csv.as_bytes());
+
+        // The leading record timestamp must be canonical RFC 3339.
+        crate::test::assert_canonical_time(
+            &response_csv_fields(value, timestamp, sensor)[0],
+            timestamp,
+        );
+    }
+
+    /// Decodes the tab-separated range-data row produced by `response_data`.
+    fn response_csv_fields<T>(value: &T, timestamp: i64, sensor: &str) -> Vec<String>
+    where
+        T: ResponseRangeData,
+    {
+        let res = value.response_data(timestamp, sensor).unwrap();
+        let decoded: Option<(i64, String, Vec<u8>)> = bincode::deserialize(&res).unwrap();
+        let (_, _, csv) = decoded.expect("expected Some payload");
+        String::from_utf8(csv)
+            .unwrap()
+            .split('\t')
+            .map(ToString::to_string)
+            .collect()
     }
 
     #[test]
@@ -707,6 +728,11 @@ mod tests {
         assert!(display.contains("file"));
 
         assert_response_data(&ftc, 1000, "file-creation-time-changed-sensor");
+
+        // The struct's own datetime columns must also be canonical RFC 3339.
+        let fields = response_csv_fields(&ftc, 1000, "file-creation-time-changed-sensor");
+        crate::test::assert_canonical_time(&fields[8], 1000); // creation_utc_time
+        crate::test::assert_canonical_time(&fields[9], 900); // previous_creation_utc_time
     }
 
     #[test]
@@ -793,6 +819,9 @@ mod tests {
         assert!(display.contains("file"));
 
         assert_response_data(&fc, 1000, "file-create-sensor");
+
+        let fields = response_csv_fields(&fc, 1000, "file-create-sensor");
+        crate::test::assert_canonical_time(&fields[8], 1000); // creation_utc_time
     }
 
     #[test]
@@ -845,6 +874,9 @@ mod tests {
         };
 
         assert_response_data(&fcsh, 6_000, "file-create-stream-hash-sensor");
+
+        let fields = response_csv_fields(&fcsh, 6_000, "file-create-stream-hash-sensor");
+        crate::test::assert_canonical_time(&fields[8], 1_700); // creation_utc_time
     }
 
     #[test]

@@ -2,6 +2,8 @@ pub mod connection;
 pub mod frame;
 pub mod ingest;
 pub mod publish;
+
+pub use ingest::RFC3339_RANGE_DATA_FORMAT;
 #[cfg(test)]
 mod test;
 
