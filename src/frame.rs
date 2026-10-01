@@ -264,7 +264,7 @@ mod tests {
         super::send(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let received = super::recv::<&str>(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
@@ -340,7 +340,7 @@ mod tests {
         super::recv_raw(&mut channel.client.recv, &mut buf)
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
     }
 
     #[tokio::test]

@@ -778,7 +778,7 @@ mod tests {
         super::send_ok(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let resp_result = recv_ack_response(&mut channel.client.recv).await.is_ok();
         assert!(resp_result);
     }
@@ -792,7 +792,7 @@ mod tests {
         super::send_err(&mut channel.server.send, &mut buf, "hello")
             .await
             .unwrap();
-        assert!(buf.is_empty());
+        assert_eq!(buf, [] as [u8; 0]);
         let resp = recv_ack_response(&mut channel.client.recv)
             .await
             .unwrap_err();
@@ -1504,7 +1504,10 @@ mod tests {
             .unwrap();
         assert_eq!(code, MessageCode::RawData);
         let received: RequestRawData = bincode::deserialize(&data).unwrap();
-        assert!(received.input.is_empty());
+        assert_eq!(
+            received.input,
+            [] as [(std::string::String, std::vec::Vec<i64>); 0]
+        );
     }
 
     /// Tests raw data request with empty timestamp vectors.
@@ -1532,7 +1535,7 @@ mod tests {
         assert_eq!(code, MessageCode::RawData);
         let received: RequestRawData = bincode::deserialize(&data).unwrap();
         assert_eq!(received.input.len(), 2);
-        assert!(received.input[0].1.is_empty());
+        assert_eq!(received.input[0].1, [] as [i64; 0]);
         assert_eq!(received.input[1].1.len(), 3);
     }
 
@@ -1621,7 +1624,10 @@ mod tests {
         let received = super::receive_raw_events(&mut channel.client.recv)
             .await
             .unwrap();
-        assert!(received.is_empty());
+        assert_eq!(
+            received,
+            [] as [(i64, std::string::String, std::vec::Vec<u8>); 0]
+        );
     }
 
     /// Tests `recv_ack_response` with malformed response.
