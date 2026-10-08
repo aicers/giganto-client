@@ -8,7 +8,9 @@ use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ingest::{as_str_or_default, convert_time_format, vec_to_string_or_default},
+    ingest::{
+        as_str_or_default, convert_time_format, to_string_or_empty, vec_to_string_or_default,
+    },
     publish::range::ResponseRangeData,
 };
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1134,6 +1136,32 @@ impl ResponseRangeData for Nfs {
     }
 }
 
+/// BOOTP/DHCP transaction direction and state based on the observed packets.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, strum_macros::Display)]
+#[repr(u8)]
+pub enum TransactionOp {
+    /// Only request packets (such as Request or Discover) were observed.
+    RequestOnly = 1,
+    /// Only reply packets (such as Reply, Offer, or Ack) were observed.
+    ReplyOnly = 2,
+    /// Both request and reply packets were observed within the session.
+    RequestAndReply = 3,
+}
+
+/// DHCP message type (option 53).
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, strum_macros::Display)]
+pub enum DhcpMsgType {
+    Discover,
+    Offer,
+    Request,
+    Decline,
+    Ack,
+    Nak,
+    Release,
+    Inform,
+    Unknown,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Bootp {
     pub orig_addr: IpAddr,
@@ -1147,15 +1175,25 @@ pub struct Bootp {
     pub resp_pkts: u64,
     pub orig_l2_bytes: u64,
     pub resp_l2_bytes: u64,
-    pub op: u8,
-    pub htype: u8,
-    pub hops: u8,
+    /// Transaction state when packets are observed.
+    pub op: Option<TransactionOp>,
+    pub htype: Option<u8>,
+    pub hlen: Option<u8>,
+    pub hops: Option<u8>,
+    /// Transaction identifier used to match requests and replies.
     pub xid: u32,
-    pub ciaddr: IpAddr,
-    pub yiaddr: IpAddr,
-    pub siaddr: IpAddr,
-    pub giaddr: IpAddr,
+    pub secs: Option<u16>,
+    pub flags: Option<u16>,
+    /// Client IP address, primarily collected from a request.
+    pub ciaddr: Option<IpAddr>,
+    /// Client IP address assigned or offered in a reply.
+    pub yiaddr: Option<IpAddr>,
+    /// Bootstrap server IP address collected from a reply.
+    pub siaddr: Option<IpAddr>,
+    pub giaddr: Option<IpAddr>,
+    /// Client hardware address; may be empty when the request is lost.
     pub chaddr: Vec<u8>,
+    /// Server host name; may be empty when the reply is lost.
     pub sname: String,
     pub file: String,
 }
@@ -1164,7 +1202,7 @@ impl Display for Bootp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -1176,14 +1214,17 @@ impl Display for Bootp {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            self.op,
-            self.htype,
-            self.hops,
+            to_string_or_empty(self.op),
+            to_string_or_empty(self.htype),
+            to_string_or_empty(self.hlen),
+            to_string_or_empty(self.hops),
             self.xid,
-            self.ciaddr,
-            self.yiaddr,
-            self.siaddr,
-            self.giaddr,
+            to_string_or_empty(self.secs),
+            to_string_or_empty(self.flags),
+            to_string_or_empty(self.ciaddr),
+            to_string_or_empty(self.yiaddr),
+            to_string_or_empty(self.siaddr),
+            to_string_or_empty(self.giaddr),
             vec_to_string_or_default(&self.chaddr),
             as_str_or_default(&self.sname),
             as_str_or_default(&self.file),
@@ -1235,24 +1276,39 @@ pub struct Dhcp {
     pub resp_pkts: u64,
     pub orig_l2_bytes: u64,
     pub resp_l2_bytes: u64,
-    pub msg_type: u8,
-    pub ciaddr: IpAddr,
-    pub yiaddr: IpAddr,
-    pub siaddr: IpAddr,
-    pub giaddr: IpAddr,
-    pub subnet_mask: IpAddr,
+    /// Transaction direction and state.
+    pub op: Option<TransactionOp>,
+    /// Transaction identifier used to match requests and replies.
+    pub xid: u32,
+    /// Client IP address collected from a request or renewal.
+    pub ciaddr: Option<IpAddr>,
+    /// Client IP address assigned or offered in an Offer or Ack.
+    pub yiaddr: Option<IpAddr>,
+    /// DHCP server identifier (option 54).
+    pub server_id: Option<IpAddr>,
+    /// Client hardware address used for asset identification.
+    pub chaddr: Vec<u8>,
+    pub msg_type: Option<DhcpMsgType>,
+    pub req_ip_addr: Option<IpAddr>,
+    pub subnet_mask: Option<IpAddr>,
     pub router: Vec<IpAddr>,
     pub domain_name_server: Vec<IpAddr>,
-    pub req_ip_addr: IpAddr,
-    pub lease_time: u32,
-    pub server_id: IpAddr,
+    /// Client host name (option 12).
+    pub hostname: Option<String>,
+    /// Domain name (option 15).
+    pub domain_name: Option<String>,
+    /// IP lease time in seconds (option 51).
+    pub lease_time: Option<u32>,
+    /// Lease renewal time T1 in seconds (option 58).
+    pub renewal_time: Option<u32>,
+    /// Lease rebinding time T2 in seconds (option 59).
+    pub rebinding_time: Option<u32>,
     pub param_req_list: Vec<u8>,
-    pub message: String,
-    pub renewal_time: u32,
-    pub rebinding_time: u32,
     pub class_id: Vec<u8>,
-    pub client_id_type: u8,
+    pub client_id_type: Option<u8>,
     pub client_id: Vec<u8>,
+    pub message: String,
+    /// Unparsed raw extension options as (option code, value bytes).
     pub options: Vec<(u8, Vec<u8>)>,
 }
 
@@ -1260,7 +1316,7 @@ impl Display for Dhcp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -1272,24 +1328,27 @@ impl Display for Dhcp {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            self.msg_type,
-            self.ciaddr,
-            self.yiaddr,
-            self.siaddr,
-            self.giaddr,
-            self.subnet_mask,
+            to_string_or_empty(self.op),
+            self.xid,
+            to_string_or_empty(self.ciaddr),
+            to_string_or_empty(self.yiaddr),
+            to_string_or_empty(self.server_id),
+            vec_to_string_or_default(&self.chaddr),
+            to_string_or_empty(self.msg_type),
+            to_string_or_empty(self.req_ip_addr),
+            to_string_or_empty(self.subnet_mask),
             vec_to_string_or_default(&self.router),
             vec_to_string_or_default(&self.domain_name_server),
-            self.req_ip_addr,
-            self.lease_time,
-            self.server_id,
+            to_string_or_empty(self.hostname.as_deref().map(as_str_or_default)),
+            to_string_or_empty(self.domain_name.as_deref().map(as_str_or_default)),
+            to_string_or_empty(self.lease_time),
+            to_string_or_empty(self.renewal_time),
+            to_string_or_empty(self.rebinding_time),
             vec_to_string_or_default(&self.param_req_list),
-            as_str_or_default(&self.message),
-            self.renewal_time,
-            self.rebinding_time,
             vec_to_string_or_default(&self.class_id),
-            self.client_id_type,
+            to_string_or_empty(self.client_id_type),
             vec_to_string_or_default(&self.client_id),
+            as_str_or_default(&self.message),
             display_dhcp_options(&self.options),
         )
     }
@@ -1575,24 +1634,27 @@ mod tests {
                 resp_pkts: 22,
                 orig_l2_bytes: 2_100,
                 resp_l2_bytes: 2_200,
-                msg_type: 5,
-                ciaddr: "0.0.0.0".parse().unwrap(),
-                yiaddr: "192.0.2.70".parse().unwrap(),
-                siaddr: "192.0.2.1".parse().unwrap(),
-                giaddr: "0.0.0.0".parse().unwrap(),
-                subnet_mask: "255.255.255.0".parse().unwrap(),
+                op: Some(TransactionOp::RequestAndReply),
+                xid: 0x1234_5678,
+                ciaddr: Some("0.0.0.0".parse().unwrap()),
+                yiaddr: Some("192.0.2.70".parse().unwrap()),
+                server_id: Some("192.0.2.1".parse().unwrap()),
+                chaddr: vec![0, 1, 2, 3, 4, 5],
+                msg_type: Some(DhcpMsgType::Ack),
+                req_ip_addr: Some("192.0.2.80".parse().unwrap()),
+                subnet_mask: Some("255.255.255.0".parse().unwrap()),
                 router: vec!["192.0.2.1".parse().unwrap()],
                 domain_name_server: vec!["192.0.2.2".parse().unwrap()],
-                req_ip_addr: "192.0.2.80".parse().unwrap(),
-                lease_time: 86_400,
-                server_id: "192.0.2.1".parse().unwrap(),
+                hostname: Some("myhost".to_string()),
+                domain_name: Some("example.com".to_string()),
+                lease_time: Some(86_400),
+                renewal_time: Some(43_200),
+                rebinding_time: Some(64_800),
                 param_req_list: vec![1, 3, 6],
-                message: "dhcp offer".to_string(),
-                renewal_time: 43_200,
-                rebinding_time: 64_800,
                 class_id: vec![1, 2, 3],
-                client_id_type: 1,
+                client_id_type: Some(1),
                 client_id: vec![0, 1, 2, 3, 4, 5],
+                message: "dhcp ack".to_string(),
                 options,
             }
         }
@@ -1996,14 +2058,17 @@ mod tests {
                 resp_pkts: 20,
                 orig_l2_bytes: 1_900,
                 resp_l2_bytes: 2_000,
-                op: 1,
-                htype: 1,
-                hops: 0,
+                op: Some(TransactionOp::RequestAndReply),
+                htype: Some(1),
+                hlen: Some(6),
+                hops: Some(0),
                 xid: 0x1234_5678,
-                ciaddr: "0.0.0.0".parse().unwrap(),
-                yiaddr: "192.0.2.50".parse().unwrap(),
-                siaddr: "192.0.2.1".parse().unwrap(),
-                giaddr: "0.0.0.0".parse().unwrap(),
+                secs: Some(10),
+                flags: Some(0),
+                ciaddr: Some("0.0.0.0".parse().unwrap()),
+                yiaddr: Some("192.0.2.50".parse().unwrap()),
+                siaddr: Some("192.0.2.1".parse().unwrap()),
+                giaddr: Some("0.0.0.0".parse().unwrap()),
                 chaddr: vec![0, 1, 2, 3, 4, 5],
                 sname: "server".to_string(),
                 file: "bootfile".to_string(),
@@ -2579,7 +2644,7 @@ mod tests {
         let bootp = fixtures::bootp();
 
         let fields = response_fields(&bootp, 12_000, "bootp-sensor");
-        assert_eq!(fields.len(), 24);
+        assert_eq!(fields.len(), 27);
         assert_field_values(
             &fields,
             &[
@@ -2588,20 +2653,207 @@ mod tests {
                 (3, "68"),
                 (4, "192.0.2.41"),
                 (5, "67"),
-                (13, "1"),
+                (13, "RequestAndReply"),
                 (14, "1"),
-                (15, "0"),
-                (16, "305419896"),
-                (17, "0.0.0.0"),
-                (18, "192.0.2.50"),
-                (19, "192.0.2.1"),
+                (15, "6"),
+                (16, "0"),
+                (17, "305419896"),
+                (18, "10"),
+                (19, "0"),
                 (20, "0.0.0.0"),
-                (21, "0,1,2,3,4,5"),
-                (22, "server"),
-                (23, "bootfile"),
+                (21, "192.0.2.50"),
+                (22, "192.0.2.1"),
+                (23, "0.0.0.0"),
+                (24, "0,1,2,3,4,5"),
+                (25, "server"),
+                (26, "bootfile"),
             ],
         );
         assert_eq!(fields[7], fmt_time(12_000));
+    }
+
+    #[test]
+    fn test_transaction_states_display_and_serialization() {
+        for (op, code, text) in [
+            (TransactionOp::RequestOnly, 1, "RequestOnly"),
+            (TransactionOp::ReplyOnly, 2, "ReplyOnly"),
+            (TransactionOp::RequestAndReply, 3, "RequestAndReply"),
+        ] {
+            assert_eq!(op as u8, code);
+            let bootp = Bootp {
+                op: Some(op),
+                ..fixtures::bootp()
+            };
+            let dhcp = Dhcp {
+                op: Some(op),
+                ..fixtures::dhcp(vec![])
+            };
+            assert_eq!(display_fields(&bootp)[11], text);
+            assert_eq!(display_fields(&dhcp)[11], text);
+            assert_eq!(response_fields(&bootp, 12_000, "bootp-sensor")[13], text);
+            assert_eq!(response_fields(&dhcp, 13_000, "dhcp-sensor")[13], text);
+            assert_eq!(
+                bincode::deserialize::<Bootp>(&bincode::serialize(&bootp).unwrap()).unwrap(),
+                bootp
+            );
+            assert_eq!(
+                bincode::deserialize::<Dhcp>(&bincode::serialize(&dhcp).unwrap()).unwrap(),
+                dhcp
+            );
+        }
+    }
+
+    #[test]
+    fn test_dhcp_message_types_display_and_serialization() {
+        for (msg_type, text) in [
+            (DhcpMsgType::Discover, "Discover"),
+            (DhcpMsgType::Offer, "Offer"),
+            (DhcpMsgType::Request, "Request"),
+            (DhcpMsgType::Decline, "Decline"),
+            (DhcpMsgType::Ack, "Ack"),
+            (DhcpMsgType::Nak, "Nak"),
+            (DhcpMsgType::Release, "Release"),
+            (DhcpMsgType::Inform, "Inform"),
+            (DhcpMsgType::Unknown, "Unknown"),
+        ] {
+            let dhcp = Dhcp {
+                msg_type: Some(msg_type),
+                ..fixtures::dhcp(vec![])
+            };
+            assert_eq!(display_fields(&dhcp)[17], text);
+            assert_eq!(response_fields(&dhcp, 13_000, "dhcp-sensor")[19], text);
+            assert_eq!(
+                bincode::deserialize::<Dhcp>(&bincode::serialize(&dhcp).unwrap()).unwrap(),
+                dhcp
+            );
+        }
+    }
+
+    #[test]
+    fn test_bootp_absent_values_display_and_serialization() {
+        let bootp = Bootp {
+            op: None,
+            htype: None,
+            hlen: None,
+            hops: None,
+            secs: None,
+            flags: None,
+            ciaddr: None,
+            yiaddr: None,
+            siaddr: None,
+            giaddr: None,
+            chaddr: vec![],
+            sname: String::new(),
+            file: String::new(),
+            ..fixtures::bootp()
+        };
+        let fields = display_fields(&bootp);
+        assert_eq!(fields.len(), 25);
+        assert_eq!(fields[15], "305419896");
+        assert_placeholder_fields(
+            &fields,
+            &[11, 12, 13, 14, 16, 17, 18, 19, 20, 21, 22, 23, 24],
+        );
+        let response = response_fields(&bootp, 12_000, "bootp-sensor");
+        assert_eq!(&response[2..], fields);
+        assert_eq!(
+            bincode::deserialize::<Bootp>(&bincode::serialize(&bootp).unwrap()).unwrap(),
+            bootp
+        );
+    }
+
+    #[test]
+    fn test_dhcp_absent_values_display_and_serialization() {
+        let dhcp = Dhcp {
+            op: None,
+            ciaddr: None,
+            yiaddr: None,
+            server_id: None,
+            msg_type: None,
+            req_ip_addr: None,
+            subnet_mask: None,
+            hostname: None,
+            domain_name: None,
+            lease_time: None,
+            renewal_time: None,
+            rebinding_time: None,
+            client_id_type: None,
+            chaddr: vec![],
+            router: vec![],
+            domain_name_server: vec![],
+            param_req_list: vec![],
+            class_id: vec![],
+            client_id: vec![],
+            message: String::new(),
+            ..fixtures::dhcp(vec![])
+        };
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), 33);
+        assert_eq!(fields[12], "305419896");
+        let indices: Vec<_> = (11..33).filter(|index| *index != 12).collect();
+        assert_placeholder_fields(&fields, &indices);
+        let response = response_fields(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(&response[2..], fields);
+        assert_eq!(
+            bincode::deserialize::<Dhcp>(&bincode::serialize(&dhcp).unwrap()).unwrap(),
+            dhcp
+        );
+    }
+
+    #[test]
+    fn test_dhcp_present_empty_text_and_zero_values() {
+        let dhcp = Dhcp {
+            hostname: Some(String::new()),
+            domain_name: Some(String::new()),
+            lease_time: Some(0),
+            renewal_time: Some(0),
+            rebinding_time: Some(0),
+            client_id_type: Some(0),
+            ..fixtures::dhcp(vec![])
+        };
+        let fields = display_fields(&dhcp);
+        assert_placeholder_fields(&fields, &[22, 23]);
+        assert_field_values(&fields, &[(24, "0"), (25, "0"), (26, "0"), (29, "0")]);
+        assert_eq!(&response_fields(&dhcp, 13_000, "dhcp-sensor")[2..], fields);
+    }
+
+    #[test]
+    fn test_dhcp_response_data_transaction_fields() {
+        let dhcp = fixtures::dhcp(vec![(53, vec![5])]);
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), 33);
+        assert_eq!(fields[5], fmt_time(dhcp.start_time));
+        assert_eq!(
+            &fields[11..],
+            [
+                "RequestAndReply",
+                "305419896",
+                "0.0.0.0",
+                "192.0.2.70",
+                "192.0.2.1",
+                "0,1,2,3,4,5",
+                "Ack",
+                "192.0.2.80",
+                "255.255.255.0",
+                "192.0.2.1",
+                "192.0.2.2",
+                "myhost",
+                "example.com",
+                "86400",
+                "43200",
+                "64800",
+                "1,3,6",
+                "1,2,3",
+                "1",
+                "0,1,2,3,4,5",
+                "dhcp ack",
+                "53:05",
+            ]
+        );
+        let response = response_fields(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(response[0], fmt_time(13_000));
+        assert_eq!(response[1], "dhcp-sensor");
+        assert_eq!(&response[2..], fields);
     }
 
     #[test]
@@ -2868,7 +3120,7 @@ mod tests {
         };
 
         let fields = display_fields(&bootp);
-        assert_eq!(fields.len(), 22);
-        assert_placeholder_fields(&fields, &[19, 20, 21]);
+        assert_eq!(fields.len(), 25);
+        assert_placeholder_fields(&fields, &[22, 23, 24]);
     }
 }
