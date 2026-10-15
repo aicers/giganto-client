@@ -154,24 +154,32 @@ fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;
+
+    use crate::test::wait;
+
     #[tokio::test]
     async fn ingest_send_recv() {
         use std::{mem, net::IpAddr};
 
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // send/recv event type
-        super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn)
-            .await
-            .unwrap();
+        wait(
+            "super::send_record_header",
+            super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn),
+        )
+        .await
+        .unwrap();
 
         let mut buf = vec![0; mem::size_of::<u32>()];
-        super::receive_record_header(&mut channel.server.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::receive_record_header",
+            super::receive_record_header(&mut channel.server.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, u32::from(super::RawEventKind::Conn).to_le_bytes());
 
         // send/recv event data
@@ -192,106 +200,129 @@ mod tests {
             orig_l2_bytes: 21515,
             resp_l2_bytes: 27889,
         };
-        super::send_event(&mut channel.client.send, 9999, conn.clone())
-            .await
-            .unwrap();
-        let (data, timestamp) = super::receive_event(&mut channel.server.recv)
-            .await
-            .unwrap();
+        wait(
+            "super::send_event",
+            super::send_event(&mut channel.client.send, 9999, conn.clone()),
+        )
+        .await
+        .unwrap();
+        let (data, timestamp) = wait(
+            "super::receive_event",
+            super::receive_event(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(timestamp, 9999);
         assert_eq!(data, bincode::serialize(&conn).unwrap());
 
         // recv ack timestamp
-        crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes())
-            .await
-            .unwrap();
-        let timestamp = super::receive_ack_timestamp(&mut channel.server.recv)
-            .await
-            .unwrap();
+        wait(
+            "crate::frame::send_bytes",
+            crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes()),
+        )
+        .await
+        .unwrap();
+        let timestamp = wait(
+            "super::receive_ack_timestamp",
+            super::receive_ack_timestamp(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(timestamp, 8888);
     }
 
     #[tokio::test]
     async fn send_record_header_write_error_returns_error() {
         use crate::frame::SendError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Finish the stream to force a write error.
         channel.client.send.finish().ok();
 
-        let err = super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn)
-            .await
-            .expect_err("expected send_record_header to fail after finish");
+        let err = wait(
+            "super::send_record_header",
+            super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn),
+        )
+        .await
+        .expect_err("expected send_record_header to fail after finish");
         assert!(matches!(err, SendError::WriteError(_)));
     }
 
     #[tokio::test]
     async fn receive_record_header_short_read_returns_error() {
         use crate::frame::RecvError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&u32::from(super::RawEventKind::Conn).to_le_bytes()[..2])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel
+                .server
+                .send
+                .write_all(&u32::from(super::RawEventKind::Conn).to_le_bytes()[..2]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
         let mut buf = [0; std::mem::size_of::<u32>()];
-        let err = super::receive_record_header(&mut channel.client.recv, &mut buf)
-            .await
-            .expect_err("expected short read to fail");
+        let err = wait(
+            "super::receive_record_header",
+            super::receive_record_header(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .expect_err("expected short read to fail");
         assert!(matches!(err, RecvError::ReadError(_)));
     }
 
     #[tokio::test]
     async fn receive_event_short_read_returns_error() {
         use crate::frame::RecvError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&1234_i64.to_le_bytes()[..4])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&1234_i64.to_le_bytes()[..4]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let err = super::receive_event(&mut channel.client.recv)
-            .await
-            .expect_err("expected short read to fail");
+        let err = wait(
+            "super::receive_event",
+            super::receive_event(&mut channel.client.recv),
+        )
+        .await
+        .expect_err("expected short read to fail");
         assert!(matches!(err, RecvError::ReadError(_)));
     }
 
     #[tokio::test]
     async fn receive_ack_timestamp_short_read_returns_error() {
         use crate::frame::RecvError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&8888_i64.to_be_bytes()[..4])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&8888_i64.to_be_bytes()[..4]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let err = super::receive_ack_timestamp(&mut channel.client.recv)
-            .await
-            .expect_err("expected short read to fail");
+        let err = wait(
+            "super::receive_ack_timestamp",
+            super::receive_ack_timestamp(&mut channel.client.recv),
+        )
+        .await
+        .expect_err("expected short read to fail");
         assert!(matches!(err, RecvError::ReadError(_)));
     }
 

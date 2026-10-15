@@ -1,9 +1,11 @@
 //! Shared test code
 
-use std::sync::LazyLock;
+use std::{
+    future::{Future, IntoFuture},
+    time::Duration,
+};
 
 use quinn::{Connection, RecvStream, SendStream};
-use tokio::sync::Mutex;
 
 pub(crate) struct Channel {
     pub(crate) server: Endpoint,
@@ -16,7 +18,24 @@ pub(crate) struct Endpoint {
     pub(crate) recv: RecvStream,
 }
 
-pub(crate) static TOKEN: LazyLock<Mutex<u32>> = LazyLock::new(|| Mutex::new(0));
+pub(crate) const WAIT_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const EVENT_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Bounds one asynchronous operation, keeping timeout failures separate from its result.
+pub(crate) async fn wait<F: Future>(operation: &str, future: F) -> F::Output {
+    wait_with_timeout(operation, WAIT_TIMEOUT, future).await
+}
+
+/// Bounds propagation of a stream-stop or connection-close event.
+pub(crate) async fn wait_for_event<F: Future>(operation: &str, future: F) -> F::Output {
+    wait_with_timeout(operation, EVENT_WAIT_TIMEOUT, future).await
+}
+
+async fn wait_with_timeout<F: Future>(operation: &str, duration: Duration, future: F) -> F::Output {
+    tokio::time::timeout(duration, future)
+        .await
+        .unwrap_or_else(|_| panic!("timed out after {duration:?} waiting for {operation}"))
+}
 
 /// Creates a bidirectional channel, returning server's send and receive and
 /// client's send and receive streams.
@@ -28,7 +47,6 @@ pub(crate) async fn channel() -> Channel {
 
     use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer};
     const TEST_SERVER_NAME: &str = "test-server";
-    const TEST_PORT: u16 = 60190;
 
     let cert =
         rcgen::generate_simple_self_signed([TEST_SERVER_NAME.to_string()]).expect("infallible");
@@ -36,34 +54,42 @@ pub(crate) async fn channel() -> Channel {
     let key_der = PrivatePkcs8KeyDer::from(cert.key_pair.serialize_der());
     let server_config = quinn::ServerConfig::with_single_cert(cert_der.clone(), key_der.into())
         .expect("infallible");
-    let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), TEST_PORT);
+    let server_addr = SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 0);
 
-    let server_endpoint = {
-        loop {
-            break match quinn::Endpoint::server(server_config.clone(), server_addr) {
-                Ok(e) => e,
-                Err(e) => {
-                    if e.kind() == tokio::io::ErrorKind::AddrInUse {
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-                    panic!("{}", e);
-                }
-            };
-        }
-    };
+    let server_endpoint = quinn::Endpoint::server(server_config, server_addr)
+        .unwrap_or_else(|err| panic!("failed to create test server at {server_addr}: {err}"));
+    let server_addr = server_endpoint
+        .local_addr()
+        .expect("test server local address");
 
     let handle = tokio::spawn(async move {
-        let server_connection = match server_endpoint.accept().await {
-            Some(conn) => match conn.await {
-                Ok(conn) => conn,
-                Err(e) => panic!("{}", e.to_string()),
-            },
+        let server_connection = match wait(
+            "test server accepting incoming connection",
+            server_endpoint.accept(),
+        )
+        .await
+        {
+            Some(conn) => {
+                match wait("test server establishing connection", conn.into_future()).await {
+                    Ok(conn) => conn,
+                    Err(e) => panic!("{}", e.to_string()),
+                }
+            }
             None => panic!("connection closed"),
         };
-        let (server_send, mut server_recv) = server_connection.accept_bi().await.unwrap();
+        let (server_send, mut server_recv) = wait(
+            "test server accepting bidirectional stream",
+            server_connection.accept_bi(),
+        )
+        .await
+        .unwrap();
         let mut server_buf = [0; 5];
-        server_recv.read_exact(&mut server_buf).await.unwrap();
+        wait(
+            "test server receiving ready message",
+            server_recv.read_exact(&mut server_buf),
+        )
+        .await
+        .unwrap();
         (server_connection, server_send, server_recv)
     });
 
@@ -77,11 +103,24 @@ pub(crate) async fn channel() -> Channel {
         .connect_with(client_config, server_addr, TEST_SERVER_NAME)
         .unwrap();
 
-    let client_connection = client_connecting.await.unwrap();
-    let (mut client_send, client_recv) = client_connection.open_bi().await.unwrap();
-    client_send.write_all(b"ready").await.unwrap();
+    let client_connection = wait("test client establishing connection", client_connecting)
+        .await
+        .unwrap();
+    let (mut client_send, client_recv) = wait(
+        "test client opening bidirectional stream",
+        client_connection.open_bi(),
+    )
+    .await
+    .unwrap();
+    wait(
+        "test client sending ready message",
+        client_send.write_all(b"ready"),
+    )
+    .await
+    .unwrap();
 
-    let (server_connection, server_send, server_recv) = handle.await.unwrap();
+    let (server_connection, server_send, server_recv) =
+        wait("test server setup task", handle).await.unwrap();
 
     Channel {
         server: self::Endpoint {
