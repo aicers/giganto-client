@@ -159,6 +159,7 @@ fn prepare_buf(buf: &mut Vec<u8>, len: u64) -> Result<(), RecvError> {
 #[cfg(test)]
 mod tests {
     use super::{RecvError, SendError};
+    use crate::test::{wait, wait_for_event};
 
     /// Asserts that the result is a specific `RecvError` variant.
     ///
@@ -204,70 +205,94 @@ mod tests {
         };
     }
 
-    const EVENT_WAIT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
-
     async fn wait_for_stop_signal(send: &mut quinn::SendStream) {
-        tokio::time::timeout(EVENT_WAIT_TIMEOUT, send.stopped())
+        wait_for_event("peer STOP_SENDING", send.stopped())
             .await
-            .expect("timed out while waiting for peer STOP_SENDING")
             .expect("waiting for peer STOP_SENDING failed");
     }
 
     async fn wait_for_connection_close(conn: &quinn::Connection) {
-        tokio::time::timeout(EVENT_WAIT_TIMEOUT, conn.closed())
-            .await
-            .expect("timed out waiting for connection close");
+        wait_for_event("connection close", conn.closed()).await;
     }
 
     #[tokio::test]
     async fn frame_send_and_recv() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let mut buf = Vec::new();
-        super::send(&mut channel.server.send, &mut buf, "hello")
-            .await
-            .unwrap();
+        wait(
+            "super::send",
+            super::send(&mut channel.server.send, &mut buf, "hello"),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf.len(), 0);
-        super::recv_raw(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf[0] as usize, "hello".len());
         assert_eq!(&buf[8..], b"hello");
 
-        super::send_raw(&mut channel.server.send, b"world")
-            .await
-            .unwrap();
-        super::recv_raw(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::send_raw",
+            super::send_raw(&mut channel.server.send, b"world"),
+        )
+        .await
+        .unwrap();
+        wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, b"world");
 
-        super::send_bytes(&mut channel.server.send, b"hello")
-            .await
-            .unwrap();
-        super::recv_bytes(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::send_bytes",
+            super::send_bytes(&mut channel.server.send, b"hello"),
+        )
+        .await
+        .unwrap();
+        wait(
+            "super::recv_bytes",
+            super::recv_bytes(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, b"hello");
 
-        super::send_handshake(&mut channel.server.send, b"hello")
-            .await
-            .unwrap();
-        super::recv_handshake(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::send_handshake",
+            super::send_handshake(&mut channel.server.send, b"hello"),
+        )
+        .await
+        .unwrap();
+        wait(
+            "super::recv_handshake",
+            super::recv_handshake(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, b"hello");
 
-        super::send(&mut channel.server.send, &mut buf, "hello")
-            .await
-            .unwrap();
+        wait(
+            "super::send",
+            super::send(&mut channel.server.send, &mut buf, "hello"),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, [] as [u8; 0]);
-        let received = super::recv::<&str>(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        let received = wait(
+            "super::recv",
+            super::recv::<&str>(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(received, "hello");
     }
 
@@ -302,19 +327,25 @@ mod tests {
 
     #[tokio::test]
     async fn frame_error_cases() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Test RecvError::DeserializationFailure
         let mut buf = Vec::new();
         // Send a message that is clearly not a valid bincode for a complex struct.
         // Let's try to deserialize into a Vec<u32> from a single byte.
-        super::send_raw(&mut channel.server.send, b"1")
-            .await
-            .unwrap();
-        let result = super::recv::<Vec<u32>>(&mut channel.client.recv, &mut buf).await;
+        wait(
+            "super::send_raw",
+            super::send_raw(&mut channel.server.send, b"1"),
+        )
+        .await
+        .unwrap();
+        let result = wait(
+            "super::recv",
+            super::recv::<Vec<u32>>(&mut channel.client.recv, &mut buf),
+        )
+        .await;
         assert!(matches!(
             result,
             Err(super::RecvError::DeserializationFailure(_))
@@ -324,30 +355,39 @@ mod tests {
         // Let's try a reliable way to trigger MessageTooLarge:
         // 8-byte length in recv_handshake with u64::MAX.
         let huge_len_buf_64 = [255u8; 8];
-        channel
-            .server
-            .send
-            .write_all(&huge_len_buf_64)
-            .await
-            .unwrap();
-        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&huge_len_buf_64),
+        )
+        .await
+        .unwrap();
+        let result = wait(
+            "super::recv_handshake",
+            super::recv_handshake(&mut channel.client.recv, &mut buf),
+        )
+        .await;
         assert!(matches!(result, Err(super::RecvError::MessageTooLarge)));
 
         // Test Empty Message
-        super::send_raw(&mut channel.server.send, b"")
-            .await
-            .unwrap();
-        super::recv_raw(&mut channel.client.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::send_raw",
+            super::send_raw(&mut channel.server.send, b""),
+        )
+        .await
+        .unwrap();
+        wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, [] as [u8; 0]);
     }
 
     #[tokio::test]
     async fn recv_raw_returns_read_error_when_stream_closed_before_header() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the send stream without sending any data
@@ -355,7 +395,11 @@ mod tests {
 
         // Attempt to receive - should fail because stream closed before header
         let mut buf = Vec::new();
-        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -368,18 +412,26 @@ mod tests {
 
     #[tokio::test]
     async fn recv_raw_returns_read_error_when_stream_closed_during_header() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send only 2 bytes of a 4-byte header then close
-        channel.server.send.write_all(&[0x05, 0x00]).await.unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&[0x05, 0x00]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().unwrap();
 
         // Attempt to receive - should fail because stream closed mid-header
         let mut buf = Vec::new();
-        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -392,25 +444,33 @@ mod tests {
 
     #[tokio::test]
     async fn recv_raw_returns_read_error_when_payload_truncated() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send a header indicating 10 bytes but only provide 3 bytes of payload
         let len: u32 = 10;
-        channel
-            .server
-            .send
-            .write_all(&len.to_le_bytes())
-            .await
-            .unwrap();
-        channel.server.send.write_all(b"abc").await.unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&len.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(b"abc"),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().unwrap();
 
         // Attempt to receive - should fail because payload is truncated
         let mut buf = Vec::new();
-        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -426,9 +486,8 @@ mod tests {
 
     #[tokio::test]
     async fn recv_bytes_returns_read_error_when_stream_closed() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the send stream without sending any data
@@ -436,7 +495,11 @@ mod tests {
 
         // Attempt to receive 5 bytes - should fail because stream closed
         let mut buf = [0u8; 5];
-        let result = super::recv_bytes(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_bytes",
+            super::recv_bytes(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -449,9 +512,8 @@ mod tests {
 
     #[tokio::test]
     async fn recv_handshake_returns_read_error_when_stream_closed_before_header() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the send stream without sending any data
@@ -459,32 +521,44 @@ mod tests {
 
         // Attempt to receive handshake - should fail because stream closed
         let mut buf = Vec::new();
-        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_handshake",
+            super::recv_handshake(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
     }
 
     #[tokio::test]
     async fn recv_handshake_returns_read_error_when_payload_truncated() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send an 8-byte header indicating 100 bytes, but only send 10
         let len: u64 = 100;
-        channel
-            .server
-            .send
-            .write_all(&len.to_le_bytes())
-            .await
-            .unwrap();
-        channel.server.send.write_all(b"0123456789").await.unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&len.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(b"0123456789"),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().unwrap();
 
         // Attempt to receive handshake - should fail because payload truncated
         let mut buf = Vec::new();
-        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_handshake",
+            super::recv_handshake(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -500,30 +574,35 @@ mod tests {
 
     #[tokio::test]
     async fn recv_returns_deserialization_failure_for_invalid_data() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send raw bytes that cannot be deserialized as the expected type
         // We'll try to receive a String but send invalid bincode data
         let invalid_data = [0xFF, 0xFF, 0xFF, 0xFF, 0xFF]; // Invalid bincode for String
-        super::send_raw(&mut channel.server.send, &invalid_data)
-            .await
-            .unwrap();
+        wait(
+            "super::send_raw",
+            super::send_raw(&mut channel.server.send, &invalid_data),
+        )
+        .await
+        .unwrap();
 
         // Attempt to receive and deserialize as String - should fail
         let mut buf = Vec::new();
-        let result = super::recv::<String>(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv",
+            super::recv::<String>(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::DeserializationFailure(_));
     }
 
     #[tokio::test]
     async fn recv_returns_deserialization_failure_for_truncated_serialized_data() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send a truncated serialized string - missing the actual string bytes
@@ -533,22 +612,28 @@ mod tests {
             0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // length = 5
             b'a', b'b', // only 2 bytes instead of 5
         ];
-        super::send_raw(&mut channel.server.send, &truncated_data)
-            .await
-            .unwrap();
+        wait(
+            "super::send_raw",
+            super::send_raw(&mut channel.server.send, &truncated_data),
+        )
+        .await
+        .unwrap();
 
         // Attempt to receive as String - should fail deserialization
         let mut buf = Vec::new();
-        let result = super::recv::<String>(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv",
+            super::recv::<String>(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::DeserializationFailure(_));
     }
 
     #[tokio::test]
     async fn send_returns_write_error_when_stream_stopped() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Have the client stop the server's send stream with an error code
@@ -563,7 +648,11 @@ mod tests {
 
         // Attempt to send - should fail because stream was stopped
         let mut buf = Vec::new();
-        let result = super::send(&mut channel.server.send, &mut buf, "hello").await;
+        let result = wait(
+            "super::send",
+            super::send(&mut channel.server.send, &mut buf, "hello"),
+        )
+        .await;
 
         assert_send_err!(result, SendError::WriteError(_));
 
@@ -575,9 +664,8 @@ mod tests {
 
     #[tokio::test]
     async fn send_raw_returns_write_error_when_stream_stopped() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Have the client stop the server's send stream
@@ -591,16 +679,19 @@ mod tests {
         wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send raw - should fail
-        let result = super::send_raw(&mut channel.server.send, b"hello world").await;
+        let result = wait(
+            "super::send_raw",
+            super::send_raw(&mut channel.server.send, b"hello world"),
+        )
+        .await;
 
         assert_send_err!(result, SendError::WriteError(_));
     }
 
     #[tokio::test]
     async fn send_bytes_returns_write_error_when_stream_stopped() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Have the client stop the server's send stream
@@ -614,16 +705,19 @@ mod tests {
         wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send bytes - should fail
-        let result = super::send_bytes(&mut channel.server.send, b"hello").await;
+        let result = wait(
+            "super::send_bytes",
+            super::send_bytes(&mut channel.server.send, b"hello"),
+        )
+        .await;
 
         assert_send_err!(result, SendError::WriteError(_));
     }
 
     #[tokio::test]
     async fn send_handshake_returns_write_error_when_stream_stopped() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Have the client stop the server's send stream
@@ -637,16 +731,19 @@ mod tests {
         wait_for_stop_signal(&mut channel.server.send).await;
 
         // Attempt to send handshake - should fail
-        let result = super::send_handshake(&mut channel.server.send, b"handshake data").await;
+        let result = wait(
+            "super::send_handshake",
+            super::send_handshake(&mut channel.server.send, b"handshake data"),
+        )
+        .await;
 
         assert_send_err!(result, SendError::WriteError(_));
     }
 
     #[tokio::test]
     async fn send_returns_write_error_when_connection_closed() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the client connection entirely
@@ -660,7 +757,11 @@ mod tests {
 
         // Attempt to send - should fail because connection closed
         let mut buf = Vec::new();
-        let result = super::send(&mut channel.server.send, &mut buf, "hello").await;
+        let result = wait(
+            "super::send",
+            super::send(&mut channel.server.send, &mut buf, "hello"),
+        )
+        .await;
 
         assert_send_err!(result, SendError::WriteError(_));
 
@@ -676,9 +777,8 @@ mod tests {
 
     #[tokio::test]
     async fn recv_raw_returns_read_error_when_connection_closed() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the server connection entirely
@@ -692,25 +792,37 @@ mod tests {
 
         // Attempt to receive - should fail because connection closed
         let mut buf = Vec::new();
-        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
     }
 
     #[tokio::test]
     async fn recv_bytes_returns_read_error_for_partial_data() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send only 3 bytes then close
-        channel.server.send.write_all(b"abc").await.unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(b"abc"),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().unwrap();
 
         // Attempt to receive 10 bytes - should fail with FinishedEarly
         let mut buf = [0u8; 10];
-        let result = super::recv_bytes(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_bytes",
+            super::recv_bytes(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -723,9 +835,8 @@ mod tests {
 
     #[tokio::test]
     async fn recv_returns_read_error_when_empty_stream() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the stream immediately without sending anything
@@ -733,7 +844,11 @@ mod tests {
 
         // Attempt to receive - should fail because stream is empty
         let mut buf = Vec::new();
-        let result = super::recv::<String>(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv",
+            super::recv::<String>(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         // This should be a ReadError (FinishedEarly) since we can't even read the header
         assert_recv_err!(result, RecvError::ReadError(_));
@@ -743,23 +858,26 @@ mod tests {
     /// the 8-byte length header contains a value that exceeds allocatable capacity.
     #[tokio::test]
     async fn recv_handshake_returns_message_too_large_for_oversized_length() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send an 8-byte length header with u64::MAX, which exceeds any allocatable size
         let oversized_len: u64 = u64::MAX;
-        channel
-            .server
-            .send
-            .write_all(&oversized_len.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&oversized_len.to_le_bytes()),
+        )
+        .await
+        .unwrap();
 
         // Attempt to receive - should fail with MessageTooLarge
         let mut buf = Vec::new();
-        let result = super::recv_handshake(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_handshake",
+            super::recv_handshake(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::MessageTooLarge);
     }
@@ -792,7 +910,7 @@ mod tests {
     async fn send_returns_serialization_failure_for_unserializable_data() {
         use serde::ser::{Serialize, Serializer};
 
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
         // Define a type that always fails to serialize
         struct AlwaysFailsToSerialize;
@@ -809,11 +927,14 @@ mod tests {
             }
         }
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let mut buf = Vec::new();
-        let result = super::send(&mut channel.server.send, &mut buf, AlwaysFailsToSerialize).await;
+        let result = wait(
+            "super::send",
+            super::send(&mut channel.server.send, &mut buf, AlwaysFailsToSerialize),
+        )
+        .await;
 
         assert_send_err!(result, SendError::SerializationFailure(_));
     }
@@ -824,7 +945,7 @@ mod tests {
     async fn recv_returns_deserialization_failure_for_type_mismatch() {
         use serde::Deserialize;
 
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
         // Define a struct that expects specific fields
         #[derive(Debug, Deserialize)]
@@ -834,17 +955,23 @@ mod tests {
             _field3: Vec<u8>,
         }
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send a simple u32 value
         let mut buf = Vec::new();
-        super::send(&mut channel.server.send, &mut buf, 42u32)
-            .await
-            .unwrap();
+        wait(
+            "super::send",
+            super::send(&mut channel.server.send, &mut buf, 42u32),
+        )
+        .await
+        .unwrap();
 
         // Try to receive as a complex struct - should fail deserialization
-        let result = super::recv::<ExpectedStruct>(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv",
+            super::recv::<ExpectedStruct>(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::DeserializationFailure(_));
     }
@@ -852,9 +979,8 @@ mod tests {
     /// Tests `ReadError` variant wrapping `quinn::ReadExactError::ReadError`.
     #[tokio::test]
     async fn recv_raw_returns_read_error_with_read_error_variant_when_reset() {
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Reset the stream with an error code instead of finishing cleanly
@@ -866,7 +992,11 @@ mod tests {
 
         // Attempt to receive - should fail with a ReadError containing ReadError
         let mut buf = Vec::new();
-        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         assert_recv_err!(result, RecvError::ReadError(_));
 
@@ -910,16 +1040,19 @@ mod tests {
     async fn recv_error_source_chain_is_accessible() {
         use std::error::Error;
 
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Close the stream to trigger ReadError
         channel.server.send.finish().unwrap();
 
         let mut buf = Vec::new();
-        let result = super::recv_raw(&mut channel.client.recv, &mut buf).await;
+        let result = wait(
+            "super::recv_raw",
+            super::recv_raw(&mut channel.client.recv, &mut buf),
+        )
+        .await;
 
         if let Err(ref recv_err) = result {
             // Verify the error has a source (the underlying quinn error)
