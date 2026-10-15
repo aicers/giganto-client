@@ -10,7 +10,7 @@ anyhow = "1.0"
 bincode = "1"
 jiff = "0.2"
 num_enum = "0.7"
-quinn = "0.11"
+quinn = { version = "0.11", default-features = false }
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 strum = "0.27"
@@ -21,10 +21,13 @@ tokio = "1"
 [dev-dependencies]
 chrono = "0.4"
 futures = "0.3"
-quinn = { version = "0.11", features = ["ring"] }
-rcgen = "0.13"
+quinn = { version = "0.11", default-features = false, features = [
+  "runtime-tokio",
+  "rustls-aws-lc-rs",
+] }
+rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
 rustls = { version = "0.23", default-features = false, features = [
-  "ring",
+  "aws_lc_rs",
   "std",
 ] }
 tokio = { version = "1", features = ["macros", "rt", "sync"] }
