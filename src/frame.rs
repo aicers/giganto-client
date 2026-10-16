@@ -101,12 +101,21 @@ pub async fn send<T>(send: &mut SendStream, buf: &mut Vec<u8>, msg: T) -> Result
 where
     T: Serialize,
 {
+    prepare_frame(buf, msg)?;
+    send.write_all(buf).await?;
+    buf.clear();
+    Ok(())
+}
+
+/// Serializes a body and prepares its length header without writing to a stream.
+pub(crate) fn prepare_frame<T>(buf: &mut Vec<u8>, msg: T) -> Result<(), SendError>
+where
+    T: Serialize,
+{
     buf.resize(mem::size_of::<u32>(), 0);
     bincode::serialize_into(&mut *buf, &msg)?;
     let len = u32::try_from(buf.len() - mem::size_of::<u32>())?;
     buf[..mem::size_of::<u32>()].clone_from_slice(&len.to_le_bytes());
-    send.write_all(buf).await?;
-    buf.clear();
     Ok(())
 }
 
@@ -213,6 +222,19 @@ mod tests {
 
     async fn wait_for_connection_close(conn: &quinn::Connection) {
         wait_for_event("connection close", conn.closed()).await;
+    }
+
+    #[test]
+    fn prepare_frame_preserves_wire_format_and_reuses_buffer() {
+        let message = "x".repeat(256);
+        let body = bincode::serialize(&message).unwrap();
+        let mut buf = vec![0xff; 1024];
+        super::prepare_frame(&mut buf, &message).unwrap();
+        assert_eq!(&buf[..4], &264_u32.to_le_bytes());
+        assert_eq!(&buf[4..], body);
+
+        super::prepare_frame(&mut buf, ()).unwrap();
+        assert_eq!(buf, 0_u32.to_le_bytes());
     }
 
     #[tokio::test]

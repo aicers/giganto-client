@@ -8,6 +8,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Fixed
 
+- Fixed `send_event` and `send_range_data_request` transmitting a message prefix
+  before body serialization or length validation fails.
 - Fixed incorrect TCP CWR flag representation in NetFlow5 string output and
   publish query responses.
 - Fixed incorrect millisecond-to-second conversion of NetFlow5 `first` and
