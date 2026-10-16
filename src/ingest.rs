@@ -49,9 +49,10 @@ pub async fn send_event<T>(
 where
     T: Serialize,
 {
-    frame::send_bytes(send, &timestamp.to_le_bytes()).await?;
     let mut buf = Vec::new();
-    frame::send(send, &mut buf, record_data).await?;
+    frame::prepare_frame(&mut buf, record_data)?;
+    frame::send_bytes(send, &timestamp.to_le_bytes()).await?;
+    frame::send_bytes(send, &buf).await?;
     Ok(())
 }
 
@@ -156,6 +157,59 @@ mod tests {
     use chrono::DateTime;
 
     use crate::test::wait;
+
+    #[tokio::test]
+    async fn send_event_serialization_failure_leaves_stream_unchanged() {
+        struct BadSerialize;
+
+        impl serde::Serialize for BadSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("forced serialization error"))
+            }
+        }
+
+        let mut channel = crate::test::channel().await;
+        // Serialize part of the body before failing.
+        let result = wait(
+            "send failing event",
+            super::send_event(&mut channel.client.send, 1234, (42_u32, BadSerialize)),
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(super::SendError::SerializationFailure(_))
+        ));
+
+        wait(
+            "send valid event after failure",
+            super::send_event(&mut channel.client.send, -5678, "valid event"),
+        )
+        .await
+        .unwrap();
+        channel.client.send.finish().unwrap();
+
+        let (body, timestamp) = wait(
+            "receive valid event after failure",
+            super::receive_event(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(timestamp, -5678);
+        assert_eq!(body, bincode::serialize("valid event").unwrap());
+        let mut remaining = [0; 1];
+        assert_eq!(
+            wait(
+                "end of event stream",
+                channel.server.recv.read(&mut remaining)
+            )
+            .await
+            .unwrap(),
+            None
+        );
+    }
 
     #[tokio::test]
     async fn ingest_send_recv() {

@@ -18,6 +18,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   a peer stream. Client and server handshakes share receive-error conversion,
   so server receive failures now distinguish `ConnectionClosed`,
   `MessageTooLarge`, and the original `ReadError` instead of `InvalidMessage`.
+- Fixed `send_event` and `send_range_data_request` transmitting a message prefix
+  before body serialization or length validation fails.
 - Fixed incorrect TCP CWR flag representation in NetFlow5 string output and
   publish query responses.
 - Fixed incorrect millisecond-to-second conversion of NetFlow5 `first` and
