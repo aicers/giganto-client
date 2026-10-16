@@ -122,13 +122,12 @@ pub async fn send_range_data_request<T>(
 where
     T: Serialize,
 {
-    //send MessageCode
+    let mut buf = Vec::new();
+    frame::prepare_frame(&mut buf, request)?;
+
     let msg_code: u32 = msg.into();
     send_bytes(send, &msg_code.to_le_bytes()).await?;
-
-    //send RequestRange
-    let mut buf = Vec::new();
-    frame::send(send, &mut buf, request).await?;
+    send_bytes(send, &buf).await?;
     Ok(())
 }
 
@@ -984,12 +983,43 @@ mod tests {
             super::send_range_data_request(
                 &mut channel.client.send,
                 super::range::MessageCode::ReqRange,
-                BadSerialize,
+                (42_u32, BadSerialize),
             ),
         )
         .await;
 
         assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+
+        wait(
+            "send valid request after failure",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::RawData,
+                "valid request",
+            ),
+        )
+        .await
+        .unwrap();
+        channel.client.send.finish().unwrap();
+
+        let (code, body) = wait(
+            "receive valid request after failure",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, super::range::MessageCode::RawData);
+        assert_eq!(body, bincode::serialize("valid request").unwrap());
+        let mut remaining = [0; 1];
+        assert_eq!(
+            wait(
+                "end of request stream",
+                channel.server.recv.read(&mut remaining)
+            )
+            .await
+            .unwrap(),
+            None
+        );
     }
 
     #[tokio::test]
