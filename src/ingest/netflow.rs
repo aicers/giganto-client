@@ -121,7 +121,7 @@ static TCP_FLAGS: [(u8, &str); 8] = [
     (0x10, "ACK"),
     (0x20, "URG"),
     (0x40, "ECE"),
-    (0x08, "CWR"),
+    (0x80, "CWR"),
 ];
 
 fn tcp_flags(b: u8) -> String {
@@ -143,7 +143,7 @@ fn tcp_flags(b: u8) -> String {
 }
 
 fn millis_to_secs(millis: u32) -> String {
-    format!("{}.{}", millis / 1000, millis - (millis / 1000) * 1000)
+    format!("{}.{:03}", millis / 1000, millis % 1000)
 }
 
 #[cfg(test)]
@@ -164,7 +164,7 @@ mod tests {
             last: 2000,
             src_port: 80,
             dst_port: 8080,
-            tcp_flags: 0x02, // SYN
+            tcp_flags: 0x88, // PSH-CWR
             prot: 6,
             tos: 0,
             src_as: 65001,
@@ -178,10 +178,10 @@ mod tests {
             sampling_rate: 0,
         };
         let display = format!("{nf5}");
-        assert!(display.contains("127.0.0.1"));
-        assert!(display.contains("SYN"));
-        assert!(display.contains("1.0")); // first
-        assert!(display.contains("2.0")); // last
+        assert_eq!(
+            display,
+            "127.0.0.1\t192.168.0.1\t10.0.0.1\t1\t2\t10\t100\t1.000\t2.000\t80\t8080\tPSH-CWR\t6\t0\t65001\t65002\t24\t24\t123\t1\t1\t0\t0"
+        );
     }
 
     #[test]
@@ -214,11 +214,11 @@ mod tests {
             output: 2,
             d_pkts: 10,
             d_octets: 100,
-            first: 1500,
-            last: 3500,
+            first: 1001,
+            last: 1010,
             src_port: 1234,
             dst_port: 4321,
-            tcp_flags: 0x12, // SYN-ACK
+            tcp_flags: 0x88, // PSH-CWR
             prot: 6,
             tos: 0,
             src_as: 65001,
@@ -241,7 +241,10 @@ mod tests {
         assert_eq!(decoded_ts, timestamp);
         assert_eq!(decoded_sensor, sensor);
 
-        let expected_csv = format!("{}\t{nf5}", convert_time_format(timestamp));
+        let expected_csv = format!(
+            "{}\t10.0.0.1\t10.0.0.2\t10.0.0.3\t1\t2\t10\t100\t1.001\t1.010\t1234\t4321\tPSH-CWR\t6\t0\t65001\t65002\t24\t24\t123\t1\t2\t0\t0",
+            convert_time_format(timestamp)
+        );
         assert_eq!(decoded_csv, expected_csv.as_bytes());
 
         let row = String::from_utf8(decoded_csv).unwrap();
@@ -283,11 +286,30 @@ mod tests {
         assert_eq!(tcp_flags(0x02), "SYN");
         assert_eq!(tcp_flags(0x12), "SYN-ACK");
         assert_eq!(tcp_flags(0x00), "None");
+        assert_eq!(tcp_flags(0x08), "PSH");
+        assert_eq!(tcp_flags(0x80), "CWR");
+        assert_eq!(tcp_flags(0x88), "PSH-CWR");
     }
 
     #[test]
     fn test_millis_to_secs() {
-        assert_eq!(millis_to_secs(1234), "1.234");
-        assert_eq!(millis_to_secs(1000), "1.0");
+        for (millis, expected) in [
+            (0, "0.000"),
+            (1, "0.001"),
+            (10, "0.010"),
+            (99, "0.099"),
+            (100, "0.100"),
+            (123, "0.123"),
+            (999, "0.999"),
+            (1000, "1.000"),
+            (1001, "1.001"),
+            (1010, "1.010"),
+            (1099, "1.099"),
+            (1100, "1.100"),
+            (1234, "1.234"),
+            (u32::MAX, "4294967.295"),
+        ] {
+            assert_eq!(millis_to_secs(millis), expected, "millis: {millis}");
+        }
     }
 }
