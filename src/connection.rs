@@ -23,8 +23,21 @@ pub enum HandshakeError {
     MessageTooLarge,
     #[error("Invalid message")]
     InvalidMessage,
+    #[error("Invalid protocol version requirement")]
+    InvalidVersionRequirement(#[source] semver::Error),
     #[error("Protocol version {0} is not supported")]
     IncompatibleProtocol(String),
+}
+
+impl From<RecvError> for HandshakeError {
+    fn from(e: RecvError) -> Self {
+        match e {
+            RecvError::ReadError(quinn::ReadExactError::FinishedEarly(_)) => Self::ConnectionClosed,
+            RecvError::ReadError(quinn::ReadExactError::ReadError(e)) => Self::ReadError(e),
+            RecvError::MessageTooLarge => Self::MessageTooLarge,
+            RecvError::DeserializationFailure(_) => Self::InvalidMessage,
+        }
+    }
 }
 
 impl From<SendError> for HandshakeError {
@@ -58,20 +71,7 @@ pub async fn client_handshake(
         }
     }
 
-    match frame::recv_handshake(&mut recv, &mut buf).await {
-        Err(RecvError::ReadError(error)) => match error {
-            quinn::ReadExactError::FinishedEarly(_) => {
-                return Err(HandshakeError::ConnectionClosed);
-            }
-            quinn::ReadExactError::ReadError(e) => {
-                return Err(HandshakeError::ReadError(e));
-            }
-        },
-        Err(RecvError::MessageTooLarge) => {
-            return Err(HandshakeError::MessageTooLarge);
-        }
-        Ok(()) | Err(_) => {}
-    }
+    frame::recv_handshake(&mut recv, &mut buf).await?;
 
     bincode::deserialize::<Option<&str>>(&buf)
         .map_err(|_| HandshakeError::InvalidMessage)?
@@ -84,24 +84,24 @@ pub async fn client_handshake(
 ///
 /// # Errors
 ///
+/// Returns `HandshakeError::InvalidVersionRequirement` if `std_version` cannot
+/// be parsed as a version requirement, before waiting for a peer stream.
 /// Returns `HandshakeError` if the handshake failed.
-#[allow(clippy::missing_panics_doc)]
 pub async fn server_handshake(
     conn: &Connection,
     std_version: &str,
 ) -> Result<(SendStream, RecvStream), HandshakeError> {
+    let version_req =
+        VersionReq::parse(std_version).map_err(HandshakeError::InvalidVersionRequirement)?;
     let (mut send, mut recv) = conn
         .accept_bi()
         .await
         .map_err(HandshakeError::ConnectionLost)?;
 
     let mut buf = Vec::new();
-    recv_handshake(&mut recv, &mut buf)
-        .await
-        .map_err(|_| HandshakeError::InvalidMessage)?;
+    recv_handshake(&mut recv, &mut buf).await?;
 
     let recv_version = String::from_utf8(buf).map_err(|_| HandshakeError::InvalidMessage)?;
-    let version_req = VersionReq::parse(std_version).expect("valid version requirement");
     let protocol_version = Version::parse(&recv_version)
         .map_err(|_| HandshakeError::IncompatibleProtocol(recv_version))?;
     if version_req.matches(&protocol_version) {
@@ -254,6 +254,69 @@ mod tests {
         spawn_client_open_bi_raw_write_without_finish, spawn_client_open_bi_send_handshake,
         spawn_server_accept_bi_recv_handshake_then,
     };
+
+    #[tokio::test]
+    async fn handshake_error_invalid_requirement_before_accepting_peer_stream() {
+        use std::error::Error;
+
+        use futures::FutureExt;
+
+        let channel = channel().await;
+        let requirement = "not-a-version-requirement";
+        let expected = semver::VersionReq::parse(requirement).unwrap_err();
+
+        // No new peer stream is opened: the first poll must return the error.
+        let error = server_handshake(&channel.server.conn, requirement)
+            .now_or_never()
+            .expect("invalid requirements must be rejected without waiting for a peer")
+            .unwrap_err();
+        let HandshakeError::InvalidVersionRequirement(ref parse_error) = error else {
+            panic!("Expected InvalidVersionRequirement, got {error:?}");
+        };
+        assert_eq!(error.to_string(), "Invalid protocol version requirement");
+        assert_eq!(parse_error.to_string(), expected.to_string());
+        let source = error
+            .source()
+            .unwrap()
+            .downcast_ref::<semver::Error>()
+            .expect("source must preserve the semver parsing error");
+        assert!(std::ptr::eq(source, parse_error));
+    }
+
+    #[test]
+    fn handshake_error_invalid_message_from_deserialization_failure() {
+        let error =
+            frame::RecvError::DeserializationFailure(Box::new(bincode::ErrorKind::SizeLimit));
+        assert!(matches!(
+            HandshakeError::from(error),
+            HandshakeError::InvalidMessage
+        ));
+    }
+
+    #[tokio::test]
+    async fn handshake_error_read_reset_during_server_receive() {
+        let channel = channel().await;
+        let (server, client) = (channel.server, channel.client);
+        let reset_code = VarInt::from_u32(123);
+        let (mut send, _recv) = wait("client.conn.open_bi", client.conn.open_bi())
+            .await
+            .unwrap();
+        wait("send.write_all", send.write_all(&100u64.to_le_bytes()))
+            .await
+            .unwrap();
+
+        send.reset(reset_code).unwrap();
+
+        let result = wait(
+            "server_handshake",
+            server_handshake(&server.conn, DEFAULT_SERVER_VERSION_REQ),
+        )
+        .await;
+        assert!(
+            is_read_error_reset(&result, reset_code),
+            "Expected server ReadError::Reset with code {reset_code}, got {result:?}"
+        );
+    }
 
     #[tokio::test]
     #[allow(clippy::similar_names)]
@@ -476,7 +539,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handshake_error_invalid_message_on_truncated_handshake_body() {
+    async fn handshake_error_connection_closed_on_truncated_handshake_body() {
         let channel = channel().await;
         let (server, client) = (channel.server, channel.client);
 
@@ -493,8 +556,8 @@ mod tests {
         wait("joining task client_task", client_task).await.unwrap();
 
         assert!(
-            is_invalid_message(&result),
-            "Expected InvalidMessage for truncated handshake, got {result:?}"
+            is_connection_closed(&result),
+            "Expected ConnectionClosed for truncated handshake, got {result:?}"
         );
     }
 
@@ -691,7 +754,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handshake_error_invalid_message_on_huge_length_header() {
+    async fn handshake_error_message_too_large_on_huge_length_header() {
         let channel = channel().await;
         let (server, client) = (channel.server, channel.client);
 
@@ -708,8 +771,8 @@ mod tests {
         wait("joining task client_task", client_task).await.unwrap();
 
         assert!(
-            is_invalid_message(&result),
-            "Expected InvalidMessage (from oversized length header), got {result:?}"
+            is_message_too_large(&result),
+            "Expected MessageTooLarge for oversized length header, got {result:?}"
         );
     }
 

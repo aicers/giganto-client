@@ -6,8 +6,18 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Changed
+
+- Added the public `HandshakeError::InvalidVersionRequirement` variant;
+  downstream exhaustive matches on `HandshakeError` may need updating.
+
 ### Fixed
 
+- Invalid server handshake version requirements now return an error with the
+  original parsing error as its source instead of panicking, before waiting for
+  a peer stream. Client and server handshakes share receive-error conversion,
+  so server receive failures now distinguish `ConnectionClosed`,
+  `MessageTooLarge`, and the original `ReadError` instead of `InvalidMessage`.
 - Fixed incorrect TCP CWR flag representation in NetFlow5 string output and
   publish query responses.
 - Fixed incorrect millisecond-to-second conversion of NetFlow5 `first` and
