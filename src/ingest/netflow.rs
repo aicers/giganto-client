@@ -5,7 +5,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ingest::convert_time_format, publish::range::ResponseRangeData};
+use crate::{
+    ingest::{convert_time_format, sanitize_csv_field},
+    publish::range::ResponseRangeData,
+};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
@@ -101,7 +104,7 @@ impl Display for Netflow9 {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            self.contents
+            sanitize_csv_field(&self.contents)
         )
     }
 }
