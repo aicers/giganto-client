@@ -8,7 +8,7 @@ use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ingest::{as_str_or_default, convert_time_format, vec_to_string_or_default},
+    ingest::{convert_time_format, sanitize_csv_field, vec_to_string_or_default},
     publish::range::ResponseRangeData,
 };
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -40,10 +40,10 @@ impl Display for Conn {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            as_str_or_default(&self.conn_state),
+            sanitize_csv_field(&self.conn_state),
             convert_time_format(self.start_time),
             self.duration,
-            self.service,
+            sanitize_csv_field(&self.service),
             self.orig_bytes,
             self.resp_bytes,
             self.orig_pkts,
@@ -205,7 +205,7 @@ impl Display for Dns {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            self.query,
+            sanitize_csv_field(&self.query),
             vec_to_string_or_default(&self.answer),
             self.trans_id,
             self.rtt,
@@ -347,26 +347,26 @@ impl Display for Http {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.method),
-            as_str_or_default(&self.host),
-            as_str_or_default(&self.uri),
-            as_str_or_default(&self.referer),
-            as_str_or_default(&self.version),
-            crate::ingest::sanitize_csv_field(&self.user_agent),
+            sanitize_csv_field(&self.method),
+            sanitize_csv_field(&self.host),
+            sanitize_csv_field(&self.uri),
+            sanitize_csv_field(&self.referer),
+            sanitize_csv_field(&self.version),
+            sanitize_csv_field(&self.user_agent),
             self.request_len,
             self.response_len,
             self.status_code,
-            as_str_or_default(&self.status_msg),
-            as_str_or_default(&self.username),
-            as_str_or_default(&self.password),
-            as_str_or_default(&self.cookie),
-            as_str_or_default(&self.content_encoding),
-            as_str_or_default(&self.content_type),
-            as_str_or_default(&self.cache_control),
+            sanitize_csv_field(&self.status_msg),
+            sanitize_csv_field(&self.username),
+            sanitize_csv_field(&self.password),
+            sanitize_csv_field(&self.cookie),
+            sanitize_csv_field(&self.content_encoding),
+            sanitize_csv_field(&self.content_type),
+            sanitize_csv_field(&self.cache_control),
             vec_to_string_or_default(&self.filenames),
             vec_to_string_or_default(&self.mime_types),
             crate::ingest::sanitize_csv_field_bytes(&self.body),
-            as_str_or_default(&self.state),
+            sanitize_csv_field(&self.state),
         )
     }
 }
@@ -411,7 +411,7 @@ impl Display for Rdp {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            self.cookie
+            sanitize_csv_field(&self.cookie)
         )
     }
 }
@@ -462,13 +462,13 @@ impl Display for Smtp {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.mailfrom),
-            as_str_or_default(&self.date),
-            as_str_or_default(&self.from),
-            as_str_or_default(&self.to),
-            as_str_or_default(&self.subject),
-            as_str_or_default(&self.agent),
-            as_str_or_default(&self.state),
+            sanitize_csv_field(&self.mailfrom),
+            sanitize_csv_field(&self.date),
+            sanitize_csv_field(&self.from),
+            sanitize_csv_field(&self.to),
+            sanitize_csv_field(&self.subject),
+            sanitize_csv_field(&self.agent),
+            sanitize_csv_field(&self.state),
         )
     }
 }
@@ -517,11 +517,11 @@ impl Display for Ntlm {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.protocol),
-            as_str_or_default(&self.username),
-            as_str_or_default(&self.hostname),
-            as_str_or_default(&self.domainname),
-            as_str_or_default(&self.success),
+            sanitize_csv_field(&self.protocol),
+            sanitize_csv_field(&self.username),
+            sanitize_csv_field(&self.hostname),
+            sanitize_csv_field(&self.domainname),
+            sanitize_csv_field(&self.success),
         )
     }
 }
@@ -577,10 +577,10 @@ impl Display for Kerberos {
             convert_time_format(self.client_time),
             convert_time_format(self.server_time),
             self.error_code,
-            as_str_or_default(&self.client_realm),
+            sanitize_csv_field(&self.client_realm),
             self.cname_type,
             vec_to_string_or_default(&self.cname),
-            as_str_or_default(&self.realm),
+            sanitize_csv_field(&self.realm),
             self.sname_type,
             vec_to_string_or_default(&self.sname),
         )
@@ -639,19 +639,19 @@ impl Display for Ssh {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.client),
-            as_str_or_default(&self.server),
-            as_str_or_default(&self.cipher_alg),
-            as_str_or_default(&self.mac_alg),
-            as_str_or_default(&self.compression_alg),
-            as_str_or_default(&self.kex_alg),
-            as_str_or_default(&self.host_key_alg),
-            as_str_or_default(&self.hassh_algorithms),
-            as_str_or_default(&self.hassh),
-            as_str_or_default(&self.hassh_server_algorithms),
-            as_str_or_default(&self.hassh_server),
-            as_str_or_default(&self.client_shka),
-            as_str_or_default(&self.server_shka),
+            sanitize_csv_field(&self.client),
+            sanitize_csv_field(&self.server),
+            sanitize_csv_field(&self.cipher_alg),
+            sanitize_csv_field(&self.mac_alg),
+            sanitize_csv_field(&self.compression_alg),
+            sanitize_csv_field(&self.kex_alg),
+            sanitize_csv_field(&self.host_key_alg),
+            sanitize_csv_field(&self.hassh_algorithms),
+            sanitize_csv_field(&self.hassh),
+            sanitize_csv_field(&self.hassh_server_algorithms),
+            sanitize_csv_field(&self.hassh_server),
+            sanitize_csv_field(&self.client_shka),
+            sanitize_csv_field(&self.server_shka),
         )
     }
 }
@@ -790,8 +790,8 @@ impl Display for Ftp {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.user),
-            as_str_or_default(&self.password),
+            sanitize_csv_field(&self.user),
+            sanitize_csv_field(&self.password),
             vec_to_string_or_default(&self.commands),
         )
     }
@@ -802,16 +802,16 @@ impl Display for FtpCommand {
         write!(
             f,
             "({},{},{},{},{},{},{},{},{},{})",
-            as_str_or_default(&self.command),
-            as_str_or_default(&self.reply_code),
-            as_str_or_default(&self.reply_msg),
+            sanitize_csv_field(&self.command),
+            sanitize_csv_field(&self.reply_code),
+            sanitize_csv_field(&self.reply_msg),
             self.data_passive,
             self.data_orig_addr,
             self.data_resp_addr,
             self.data_resp_port,
-            as_str_or_default(&self.file),
+            sanitize_csv_field(&self.file),
             self.file_size,
-            as_str_or_default(&self.file_id),
+            sanitize_csv_field(&self.file_id),
         )
     }
 }
@@ -861,9 +861,9 @@ impl Display for Mqtt {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.protocol),
+            sanitize_csv_field(&self.protocol),
             self.version,
-            as_str_or_default(&self.client_id),
+            sanitize_csv_field(&self.client_id),
             self.connack_reason,
             vec_to_string_or_default(&self.subscribe),
             vec_to_string_or_default(&self.suback_reason),
@@ -988,26 +988,26 @@ impl Display for Tls {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            as_str_or_default(&self.server_name),
-            as_str_or_default(&self.alpn_protocol),
-            as_str_or_default(&self.ja3),
-            as_str_or_default(&self.version),
+            sanitize_csv_field(&self.server_name),
+            sanitize_csv_field(&self.alpn_protocol),
+            sanitize_csv_field(&self.ja3),
+            sanitize_csv_field(&self.version),
             vec_to_string_or_default(&self.client_cipher_suites),
             vec_to_string_or_default(&self.client_extensions),
             self.cipher,
             vec_to_string_or_default(&self.extensions),
-            as_str_or_default(&self.ja3s),
-            as_str_or_default(&self.serial),
-            as_str_or_default(&self.subject_country),
-            as_str_or_default(&self.subject_org_name),
-            as_str_or_default(&self.subject_common_name),
+            sanitize_csv_field(&self.ja3s),
+            sanitize_csv_field(&self.serial),
+            sanitize_csv_field(&self.subject_country),
+            sanitize_csv_field(&self.subject_org_name),
+            sanitize_csv_field(&self.subject_common_name),
             convert_time_format(self.validity_not_before),
             convert_time_format(self.validity_not_after),
-            as_str_or_default(&self.subject_alt_name),
-            as_str_or_default(&self.issuer_country),
-            as_str_or_default(&self.issuer_org_name),
-            as_str_or_default(&self.issuer_org_unit_name),
-            as_str_or_default(&self.issuer_common_name),
+            sanitize_csv_field(&self.subject_alt_name),
+            sanitize_csv_field(&self.issuer_country),
+            sanitize_csv_field(&self.issuer_org_name),
+            sanitize_csv_field(&self.issuer_org_unit_name),
+            sanitize_csv_field(&self.issuer_common_name),
             self.last_alert,
         )
     }
@@ -1064,9 +1064,9 @@ impl Display for Smb {
             self.orig_l2_bytes,
             self.resp_l2_bytes,
             self.command,
-            as_str_or_default(&self.path),
-            as_str_or_default(&self.service),
-            as_str_or_default(&self.file_name),
+            sanitize_csv_field(&self.path),
+            sanitize_csv_field(&self.service),
+            sanitize_csv_field(&self.file_name),
             self.file_size,
             self.resource_type,
             self.fid,
@@ -1185,8 +1185,8 @@ impl Display for Bootp {
             self.siaddr,
             self.giaddr,
             vec_to_string_or_default(&self.chaddr),
-            as_str_or_default(&self.sname),
-            as_str_or_default(&self.file),
+            sanitize_csv_field(&self.sname),
+            sanitize_csv_field(&self.file),
         )
     }
 }
@@ -1284,7 +1284,7 @@ impl Display for Dhcp {
             self.lease_time,
             self.server_id,
             vec_to_string_or_default(&self.param_req_list),
-            as_str_or_default(&self.message),
+            sanitize_csv_field(&self.message),
             self.renewal_time,
             self.rebinding_time,
             vec_to_string_or_default(&self.class_id),
@@ -1370,8 +1370,8 @@ impl Display for Radius {
             self.id,
             self.code,
             self.resp_code,
-            self.auth,
-            self.resp_auth,
+            sanitize_csv_field(&self.auth),
+            sanitize_csv_field(&self.resp_auth),
             vec_to_string_or_default(&self.user_name),
             vec_to_string_or_default(&self.user_passwd),
             vec_to_string_or_default(&self.chap_passwd),
@@ -1380,7 +1380,7 @@ impl Display for Radius {
             vec_to_string_or_default(&self.state),
             vec_to_string_or_default(&self.nas_id),
             self.nas_port_type,
-            self.message,
+            sanitize_csv_field(&self.message),
         )
     }
 }
@@ -2028,6 +2028,23 @@ mod tests {
             ],
         );
         assert_eq!(fields[6], fmt_time(conn.start_time));
+    }
+
+    #[test]
+    fn test_conn_display_sanitizes_string_fields() {
+        let mut conn = fixtures::conn();
+        conn.conn_state = "S\tF\r\n".to_string();
+        conn.service = String::new();
+
+        let output = conn.to_string();
+        assert_eq!(
+            output,
+            "192.168.4.76\t46378\t192.168.4.76\t80\t6\tS F  \t\
+             1970-01-01T00:00:00.000001+00:00\t500\t-\t77\t295\t397\t511\t21515\t27889"
+        );
+        assert_eq!(output.split('\t').count(), 15);
+        assert_eq!(output.lines().count(), 1);
+        assert!(!output.contains('\r'));
     }
 
     #[test]

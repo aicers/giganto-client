@@ -109,10 +109,6 @@ pub(crate) fn convert_time_format(timestamp: i64) -> String {
     )
 }
 
-fn as_str_or_default(s: &str) -> &str {
-    if s.is_empty() { "-" } else { s }
-}
-
 pub(crate) fn sanitize_csv_field(s: &str) -> String {
     if s.is_empty() {
         "-".to_string()
@@ -142,6 +138,7 @@ where
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(",")
+            .replace(['\t', '\n', '\r'], " ")
     }
 }
 
@@ -493,25 +490,6 @@ mod tests {
         }
     }
 
-    /// Table-driven tests for `as_str_or_default`
-    #[test]
-    fn as_str_or_default_edge_cases() {
-        // Static test cases
-        let static_cases: &[(&str, &str, &str)] = &[
-            ("empty string", "", "-"),
-            ("single character", "a", "a"),
-            ("whitespace only", " ", " "),
-            ("tab only", "\t", "\t"),
-            ("dash string", "-", "-"),
-            ("unicode string", "日本語", "日本語"),
-        ];
-
-        for (name, input, expected) in static_cases {
-            let result = super::as_str_or_default(input);
-            assert_eq!(result, *expected, "Test case '{name}' failed");
-        }
-    }
-
     /// Table-driven tests for `sanitize_csv_field`
     #[test]
     fn sanitize_csv_field_edge_cases() {
@@ -531,6 +509,21 @@ mod tests {
                 name: "normal text",
                 input: "normal text",
                 expected: "normal text",
+            },
+            TestCase {
+                name: "tab",
+                input: "\t",
+                expected: " ",
+            },
+            TestCase {
+                name: "line feed",
+                input: "\n",
+                expected: " ",
+            },
+            TestCase {
+                name: "carriage return",
+                input: "\r",
+                expected: " ",
             },
             TestCase {
                 name: "mixed special characters",
@@ -613,6 +606,14 @@ mod tests {
         }
 
         let cases_str: &[(&str, &[&str], &str)] = &[
+            ("empty list", &[], "-"),
+            ("empty element", &[""], ""),
+            ("empty elements", &["", ""], ","),
+            (
+                "tabs and newlines",
+                &["first\tvalue", "second\nvalue\r\n"],
+                "first value,second value  ",
+            ),
             ("single element", &["single"], "single"),
             ("string elements join", &["hello", "world"], "hello,world"),
             (
@@ -626,6 +627,34 @@ mod tests {
             let out = super::vec_to_string_or_default(input);
             assert_eq!(out, *expected, "&str case '{name}' failed: input={input:?}");
         }
+    }
+
+    #[test]
+    fn vec_to_string_or_default_preserves_ftp_command_format() {
+        use super::network::FtpCommand;
+
+        let command = FtpCommand {
+            command: "RETR\tfile".to_string(),
+            reply_code: "150".to_string(),
+            reply_msg: "opening\r\ndata".to_string(),
+            data_passive: true,
+            data_orig_addr: "192.0.2.1".parse().unwrap(),
+            data_resp_addr: "192.0.2.2".parse().unwrap(),
+            data_resp_port: 20,
+            file: "file\nname".to_string(),
+            file_size: 42,
+            file_id: String::new(),
+        };
+        let second_command = FtpCommand {
+            command: "STOR".to_string(),
+            ..command.clone()
+        };
+
+        assert_eq!(
+            super::vec_to_string_or_default(&[command, second_command]),
+            "(RETR file,150,opening  data,true,192.0.2.1,192.0.2.2,20,file name,42,-),\
+             (STOR,150,opening  data,true,192.0.2.1,192.0.2.2,20,file name,42,-)"
+        );
     }
 
     /// Table-driven tests for `to_string_or_empty` with various types and edge cases

@@ -8,6 +8,9 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
+- String fields and formatted lists in tab-separated output now consistently
+  replace tabs, line feeds, and carriage returns with spaces. Empty string values
+  in fields previously printed directly now appear as `-`.
 - Added the public `HandshakeError::InvalidVersionRequirement` variant;
   downstream exhaustive matches on `HandshakeError` may need updating.
 
