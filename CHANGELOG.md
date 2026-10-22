@@ -6,6 +6,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+
+- Added a multi-source range read and a re-read with per-source status to the
+  publish protocol. `MessageCode::MultiSourceRange` carries a
+  `RequestMultiSourceRange`, which reads one event kind from several sources,
+  each from its own start, up to a shared end and a shared total count.
+  `MessageCode::RawDataWithStatus` carries a `RequestRawData` and re-reads the
+  given events like `MessageCode::RawData`, but also reports sources it cannot
+  serve. Both responses end, after the usual `None` terminator, with one
+  `RangeStatus` frame: either a `SourceStatus` (`Served`, `NoNode` or
+  `Failed`) per requested source, or a failure of the whole request. The new
+  `send_range_status` and `receive_range_status` functions write and read that
+  frame. `MessageCode` gained variants, so downstream exhaustive matches on it
+  need new arms.
+
 ### Changed
 
 - String fields and formatted lists in tab-separated output now consistently

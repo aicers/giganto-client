@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use self::{
-    range::{MessageCode, ResponseRangeData},
+    range::{MessageCode, RangeStatus, ResponseRangeData},
     stream::{RequestStreamRecord, StreamRequestPayload},
 };
 use crate::frame::{self, RecvError, SendError, recv_bytes, recv_raw, send_bytes, send_raw};
@@ -155,6 +155,27 @@ where
     Ok(())
 }
 
+/// Sends the per-source status that ends a response to
+/// `MessageCode::MultiSourceRange` or `MessageCode::RawDataWithStatus` from
+/// giganto's publish module.
+///
+/// It is sent once, after the terminator frame written by
+/// `send_range_data::<T>(send, None)`, and before the stream is finished.
+///
+/// # Errors
+///
+/// * `PublishError::SerialDeserialFailure`: if the status could not be serialized
+/// * `PublishError::MessageTooLarge`: if the status is too large
+/// * `PublishError::WriteError`: if the status could not be written
+pub async fn send_range_status(
+    send: &mut SendStream,
+    status: &RangeStatus,
+) -> Result<(), PublishError> {
+    let mut buf = Vec::new();
+    frame::send(send, &mut buf, status).await?;
+    Ok(())
+}
+
 /// Sends the data `Vec<(timestamp, sensor, raw_events)>` from giganto's publish module.
 ///
 /// # Errors
@@ -296,6 +317,27 @@ where
 {
     let mut buf = Vec::new();
     Ok(frame::recv::<T>(recv, &mut buf).await?)
+}
+
+/// Receives the per-source status that ends a response to
+/// `MessageCode::MultiSourceRange` or `MessageCode::RawDataWithStatus` from
+/// giganto's publish module.
+///
+/// Call it after `receive_range_data` has returned the `None` terminator. A
+/// response that ends before its status frame is incomplete and must be
+/// treated as a failure of the whole request.
+///
+/// # Errors
+///
+/// * `PublishError::ConnectionClosed`: if the stream was finished before the
+///   status frame
+/// * `PublishError::SerialDeserialFailure`: if the status could not be
+///   deserialized
+/// * `PublishError::ReadError`: if the status could not be read
+/// * `PublishError::MessageTooLarge`: if the status exceeds the maximum size
+pub async fn receive_range_status(recv: &mut RecvStream) -> Result<RangeStatus, PublishError> {
+    let mut buf = Vec::new();
+    Ok(frame::recv::<RangeStatus>(recv, &mut buf).await?)
 }
 
 /// Receives the data `Vec<(timestamp, sensor, raw_events)>` sent from giganto's publish module.
@@ -771,6 +813,268 @@ mod tests {
         .unwrap();
         assert_eq!(msg_code, super::range::MessageCode::ReqRange);
         assert_eq!(data, bincode::serialize(&req_range).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_multi_source_range_request_roundtrip() {
+        use super::range::{MessageCode, RequestMultiSourceRange};
+
+        let mut channel = channel().await;
+
+        let request = RequestMultiSourceRange {
+            kind: String::from("conn"),
+            sources: vec![
+                (String::from("src 1"), 11111),
+                (String::from("src 2"), 15555),
+            ],
+            end: 22222,
+            count: 5,
+        };
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                MessageCode::MultiSourceRange,
+                request.clone(),
+            ),
+        )
+        .await
+        .unwrap();
+        let (msg_code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(msg_code, MessageCode::MultiSourceRange);
+        assert_eq!(data, bincode::serialize(&request).unwrap());
+        let received: RequestMultiSourceRange = bincode::deserialize(&data).unwrap();
+        assert_eq!(received, request);
+    }
+
+    #[tokio::test]
+    async fn test_raw_data_with_status_request_roundtrip() {
+        use super::range::{MessageCode, RequestRawData};
+
+        let mut channel = channel().await;
+
+        let request = RequestRawData {
+            kind: String::from("conn"),
+            input: vec![
+                (String::from("src 1"), vec![1, 2]),
+                (String::from("src 2"), vec![3]),
+            ],
+        };
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                MessageCode::RawDataWithStatus,
+                request.clone(),
+            ),
+        )
+        .await
+        .unwrap();
+        let (msg_code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(msg_code, MessageCode::RawDataWithStatus);
+        assert_eq!(data, bincode::serialize(&request).unwrap());
+    }
+
+    /// Mixed per-source statuses used by the full-response tests.
+    fn sample_source_statuses() -> Vec<(String, super::range::SourceStatus)> {
+        use super::range::SourceStatus;
+
+        vec![
+            (String::from("src 1"), SourceStatus::Served),
+            (String::from("src 2"), SourceStatus::NoNode),
+            (
+                String::from("src 3"),
+                SourceStatus::Failed(String::from("peer unreachable")),
+            ),
+        ]
+    }
+
+    #[tokio::test]
+    async fn test_range_status_full_response_byte_payload() {
+        use super::range::ResponseRangeData;
+
+        let mut channel = channel().await;
+
+        let conn = sample_conn();
+        let events = [(1i64, "src 1"), (2, "src 2"), (3, "src 1")];
+        for (timestamp, source) in events {
+            wait(
+                "super::send_range_data",
+                super::send_range_data(
+                    &mut channel.server.send,
+                    Some((conn.clone(), timestamp, source)),
+                ),
+            )
+            .await
+            .unwrap();
+        }
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<Conn>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
+        let status: super::range::RangeStatus = Ok(sample_source_statuses());
+        wait(
+            "super::send_range_status",
+            super::send_range_status(&mut channel.server.send, &status),
+        )
+        .await
+        .unwrap();
+        channel.server.send.finish().unwrap();
+
+        for (timestamp, source) in events {
+            let received = wait(
+                "super::receive_range_data",
+                super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(
+                    &mut channel.client.recv,
+                ),
+            )
+            .await
+            .unwrap();
+            let expected: Option<(i64, String, Vec<u8>)> =
+                bincode::deserialize(&conn.response_data(timestamp, source).unwrap()).unwrap();
+            assert!(expected.is_some());
+            assert_eq!(received, expected);
+        }
+        let done = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert!(done.is_none());
+        let received_status = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received_status, status);
+    }
+
+    #[tokio::test]
+    async fn test_range_status_full_response_time_series_payload() {
+        use crate::ingest::timeseries::PeriodicTimeSeries;
+
+        let mut channel = channel().await;
+
+        let series = [
+            (1i64, "policy 1", vec![1.0, 2.5]),
+            (2, "policy 2", vec![-3.25]),
+        ];
+        for (timestamp, source, data) in &series {
+            let value = PeriodicTimeSeries {
+                id: (*source).to_string(),
+                data: data.clone(),
+            };
+            wait(
+                "super::send_range_data",
+                super::send_range_data(&mut channel.server.send, Some((value, *timestamp, source))),
+            )
+            .await
+            .unwrap();
+        }
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<PeriodicTimeSeries>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
+        let status: super::range::RangeStatus = Ok(sample_source_statuses());
+        wait(
+            "super::send_range_status",
+            super::send_range_status(&mut channel.server.send, &status),
+        )
+        .await
+        .unwrap();
+        channel.server.send.finish().unwrap();
+
+        for (timestamp, source, data) in series {
+            let received = wait(
+                "super::receive_range_data",
+                super::receive_range_data::<Option<(i64, String, Vec<f64>)>>(
+                    &mut channel.client.recv,
+                ),
+            )
+            .await
+            .unwrap();
+            assert_eq!(received, Some((timestamp, source.to_string(), data)));
+        }
+        let done = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<f64>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert!(done.is_none());
+        let received_status = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received_status, status);
+    }
+
+    #[tokio::test]
+    async fn test_range_status_err_roundtrip() {
+        let mut channel = channel().await;
+
+        let status: super::range::RangeStatus = Err(String::from("store unavailable"));
+        wait(
+            "super::send_range_status",
+            super::send_range_status(&mut channel.server.send, &status),
+        )
+        .await
+        .unwrap();
+        let received = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received, status);
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_status_missing_frame_returns_connection_closed() {
+        let mut channel = channel().await;
+
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<Conn>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
+        channel.server.send.finish().unwrap();
+
+        let done = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert!(done.is_none());
+        let res = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await;
+        assert!(
+            matches!(res, Err(PublishError::ConnectionClosed)),
+            "Expected ConnectionClosed for a missing status frame, got {res:?}"
+        );
     }
 
     #[tokio::test]
