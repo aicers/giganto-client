@@ -560,29 +560,69 @@ Where the crate handles key material or secrets:
   exact invocations the shared linting and formatting rules refer to:
   - `cargo fmt -- --check --config group_imports=StdExternalCrate`
   - `cargo clippy --tests -- -D warnings`
-
-  It then runs markdownlint over `**/*.md` (in CI through
-  `DavidAnson/markdownlint-cli2-action@v24`, locally
-  `markdownlint-cli2 "**/*.md"`), and the shared instruction-block drift
-  check, which fails when the generated regions of this file stop matching
-  the release `.agent-instructions.toml` pins.
+- The `Markdown` job runs markdownlint over `**/*.md` (in CI through
+  `DavidAnson/markdownlint-cli2-action@v24`), and then the shared
+  instruction-block drift check, which fails when the generated regions of
+  this file stop matching the release `.agent-instructions.toml` pins.
 - The crate defines no Cargo features and has no binaries, `tests/`,
   `benches/` or `examples/`. `--tests` lints the library in its test
   build, which compiles every item, since the crate has no features and no
-  `cfg(not(test))` code.
+  `cfg(not(test))` code. Nothing in it is specific to an operating system,
+  so `check` gives the same result on macOS as on Linux.
 - There is no `Cargo.lock` check: `Cargo.lock` is listed in `.gitignore`
   and is not committed, as for a library crate.
-- Before committing, ensure those pass for the changed files.
-- Before pushing or opening a PR, run what the `test` job does:
-  `cargo build --verbose` and `cargo test --verbose`. CI runs it on both
-  `ubuntu-latest` and `macOS-latest`. The tests open real QUIC connections
-  over the IPv6 loopback address on port 0 (`channel` in `src/test.rs`),
-  so they need `::1` to be available.
-- Every job runs on every pull request; there is no docs-only path filter.
-- The `coverage` job runs
+- The `test` job runs `cargo build --verbose` and `cargo test --verbose`
+  on both `ubuntu-latest` and `macOS-latest`.
+- `check`, `test` and `coverage` are skipped when the `changes` job
+  (`Change Filter`) reports a docs-only change: every changed path matches
+  its `docs` filter (`**/*.md`, `LICENSE`, `.markdownlint*`,
+  `.agent-instructions.toml`) and none matches its `code` filter
+  (`src/**`, `tests/**`, `benches/**`, `examples/**`, `build.rs`,
+  `Cargo.*`, `.cargo/**`, the Clippy and rustfmt configuration files, and
+  `.github/workflows/**`). A path on neither list counts as code. If
+  `changes` fails, they run. `Markdown` always runs. The `CI Gate` job
+  needs every other job, passes a skipped one, fails a failed or cancelled
+  one, and fails when `changes` did not succeed; it is the check branch
+  protection is meant to require.
+- The `Documentation` workflow (`.github/workflows/doc.yml`, job `build`)
+  runs `cargo doc --no-deps` and publishes to GitHub Pages on a push to
+  `main` or a manual dispatch, so a pull request never runs it.
+- Run local checks on the host's own operating system: macOS on a Mac,
+  Linux on a Linux host. Do not use a container, a virtual machine or
+  another operating system in its place. A CI job or matrix entry that
+  exists only to cover another operating system or platform is left to CI;
+  every other row applies on any host that can run its commands.
+- A change is documentation-only when every changed path matches the
+  `docs` filter of the `changes` job in `.github/workflows/ci.yml` and
+  none matches its `code` filter. For such a change run only the `Markdown`
+  row, and build or test no code.
+- For any other change, run every row of the table below that applies to
+  the host before pushing. Run each test command as written, in full: do
+  not narrow it to the changed files or to selected test names.
+
+| CI job | Local command |
+| --- | --- |
+| `check` | `cargo fmt -- --check --config group_imports=StdExternalCrate` |
+| `check` | `cargo clippy --tests -- -D warnings` |
+| `test` | `cargo build --verbose` |
+| `test` | `cargo test --verbose` |
+| `Markdown` | `markdownlint-cli2 "**/*.md"` |
+| `Documentation` | `cargo doc --no-deps` |
+
+- `check` and `Documentation` run only on `ubuntu-latest` in CI, but they
+  do not exist to cover Linux: their rows apply on a Mac as well. `test`
+  applies on both, as CI runs it on both.
+- The tests open real QUIC connections over the IPv6 loopback address on
+  port 0 (`channel` in `src/test.rs`), so `test` needs `::1` to be
+  available.
+- Left to CI: `coverage`, which runs
   `cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info`
-  and uploads to Codecov. It is not expected to be run locally.
-- The `Documentation` workflow (`.github/workflows/doc.yml`) runs
-  `cargo doc --no-deps` and publishes to GitHub Pages on a push to `main`
-  or a manual dispatch, so a pull request never runs it. Run
-  `cargo doc --no-deps` locally after changing doc comments.
+  and uploads the report to Codecov with the repository's token, and
+  `Change Filter` and `CI Gate`, which classify and summarize the run
+  rather than check the code. The shared instruction-block drift check
+  runs in `Markdown`; the generated regions of this file are never edited
+  here.
+- When a CI job fails, rerun that job's command locally; for a test job,
+  rerun the failing tests by name rather than the whole suite.
+- Before requesting review, ensure every CI job passes on the pushed
+  branch.
