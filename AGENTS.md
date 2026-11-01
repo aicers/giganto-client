@@ -554,7 +554,7 @@ Where the crate handles key material or secrets:
   recorded in its pull request, as the shared rule asks, and an update of
   this section naming the module.
 
-## CI requirements
+## Validation
 
 - The `check` job (`ubuntu-latest`) in `.github/workflows/ci.yml` runs the
   exact invocations the shared linting and formatting rules refer to:
