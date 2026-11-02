@@ -11,6 +11,15 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Added an ARP transaction event for asset information collection, including
   optional request and response messages and stream-record support.
 
+### Changed
+
+- **Breaking:** Replaced the public `Dns` query/answer fields with DNS/mDNS
+  transaction headers and typed question, answer, authority, and additional
+  sections. Empty sections represent unavailable content. This changes the Rust
+  API, serde/bincode wire schema, and range-data display columns; producers and
+  consumers must update together. This change is scoped to `assets`; integration
+  into `main` is deferred to a separate issue.
+
 ## [0.28.0] - 2026-06-16
 
 ### Changed
