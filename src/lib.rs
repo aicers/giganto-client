@@ -62,6 +62,7 @@ pub enum RawEventKind {
     Radius = 23,
     MalformedDns = 24,
     Icmp = 25,
+    Arp = 26,
 
     // Windows Sysmon
     ProcessCreate = 31,
@@ -132,4 +133,7 @@ fn test_record_type() {
     );
 
     assert_eq!(RawEventKind::from_str("icmp").unwrap(), RawEventKind::Icmp);
+    assert_eq!(RawEventKind::from_str("arp").unwrap(), RawEventKind::Arp);
+    assert_eq!(u32::from(RawEventKind::Arp), 26);
+    assert_eq!(RawEventKind::try_from(26), Ok(RawEventKind::Arp));
 }

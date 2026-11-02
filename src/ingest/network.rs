@@ -11,6 +11,33 @@ use crate::{
     ingest::{as_str_or_default, convert_time_format, vec_to_string_or_default},
     publish::range::ResponseRangeData,
 };
+
+/// One ARP packet, including both Ethernet and ARP address fields.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ArpMessage {
+    pub timestamp: i64,
+    pub eth_src_mac: [u8; 6],
+    pub eth_dst_mac: [u8; 6],
+    pub sender_mac: [u8; 6],
+    pub sender_ip: IpAddr,
+    pub target_mac: [u8; 6],
+    pub target_ip: IpAddr,
+}
+
+/// An ARP transaction, including whichever request and response were observed.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Arp {
+    pub vlan_id: Option<u16>,
+    pub start_time: i64,
+    pub duration: i64,
+    pub orig_pkts: u64,
+    pub resp_pkts: u64,
+    pub orig_l2_bytes: u64,
+    pub resp_l2_bytes: u64,
+    pub request: Option<ArpMessage>,
+    pub response: Option<ArpMessage>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Conn {
     pub orig_addr: IpAddr,
@@ -1427,6 +1454,49 @@ impl ResponseRangeData for Icmp {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn arp_transaction_round_trips() {
+        use super::{Arp, ArpMessage};
+
+        let request = ArpMessage {
+            timestamp: 100,
+            eth_src_mac: [1, 2, 3, 4, 5, 6],
+            eth_dst_mac: [255; 6],
+            sender_mac: [6, 5, 4, 3, 2, 1],
+            sender_ip: [192, 0, 2, 1].into(),
+            target_mac: [0; 6],
+            target_ip: [192, 0, 2, 2].into(),
+        };
+        let response = ArpMessage {
+            timestamp: 101,
+            eth_src_mac: [7; 6],
+            eth_dst_mac: request.eth_src_mac,
+            sender_mac: [8; 6],
+            sender_ip: request.target_ip,
+            target_mac: request.sender_mac,
+            target_ip: request.sender_ip,
+        };
+        for (request, response) in [
+            (Some(request.clone()), Some(response.clone())),
+            (Some(request), None),
+            (None, Some(response)),
+        ] {
+            let event = Arp {
+                vlan_id: Some(42),
+                start_time: 100,
+                duration: 1,
+                orig_pkts: 1,
+                resp_pkts: u64::from(response.is_some()),
+                orig_l2_bytes: 60,
+                resp_l2_bytes: 60,
+                request,
+                response,
+            };
+            let encoded = bincode::serialize(&event).unwrap();
+            let decoded: Arp = bincode::deserialize(&encoded).unwrap();
+            assert_eq!(decoded, event);
+        }
+    }
     use std::fmt::Display;
 
     use super::*;
