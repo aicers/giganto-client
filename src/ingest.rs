@@ -49,9 +49,10 @@ pub async fn send_event<T>(
 where
     T: Serialize,
 {
-    frame::send_bytes(send, &timestamp.to_le_bytes()).await?;
     let mut buf = Vec::new();
-    frame::send(send, &mut buf, record_data).await?;
+    frame::prepare_frame(&mut buf, record_data)?;
+    frame::send_bytes(send, &timestamp.to_le_bytes()).await?;
+    frame::send_bytes(send, &buf).await?;
     Ok(())
 }
 
@@ -108,10 +109,6 @@ pub(crate) fn convert_time_format(timestamp: i64) -> String {
     )
 }
 
-fn as_str_or_default(s: &str) -> &str {
-    if s.is_empty() { "-" } else { s }
-}
-
 pub(crate) fn sanitize_csv_field(s: &str) -> String {
     if s.is_empty() {
         "-".to_string()
@@ -141,6 +138,7 @@ where
             .map(ToString::to_string)
             .collect::<Vec<_>>()
             .join(",")
+            .replace(['\t', '\n', '\r'], " ")
     }
 }
 
@@ -154,24 +152,85 @@ fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
 #[cfg(test)]
 mod tests {
     use chrono::DateTime;
+
+    use crate::test::wait;
+
+    #[tokio::test]
+    async fn send_event_serialization_failure_leaves_stream_unchanged() {
+        struct BadSerialize;
+
+        impl serde::Serialize for BadSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                Err(serde::ser::Error::custom("forced serialization error"))
+            }
+        }
+
+        let mut channel = crate::test::channel().await;
+        // Serialize part of the body before failing.
+        let result = wait(
+            "send failing event",
+            super::send_event(&mut channel.client.send, 1234, (42_u32, BadSerialize)),
+        )
+        .await;
+        assert!(matches!(
+            result,
+            Err(super::SendError::SerializationFailure(_))
+        ));
+
+        wait(
+            "send valid event after failure",
+            super::send_event(&mut channel.client.send, -5678, "valid event"),
+        )
+        .await
+        .unwrap();
+        channel.client.send.finish().unwrap();
+
+        let (body, timestamp) = wait(
+            "receive valid event after failure",
+            super::receive_event(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(timestamp, -5678);
+        assert_eq!(body, bincode::serialize("valid event").unwrap());
+        let mut remaining = [0; 1];
+        assert_eq!(
+            wait(
+                "end of event stream",
+                channel.server.recv.read(&mut remaining)
+            )
+            .await
+            .unwrap(),
+            None
+        );
+    }
+
     #[tokio::test]
     async fn ingest_send_recv() {
         use std::{mem, net::IpAddr};
 
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // send/recv event type
-        super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn)
-            .await
-            .unwrap();
+        wait(
+            "super::send_record_header",
+            super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn),
+        )
+        .await
+        .unwrap();
 
         let mut buf = vec![0; mem::size_of::<u32>()];
-        super::receive_record_header(&mut channel.server.recv, &mut buf)
-            .await
-            .unwrap();
+        wait(
+            "super::receive_record_header",
+            super::receive_record_header(&mut channel.server.recv, &mut buf),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, u32::from(super::RawEventKind::Conn).to_le_bytes());
 
         // send/recv event data
@@ -192,106 +251,129 @@ mod tests {
             orig_l2_bytes: 21515,
             resp_l2_bytes: 27889,
         };
-        super::send_event(&mut channel.client.send, 9999, conn.clone())
-            .await
-            .unwrap();
-        let (data, timestamp) = super::receive_event(&mut channel.server.recv)
-            .await
-            .unwrap();
+        wait(
+            "super::send_event",
+            super::send_event(&mut channel.client.send, 9999, conn.clone()),
+        )
+        .await
+        .unwrap();
+        let (data, timestamp) = wait(
+            "super::receive_event",
+            super::receive_event(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(timestamp, 9999);
         assert_eq!(data, bincode::serialize(&conn).unwrap());
 
         // recv ack timestamp
-        crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes())
-            .await
-            .unwrap();
-        let timestamp = super::receive_ack_timestamp(&mut channel.server.recv)
-            .await
-            .unwrap();
+        wait(
+            "crate::frame::send_bytes",
+            crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes()),
+        )
+        .await
+        .unwrap();
+        let timestamp = wait(
+            "super::receive_ack_timestamp",
+            super::receive_ack_timestamp(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(timestamp, 8888);
     }
 
     #[tokio::test]
     async fn send_record_header_write_error_returns_error() {
         use crate::frame::SendError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Finish the stream to force a write error.
         channel.client.send.finish().ok();
 
-        let err = super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn)
-            .await
-            .expect_err("expected send_record_header to fail after finish");
+        let err = wait(
+            "super::send_record_header",
+            super::send_record_header(&mut channel.client.send, super::RawEventKind::Conn),
+        )
+        .await
+        .expect_err("expected send_record_header to fail after finish");
         assert!(matches!(err, SendError::WriteError(_)));
     }
 
     #[tokio::test]
     async fn receive_record_header_short_read_returns_error() {
         use crate::frame::RecvError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&u32::from(super::RawEventKind::Conn).to_le_bytes()[..2])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel
+                .server
+                .send
+                .write_all(&u32::from(super::RawEventKind::Conn).to_le_bytes()[..2]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
         let mut buf = [0; std::mem::size_of::<u32>()];
-        let err = super::receive_record_header(&mut channel.client.recv, &mut buf)
-            .await
-            .expect_err("expected short read to fail");
+        let err = wait(
+            "super::receive_record_header",
+            super::receive_record_header(&mut channel.client.recv, &mut buf),
+        )
+        .await
+        .expect_err("expected short read to fail");
         assert!(matches!(err, RecvError::ReadError(_)));
     }
 
     #[tokio::test]
     async fn receive_event_short_read_returns_error() {
         use crate::frame::RecvError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&1234_i64.to_le_bytes()[..4])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&1234_i64.to_le_bytes()[..4]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let err = super::receive_event(&mut channel.client.recv)
-            .await
-            .expect_err("expected short read to fail");
+        let err = wait(
+            "super::receive_event",
+            super::receive_event(&mut channel.client.recv),
+        )
+        .await
+        .expect_err("expected short read to fail");
         assert!(matches!(err, RecvError::ReadError(_)));
     }
 
     #[tokio::test]
     async fn receive_ack_timestamp_short_read_returns_error() {
         use crate::frame::RecvError;
-        use crate::test::{TOKEN, channel};
+        use crate::test::channel;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&8888_i64.to_be_bytes()[..4])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&8888_i64.to_be_bytes()[..4]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let err = super::receive_ack_timestamp(&mut channel.client.recv)
-            .await
-            .expect_err("expected short read to fail");
+        let err = wait(
+            "super::receive_ack_timestamp",
+            super::receive_ack_timestamp(&mut channel.client.recv),
+        )
+        .await
+        .expect_err("expected short read to fail");
         assert!(matches!(err, RecvError::ReadError(_)));
     }
 
@@ -408,25 +490,6 @@ mod tests {
         }
     }
 
-    /// Table-driven tests for `as_str_or_default`
-    #[test]
-    fn as_str_or_default_edge_cases() {
-        // Static test cases
-        let static_cases: &[(&str, &str, &str)] = &[
-            ("empty string", "", "-"),
-            ("single character", "a", "a"),
-            ("whitespace only", " ", " "),
-            ("tab only", "\t", "\t"),
-            ("dash string", "-", "-"),
-            ("unicode string", "日本語", "日本語"),
-        ];
-
-        for (name, input, expected) in static_cases {
-            let result = super::as_str_or_default(input);
-            assert_eq!(result, *expected, "Test case '{name}' failed");
-        }
-    }
-
     /// Table-driven tests for `sanitize_csv_field`
     #[test]
     fn sanitize_csv_field_edge_cases() {
@@ -446,6 +509,21 @@ mod tests {
                 name: "normal text",
                 input: "normal text",
                 expected: "normal text",
+            },
+            TestCase {
+                name: "tab",
+                input: "\t",
+                expected: " ",
+            },
+            TestCase {
+                name: "line feed",
+                input: "\n",
+                expected: " ",
+            },
+            TestCase {
+                name: "carriage return",
+                input: "\r",
+                expected: " ",
             },
             TestCase {
                 name: "mixed special characters",
@@ -528,6 +606,14 @@ mod tests {
         }
 
         let cases_str: &[(&str, &[&str], &str)] = &[
+            ("empty list", &[], "-"),
+            ("empty element", &[""], ""),
+            ("empty elements", &["", ""], ","),
+            (
+                "tabs and newlines",
+                &["first\tvalue", "second\nvalue\r\n"],
+                "first value,second value  ",
+            ),
             ("single element", &["single"], "single"),
             ("string elements join", &["hello", "world"], "hello,world"),
             (
@@ -541,6 +627,34 @@ mod tests {
             let out = super::vec_to_string_or_default(input);
             assert_eq!(out, *expected, "&str case '{name}' failed: input={input:?}");
         }
+    }
+
+    #[test]
+    fn vec_to_string_or_default_preserves_ftp_command_format() {
+        use super::network::FtpCommand;
+
+        let command = FtpCommand {
+            command: "RETR\tfile".to_string(),
+            reply_code: "150".to_string(),
+            reply_msg: "opening\r\ndata".to_string(),
+            data_passive: true,
+            data_orig_addr: "192.0.2.1".parse().unwrap(),
+            data_resp_addr: "192.0.2.2".parse().unwrap(),
+            data_resp_port: 20,
+            file: "file\nname".to_string(),
+            file_size: 42,
+            file_id: String::new(),
+        };
+        let second_command = FtpCommand {
+            command: "STOR".to_string(),
+            ..command.clone()
+        };
+
+        assert_eq!(
+            super::vec_to_string_or_default(&[command, second_command]),
+            "(RETR file,150,opening  data,true,192.0.2.1,192.0.2.2,20,file name,42,-),\
+             (STOR,150,opening  data,true,192.0.2.1,192.0.2.2,20,file name,42,-)"
+        );
     }
 
     /// Table-driven tests for `to_string_or_empty` with various types and edge cases

@@ -6,7 +6,10 @@ use std::{
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{ingest::to_string_or_empty, publish::range::ResponseRangeData};
+use crate::{
+    ingest::{sanitize_csv_field, to_string_or_empty},
+    publish::range::ResponseRangeData,
+};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Log {
@@ -16,7 +19,12 @@ pub struct Log {
 
 impl Display for Log {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}\t{}", self.kind, String::from_utf8_lossy(&self.log))
+        write!(
+            f,
+            "{}\t{}",
+            sanitize_csv_field(&self.kind),
+            String::from_utf8_lossy(&self.log)
+        )
     }
 }
 
@@ -48,7 +56,10 @@ impl Display for OpLog {
         write!(
             f,
             "{}\t{}\t{:?}\t{}",
-            self.sensor, self.service_name, self.log_level, self.contents
+            sanitize_csv_field(&self.sensor),
+            sanitize_csv_field(&self.service_name),
+            self.log_level,
+            sanitize_csv_field(&self.contents)
         )
     }
 }
@@ -72,15 +83,15 @@ impl Display for SecuLog {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.kind,
-            self.log_type,
-            self.version,
+            sanitize_csv_field(&self.kind),
+            sanitize_csv_field(&self.log_type),
+            sanitize_csv_field(&self.version),
             to_string_or_empty(self.orig_addr),
             to_string_or_empty(self.orig_port),
             to_string_or_empty(self.resp_addr),
             to_string_or_empty(self.resp_port),
             to_string_or_empty(self.proto),
-            self.contents
+            sanitize_csv_field(&self.contents)
         )
     }
 }
@@ -121,6 +132,22 @@ mod tests {
             contents: "content".to_string(),
         };
         assert_eq!(format!("{op_log}"), "sensor\tgiganto\tInfo\tcontent");
+    }
+
+    #[test]
+    fn test_op_log_display_sanitizes_string_fields() {
+        let op_log = OpLog {
+            sensor: "sensor\tname".to_string(),
+            service_name: String::new(),
+            log_level: OpLogLevel::Warn,
+            contents: "first\nsecond\r\nlast".to_string(),
+        };
+
+        let output = op_log.to_string();
+        assert_eq!(output, "sensor name\t-\tWarn\tfirst second  last");
+        assert_eq!(output.split('\t').count(), 4);
+        assert_eq!(output.lines().count(), 1);
+        assert!(!output.contains('\r'));
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ingest::{convert_time_format, vec_to_string_or_default},
+    ingest::{convert_time_format, sanitize_csv_field, vec_to_string_or_default},
     publish::range::ResponseRangeData,
 };
 
@@ -42,29 +42,29 @@ impl Display for ProcessCreate {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.file_version,
-            self.description,
-            self.product,
-            self.company,
-            self.original_file_name,
-            self.command_line,
-            self.current_directory,
-            self.user,
-            self.logon_guid,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.file_version),
+            sanitize_csv_field(&self.description),
+            sanitize_csv_field(&self.product),
+            sanitize_csv_field(&self.company),
+            sanitize_csv_field(&self.original_file_name),
+            sanitize_csv_field(&self.command_line),
+            sanitize_csv_field(&self.current_directory),
+            sanitize_csv_field(&self.user),
+            sanitize_csv_field(&self.logon_guid),
             self.logon_id,
             self.terminal_session_id,
-            self.integrity_level,
+            sanitize_csv_field(&self.integrity_level),
             vec_to_string_or_default(&self.hashes),
-            self.parent_process_guid,
+            sanitize_csv_field(&self.parent_process_guid),
             self.parent_process_id,
-            self.parent_image,
-            self.parent_command_line,
-            self.parent_user
+            sanitize_csv_field(&self.parent_image),
+            sanitize_csv_field(&self.parent_command_line),
+            sanitize_csv_field(&self.parent_user)
         )
     }
 }
@@ -95,15 +95,15 @@ impl Display for FileCreationTimeChanged {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.target_filename,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_filename),
             convert_time_format(self.creation_utc_time),
             convert_time_format(self.previous_creation_utc_time),
-            self.user,
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -143,24 +143,24 @@ impl Display for NetworkConnection {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.user,
-            self.protocol,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.user),
+            sanitize_csv_field(&self.protocol),
             self.initiated,
             self.source_is_ipv6,
             self.source_ip,
-            self.source_hostname,
+            sanitize_csv_field(&self.source_hostname),
             self.source_port,
-            self.source_port_name,
+            sanitize_csv_field(&self.source_port_name),
             self.destination_is_ipv6,
             self.destination_ip,
-            self.destination_hostname,
+            sanitize_csv_field(&self.destination_hostname),
             self.destination_port,
-            self.destination_port_name,
+            sanitize_csv_field(&self.destination_port_name),
         )
     }
 }
@@ -188,12 +188,12 @@ impl Display for ProcessTerminated {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.user,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -235,22 +235,22 @@ impl Display for ImageLoaded {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.image_loaded,
-            self.file_version,
-            self.description,
-            self.product,
-            self.company,
-            self.original_file_name,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.image_loaded),
+            sanitize_csv_field(&self.file_version),
+            sanitize_csv_field(&self.description),
+            sanitize_csv_field(&self.product),
+            sanitize_csv_field(&self.company),
+            sanitize_csv_field(&self.original_file_name),
             vec_to_string_or_default(&self.hashes),
             self.signed,
-            self.signature,
-            self.signature_status,
-            self.user,
+            sanitize_csv_field(&self.signature),
+            sanitize_csv_field(&self.signature_status),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -280,14 +280,14 @@ impl Display for FileCreate {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.target_filename,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_filename),
             convert_time_format(self.creation_utc_time),
-            self.user,
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -318,15 +318,15 @@ impl Display for RegistryValueSet {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.event_type,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.event_type),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.target_object,
-            self.details,
-            self.user,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_object),
+            sanitize_csv_field(&self.details),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -362,15 +362,15 @@ impl Display for RegistryKeyValueRename {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.event_type,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.event_type),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.target_object,
-            self.new_name,
-            self.user,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_object),
+            sanitize_csv_field(&self.new_name),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -407,16 +407,16 @@ impl Display for FileCreateStreamHash {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.target_filename,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_filename),
             convert_time_format(self.creation_utc_time),
             vec_to_string_or_default(&self.hash),
-            self.contents,
-            self.user,
+            sanitize_csv_field(&self.contents),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -451,14 +451,14 @@ impl Display for PipeEvent {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.event_type,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.event_type),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.pipe_name,
-            self.image,
-            self.user,
+            sanitize_csv_field(&self.pipe_name),
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -489,15 +489,15 @@ impl Display for DnsEvent {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.query_name,
+            sanitize_csv_field(&self.query_name),
             self.query_status,
             vec_to_string_or_default(&self.query_results),
-            self.image,
-            self.user,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -529,13 +529,13 @@ impl Display for FileDelete {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.user,
-            self.image,
-            self.target_filename,
+            sanitize_csv_field(&self.user),
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_filename),
             vec_to_string_or_default(&self.hashes),
             self.is_executable,
             self.archived,
@@ -567,13 +567,13 @@ impl Display for ProcessTampering {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.image,
-            self.tamper_type,
-            self.user,
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.tamper_type),
+            sanitize_csv_field(&self.user),
         )
     }
 }
@@ -604,13 +604,13 @@ impl Display for FileDeleteDetected {
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
-            self.agent_name,
-            self.agent_id,
-            self.process_guid,
+            sanitize_csv_field(&self.agent_name),
+            sanitize_csv_field(&self.agent_id),
+            sanitize_csv_field(&self.process_guid),
             self.process_id,
-            self.user,
-            self.image,
-            self.target_filename,
+            sanitize_csv_field(&self.user),
+            sanitize_csv_field(&self.image),
+            sanitize_csv_field(&self.target_filename),
             vec_to_string_or_default(&self.hashes),
             self.is_executable,
         )

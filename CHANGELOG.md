@@ -4,6 +4,61 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.1] - 2026-11-01
+
+### Changed
+
+- giganto-client now depends on `quinn` with its default features turned off,
+  so it no longer brings `ring`, `rustls`, or quinn's Tokio runtime support
+  into a dependent's build. Its own API is unchanged. A dependent that got any
+  of quinn 0.11's default features (`rustls-ring`, `runtime-tokio`,
+  `platform-verifier`, `log`, and `bloom`) only through giganto-client must
+  now enable them on its own `quinn` dependency. For example,
+  `Endpoint::client` and `Endpoint::server` need a crypto provider (`ring` or
+  `aws-lc-rs`, usually through `rustls-ring` or `rustls-aws-lc-rs`) and an
+  async runtime such as `runtime-tokio`. A dependent whose own `quinn`
+  dependency keeps its default features sees no change.
+
+## [0.29.0] - 2026-10-22
+
+### Added
+
+- Added a multi-source range read and a re-read with per-source status to the
+  publish protocol. `MessageCode::MultiSourceRange` carries a
+  `RequestMultiSourceRange`, which reads one event kind from several sources,
+  each from its own start, up to a shared end and a shared total count.
+  `MessageCode::RawDataWithStatus` carries a `RequestRawData` and re-reads the
+  given events like `MessageCode::RawData`, but also reports sources it cannot
+  serve. Both responses end, after the usual `None` terminator, with one
+  `RangeStatus` frame: either a `SourceStatus` (`Served`, `NoNode` or
+  `Failed`) per requested source, or a failure of the whole request. The new
+  `send_range_status` and `receive_range_status` functions write and read that
+  frame. `MessageCode` gained variants, so downstream exhaustive matches on it
+  need new arms.
+
+### Changed
+
+- String fields and formatted lists in tab-separated output now consistently
+  replace tabs, line feeds, and carriage returns with spaces. Empty string values
+  in fields previously printed directly now appear as `-`.
+- Added the public `HandshakeError::InvalidVersionRequirement` variant;
+  downstream exhaustive matches on `HandshakeError` may need updating.
+
+### Fixed
+
+- Invalid server handshake version requirements now return an error with the
+  original parsing error as its source instead of panicking, before waiting for
+  a peer stream. Client and server handshakes share receive-error conversion,
+  so server receive failures now distinguish `ConnectionClosed`,
+  `MessageTooLarge`, and the original `ReadError` instead of `InvalidMessage`.
+- Fixed `send_event` and `send_range_data_request` transmitting a message prefix
+  before body serialization or length validation fails.
+- Fixed incorrect TCP CWR flag representation in NetFlow5 string output and
+  publish query responses.
+- Fixed incorrect millisecond-to-second conversion of NetFlow5 `first` and
+  `last` fields in string output and publish query responses. Values now
+  consistently use three fractional digits to preserve millisecond precision.
+
 ## [0.28.0] - 2026-06-16
 
 ### Changed
@@ -437,6 +492,8 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Move from giganto
 
+[0.29.1]: https://github.com/aicers/giganto-client/compare/0.29.0...0.29.1
+[0.29.0]: https://github.com/aicers/giganto-client/compare/0.28.0...0.29.0
 [0.28.0]: https://github.com/aicers/giganto-client/compare/0.27.0...0.28.0
 [0.27.0]: https://github.com/aicers/giganto-client/compare/0.26.0...0.27.0
 [0.26.0]: https://github.com/aicers/giganto-client/compare/0.25.0...0.26.0

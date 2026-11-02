@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 use self::{
-    range::{MessageCode, ResponseRangeData},
+    range::{MessageCode, RangeStatus, ResponseRangeData},
     stream::{RequestStreamRecord, StreamRequestPayload},
 };
 use crate::frame::{self, RecvError, SendError, recv_bytes, recv_raw, send_bytes, send_raw};
@@ -122,13 +122,12 @@ pub async fn send_range_data_request<T>(
 where
     T: Serialize,
 {
-    //send MessageCode
+    let mut buf = Vec::new();
+    frame::prepare_frame(&mut buf, request)?;
+
     let msg_code: u32 = msg.into();
     send_bytes(send, &msg_code.to_le_bytes()).await?;
-
-    //send RequestRange
-    let mut buf = Vec::new();
-    frame::send(send, &mut buf, request).await?;
+    send_bytes(send, &buf).await?;
     Ok(())
 }
 
@@ -153,6 +152,27 @@ where
         T::response_done().map_err(PublishError::SerialDeserialFailure)?
     };
     send_raw(send, &send_buf).await?;
+    Ok(())
+}
+
+/// Sends the per-source status that ends a response to
+/// `MessageCode::MultiSourceRange` or `MessageCode::RawDataWithStatus` from
+/// giganto's publish module.
+///
+/// It is sent once, after the terminator frame written by
+/// `send_range_data::<T>(send, None)`, and before the stream is finished.
+///
+/// # Errors
+///
+/// * `PublishError::SerialDeserialFailure`: if the status could not be serialized
+/// * `PublishError::MessageTooLarge`: if the status is too large
+/// * `PublishError::WriteError`: if the status could not be written
+pub async fn send_range_status(
+    send: &mut SendStream,
+    status: &RangeStatus,
+) -> Result<(), PublishError> {
+    let mut buf = Vec::new();
+    frame::send(send, &mut buf, status).await?;
     Ok(())
 }
 
@@ -299,6 +319,27 @@ where
     Ok(frame::recv::<T>(recv, &mut buf).await?)
 }
 
+/// Receives the per-source status that ends a response to
+/// `MessageCode::MultiSourceRange` or `MessageCode::RawDataWithStatus` from
+/// giganto's publish module.
+///
+/// Call it after `receive_range_data` has returned the `None` terminator. A
+/// response that ends before its status frame is incomplete and must be
+/// treated as a failure of the whole request.
+///
+/// # Errors
+///
+/// * `PublishError::ConnectionClosed`: if the stream was finished before the
+///   status frame
+/// * `PublishError::SerialDeserialFailure`: if the status could not be
+///   deserialized
+/// * `PublishError::ReadError`: if the status could not be read
+/// * `PublishError::MessageTooLarge`: if the status exceeds the maximum size
+pub async fn receive_range_status(recv: &mut RecvStream) -> Result<RangeStatus, PublishError> {
+    let mut buf = Vec::new();
+    Ok(frame::recv::<RangeStatus>(recv, &mut buf).await?)
+}
+
 /// Receives the data `Vec<(timestamp, sensor, raw_events)>` sent from giganto's publish module.
 ///
 /// # Errors
@@ -431,7 +472,7 @@ mod tests {
     use crate::frame;
     use crate::ingest::network::Conn;
     use crate::publish::{PublishError, recv_ack_response};
-    use crate::test::{TOKEN, channel};
+    use crate::test::{channel, wait};
 
     // =========================================================================
     // Test Helpers / Builders
@@ -574,7 +615,6 @@ mod tests {
     async fn test_stream_request_semi_supervised_roundtrip() {
         use crate::publish::stream::{RequestSemiSupervisedStream, StreamRequestPayload};
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // send/recv semi-supervised stream request
@@ -586,13 +626,19 @@ mod tests {
             super::stream::RequestStreamRecord::Conn,
             semi_supervised_req.clone(),
         );
-        super::send_stream_request(&mut channel.client.send, payload.clone())
-            .await
-            .unwrap();
+        wait(
+            "super::send_stream_request",
+            super::send_stream_request(&mut channel.client.send, payload.clone()),
+        )
+        .await
+        .unwrap();
 
-        let received_payload = super::receive_stream_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let received_payload = wait(
+            "super::receive_stream_request",
+            super::receive_stream_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(received_payload, payload);
     }
 
@@ -600,7 +646,6 @@ mod tests {
     async fn test_stream_request_time_series_roundtrip() {
         use crate::publish::stream::{RequestTimeSeriesGeneratorStream, StreamRequestPayload};
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // send/recv time series generator stream request
@@ -615,43 +660,58 @@ mod tests {
             super::stream::RequestStreamRecord::Conn,
             time_series_generator_req.clone(),
         );
-        super::send_stream_request(&mut channel.client.send, payload.clone())
-            .await
-            .unwrap();
+        wait(
+            "super::send_stream_request",
+            super::send_stream_request(&mut channel.client.send, payload.clone()),
+        )
+        .await
+        .unwrap();
 
-        let received_payload = super::receive_stream_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let received_payload = wait(
+            "super::receive_stream_request",
+            super::receive_stream_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(received_payload, payload);
     }
 
     #[tokio::test]
     async fn test_stream_start_messages_roundtrip() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // send/recv semi_supervised stream start message
-        super::send_semi_supervised_stream_start_message(
-            &mut channel.server.send,
-            super::stream::RequestStreamRecord::Conn,
+        wait(
+            "super::send_semi_supervised_stream_start_message",
+            super::send_semi_supervised_stream_start_message(
+                &mut channel.server.send,
+                super::stream::RequestStreamRecord::Conn,
+            ),
         )
         .await
         .unwrap();
-        let req_record =
-            super::receive_semi_supervised_stream_start_message(&mut channel.client.recv)
-                .await
-                .unwrap();
+        let req_record = wait(
+            "super::receive_semi_supervised_stream_start_message",
+            super::receive_semi_supervised_stream_start_message(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(req_record, super::stream::RequestStreamRecord::Conn);
 
         // recv time series generator stream start message
-        frame::send_raw(&mut channel.server.send, "1".to_string().as_bytes())
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, "1".to_string().as_bytes()),
+        )
+        .await
+        .unwrap();
 
-        let policy_id =
-            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
-                .await
-                .unwrap();
+        let policy_id = wait(
+            "super::receive_time_series_generator_stream_start_message",
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(policy_id, "1".parse::<u32>().unwrap());
     }
 
@@ -661,7 +721,6 @@ mod tests {
 
         // send/recv stream data with semi-supervised (semi-supervised's stream data use send_bytes
         // function)
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let conn = sample_conn();
@@ -675,13 +734,19 @@ mod tests {
         send_buf.extend_from_slice(&sensor);
         send_buf.extend_from_slice(&raw_len);
         send_buf.extend_from_slice(&raw_event);
-        send_bytes(&mut channel.server.send, &send_buf)
-            .await
-            .unwrap();
+        wait(
+            "send_bytes",
+            send_bytes(&mut channel.server.send, &send_buf),
+        )
+        .await
+        .unwrap();
 
-        let data = super::receive_semi_supervised_data(&mut channel.client.recv)
-            .await
-            .unwrap();
+        let data = wait(
+            "super::receive_semi_supervised_data",
+            super::receive_semi_supervised_data(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
         let mut result_buf: Vec<u8> = Vec::new();
         result_buf.extend_from_slice(&6666_i64.to_le_bytes());
         result_buf.extend_from_slice(&sensor);
@@ -691,28 +756,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_receive_time_series_generator_data_roundtrip() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // recv time series generator stream data
         let conn = sample_conn();
-        frame::send_bytes(&mut channel.server.send, &7777_i64.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "frame::send_bytes",
+            frame::send_bytes(&mut channel.server.send, &7777_i64.to_le_bytes()),
+        )
+        .await
+        .unwrap();
         let mut data_buf = Vec::new();
-        frame::send(&mut channel.server.send, &mut data_buf, conn.clone())
-            .await
-            .unwrap();
-        let (data, timestamp) = super::receive_time_series_generator_data(&mut channel.client.recv)
-            .await
-            .unwrap();
+        wait(
+            "frame::send",
+            frame::send(&mut channel.server.send, &mut data_buf, conn.clone()),
+        )
+        .await
+        .unwrap();
+        let (data, timestamp) = wait(
+            "super::receive_time_series_generator_data",
+            super::receive_time_series_generator_data(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(timestamp, 7777);
         assert_eq!(data, bincode::serialize(&conn).unwrap());
     }
 
     #[tokio::test]
     async fn test_range_data_request_roundtrip() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // send/recv range data request
@@ -723,25 +795,292 @@ mod tests {
             end: 22222,
             count: 5,
         };
-        super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            req_range.clone(),
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                req_range.clone(),
+            ),
         )
         .await
         .unwrap();
-        let (msg_code, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (msg_code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(msg_code, super::range::MessageCode::ReqRange);
         assert_eq!(data, bincode::serialize(&req_range).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_multi_source_range_request_roundtrip() {
+        use super::range::{MessageCode, RequestMultiSourceRange};
+
+        let mut channel = channel().await;
+
+        let request = RequestMultiSourceRange {
+            kind: String::from("conn"),
+            sources: vec![
+                (String::from("src 1"), 11111),
+                (String::from("src 2"), 15555),
+            ],
+            end: 22222,
+            count: 5,
+        };
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                MessageCode::MultiSourceRange,
+                request.clone(),
+            ),
+        )
+        .await
+        .unwrap();
+        let (msg_code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(msg_code, MessageCode::MultiSourceRange);
+        assert_eq!(data, bincode::serialize(&request).unwrap());
+        let received: RequestMultiSourceRange = bincode::deserialize(&data).unwrap();
+        assert_eq!(received, request);
+    }
+
+    #[tokio::test]
+    async fn test_raw_data_with_status_request_roundtrip() {
+        use super::range::{MessageCode, RequestRawData};
+
+        let mut channel = channel().await;
+
+        let request = RequestRawData {
+            kind: String::from("conn"),
+            input: vec![
+                (String::from("src 1"), vec![1, 2]),
+                (String::from("src 2"), vec![3]),
+            ],
+        };
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                MessageCode::RawDataWithStatus,
+                request.clone(),
+            ),
+        )
+        .await
+        .unwrap();
+        let (msg_code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(msg_code, MessageCode::RawDataWithStatus);
+        assert_eq!(data, bincode::serialize(&request).unwrap());
+    }
+
+    /// Mixed per-source statuses used by the full-response tests.
+    fn sample_source_statuses() -> Vec<(String, super::range::SourceStatus)> {
+        use super::range::SourceStatus;
+
+        vec![
+            (String::from("src 1"), SourceStatus::Served),
+            (String::from("src 2"), SourceStatus::NoNode),
+            (
+                String::from("src 3"),
+                SourceStatus::Failed(String::from("peer unreachable")),
+            ),
+        ]
+    }
+
+    #[tokio::test]
+    async fn test_range_status_full_response_byte_payload() {
+        use super::range::ResponseRangeData;
+
+        let mut channel = channel().await;
+
+        let conn = sample_conn();
+        let events = [(1i64, "src 1"), (2, "src 2"), (3, "src 1")];
+        for (timestamp, source) in events {
+            wait(
+                "super::send_range_data",
+                super::send_range_data(
+                    &mut channel.server.send,
+                    Some((conn.clone(), timestamp, source)),
+                ),
+            )
+            .await
+            .unwrap();
+        }
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<Conn>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
+        let status: super::range::RangeStatus = Ok(sample_source_statuses());
+        wait(
+            "super::send_range_status",
+            super::send_range_status(&mut channel.server.send, &status),
+        )
+        .await
+        .unwrap();
+        channel.server.send.finish().unwrap();
+
+        for (timestamp, source) in events {
+            let received = wait(
+                "super::receive_range_data",
+                super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(
+                    &mut channel.client.recv,
+                ),
+            )
+            .await
+            .unwrap();
+            let expected: Option<(i64, String, Vec<u8>)> =
+                bincode::deserialize(&conn.response_data(timestamp, source).unwrap()).unwrap();
+            assert!(expected.is_some());
+            assert_eq!(received, expected);
+        }
+        let done = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert!(done.is_none());
+        let received_status = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received_status, status);
+    }
+
+    #[tokio::test]
+    async fn test_range_status_full_response_time_series_payload() {
+        use crate::ingest::timeseries::PeriodicTimeSeries;
+
+        let mut channel = channel().await;
+
+        let series = [
+            (1i64, "policy 1", vec![1.0, 2.5]),
+            (2, "policy 2", vec![-3.25]),
+        ];
+        for (timestamp, source, data) in &series {
+            let value = PeriodicTimeSeries {
+                id: (*source).to_string(),
+                data: data.clone(),
+            };
+            wait(
+                "super::send_range_data",
+                super::send_range_data(&mut channel.server.send, Some((value, *timestamp, source))),
+            )
+            .await
+            .unwrap();
+        }
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<PeriodicTimeSeries>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
+        let status: super::range::RangeStatus = Ok(sample_source_statuses());
+        wait(
+            "super::send_range_status",
+            super::send_range_status(&mut channel.server.send, &status),
+        )
+        .await
+        .unwrap();
+        channel.server.send.finish().unwrap();
+
+        for (timestamp, source, data) in series {
+            let received = wait(
+                "super::receive_range_data",
+                super::receive_range_data::<Option<(i64, String, Vec<f64>)>>(
+                    &mut channel.client.recv,
+                ),
+            )
+            .await
+            .unwrap();
+            assert_eq!(received, Some((timestamp, source.to_string(), data)));
+        }
+        let done = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<f64>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert!(done.is_none());
+        let received_status = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received_status, status);
+    }
+
+    #[tokio::test]
+    async fn test_range_status_err_roundtrip() {
+        let mut channel = channel().await;
+
+        let status: super::range::RangeStatus = Err(String::from("store unavailable"));
+        wait(
+            "super::send_range_status",
+            super::send_range_status(&mut channel.server.send, &status),
+        )
+        .await
+        .unwrap();
+        let received = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(received, status);
+    }
+
+    #[tokio::test]
+    async fn test_receive_range_status_missing_frame_returns_connection_closed() {
+        let mut channel = channel().await;
+
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<Conn>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
+        channel.server.send.finish().unwrap();
+
+        let done = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
+        assert!(done.is_none());
+        let res = wait(
+            "super::receive_range_status",
+            super::receive_range_status(&mut channel.client.recv),
+        )
+        .await;
+        assert!(
+            matches!(res, Err(PublishError::ConnectionClosed)),
+            "Expected ConnectionClosed for a missing status frame, got {res:?}"
+        );
     }
 
     #[tokio::test]
     async fn test_pcap_extract_roundtrip() {
         use crate::publish::PcapFilter;
 
-        let _lock = TOKEN.lock().await;
         let channel = channel().await;
 
         // send/recv pcap extract request
@@ -758,44 +1097,70 @@ mod tests {
         let send_filter = p_filter.clone();
 
         let handle = tokio::spawn(async move {
-            super::pcap_extract_request(&channel.server.conn, &send_filter).await
+            wait(
+                "super::pcap_extract_request",
+                super::pcap_extract_request(&channel.server.conn, &send_filter),
+            )
+            .await
         });
 
-        let (send, recv) = channel.client.conn.accept_bi().await.unwrap();
-        let data = super::pcap_extract_response(send, recv).await.unwrap();
+        let (send, recv) = wait(
+            "channel.client.conn.accept_bi",
+            channel.client.conn.accept_bi(),
+        )
+        .await
+        .unwrap();
+        let data = wait(
+            "super::pcap_extract_response",
+            super::pcap_extract_response(send, recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(data, p_filter);
 
-        let res = tokio::join!(handle).0.unwrap();
+        let res = wait("joining task handle", handle).await.unwrap();
         assert!(res.is_ok());
     }
 
     #[tokio::test]
     async fn test_send_ok_ack_response() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let mut buf = Vec::new();
-        super::send_ok(&mut channel.server.send, &mut buf, "hello")
-            .await
-            .unwrap();
+        wait(
+            "super::send_ok",
+            super::send_ok(&mut channel.server.send, &mut buf, "hello"),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, [] as [u8; 0]);
-        let resp_result = recv_ack_response(&mut channel.client.recv).await.is_ok();
+        let resp_result = wait(
+            "recv_ack_response",
+            recv_ack_response(&mut channel.client.recv),
+        )
+        .await
+        .is_ok();
         assert!(resp_result);
     }
 
     #[tokio::test]
     async fn test_send_err_ack_response() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let mut buf = Vec::new();
-        super::send_err(&mut channel.server.send, &mut buf, "hello")
-            .await
-            .unwrap();
+        wait(
+            "super::send_err",
+            super::send_err(&mut channel.server.send, &mut buf, "hello"),
+        )
+        .await
+        .unwrap();
         assert_eq!(buf, [] as [u8; 0]);
-        let resp = recv_ack_response(&mut channel.client.recv)
-            .await
-            .unwrap_err();
+        let resp = wait(
+            "recv_ack_response",
+            recv_ack_response(&mut channel.client.recv),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(
             resp.to_string(),
             PublishError::PcapRequestFail("hello".to_string()).to_string()
@@ -807,7 +1172,6 @@ mod tests {
         use crate::RawEventKind;
         use crate::publish::range::{MessageCode, RequestRawData};
         use crate::publish::{receive_raw_events, send_raw_events};
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let msg_code = MessageCode::RawData;
@@ -831,13 +1195,19 @@ mod tests {
             input: req_msg,
         };
 
-        super::send_range_data_request(&mut channel.client.send, msg_code, req_raw.clone())
-            .await
-            .unwrap();
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(&mut channel.client.send, msg_code, req_raw.clone()),
+        )
+        .await
+        .unwrap();
 
-        let (msg_code, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (msg_code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
 
         let recv_request = bincode::deserialize::<RequestRawData>(&data).unwrap();
         assert_eq!(msg_code, MessageCode::RawData);
@@ -854,11 +1224,19 @@ mod tests {
             (ts1, sensor2.to_string(), raw_event),
         ];
 
-        send_raw_events(&mut channel.server.send, value_with_sensors.clone())
-            .await
-            .unwrap();
+        wait(
+            "send_raw_events",
+            send_raw_events(&mut channel.server.send, value_with_sensors.clone()),
+        )
+        .await
+        .unwrap();
 
-        let recv_data = receive_raw_events(&mut channel.client.recv).await.unwrap();
+        let recv_data = wait(
+            "receive_raw_events",
+            receive_raw_events(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
 
         assert_eq!(recv_data.len(), 4);
         assert_eq!(recv_data, value_with_sensors);
@@ -866,7 +1244,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_stream_request_closed_stream_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         channel.client.send.finish().ok();
@@ -876,20 +1253,26 @@ mod tests {
             SemiSupervisedStreamBuilder::new().build(),
         );
 
-        let res = super::send_stream_request(&mut channel.client.send, payload).await;
+        let res = wait(
+            "super::send_stream_request",
+            super::send_stream_request(&mut channel.client.send, payload),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::WriteError(_))));
     }
 
     #[tokio::test]
     async fn test_send_semi_supervised_stream_start_message_closed_stream_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         channel.server.send.finish().ok();
 
-        let res = super::send_semi_supervised_stream_start_message(
-            &mut channel.server.send,
-            super::stream::RequestStreamRecord::Conn,
+        let res = wait(
+            "super::send_semi_supervised_stream_start_message",
+            super::send_semi_supervised_stream_start_message(
+                &mut channel.server.send,
+                super::stream::RequestStreamRecord::Conn,
+            ),
         )
         .await;
         assert!(matches!(res, Err(PublishError::WriteError(_))));
@@ -897,31 +1280,66 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_range_data_request_serialization_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        let res = super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            BadSerialize,
+        let res = wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                (42_u32, BadSerialize),
+            ),
         )
         .await;
 
         assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
+
+        wait(
+            "send valid request after failure",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::RawData,
+                "valid request",
+            ),
+        )
+        .await
+        .unwrap();
+        channel.client.send.finish().unwrap();
+
+        let (code, body) = wait(
+            "receive valid request after failure",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
+        assert_eq!(code, super::range::MessageCode::RawData);
+        assert_eq!(body, bincode::serialize("valid request").unwrap());
+        let mut remaining = [0; 1];
+        assert_eq!(
+            wait(
+                "end of request stream",
+                channel.server.recv.read(&mut remaining)
+            )
+            .await
+            .unwrap(),
+            None
+        );
     }
 
     #[tokio::test]
     async fn test_send_range_data_request_closed_stream_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         channel.client.send.finish().ok();
 
         let request = RequestRangeBuilder::new().build();
-        let res = super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            request,
+        let res = wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                request,
+            ),
         )
         .await;
 
@@ -930,61 +1348,76 @@ mod tests {
 
     #[tokio::test]
     async fn test_send_range_data_response_data_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        let res =
-            super::send_range_data(&mut channel.server.send, Some((BadResponseData, 1, "s1")))
-                .await;
+        let res = wait(
+            "super::send_range_data",
+            super::send_range_data(&mut channel.server.send, Some((BadResponseData, 1, "s1"))),
+        )
+        .await;
 
         assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
     }
 
     #[tokio::test]
     async fn test_send_range_data_response_done_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        let res = super::send_range_data::<BadResponseDone>(&mut channel.server.send, None).await;
+        let res = wait(
+            "super::send_range_data",
+            super::send_range_data::<BadResponseDone>(&mut channel.server.send, None),
+        )
+        .await;
 
         assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
     }
 
     #[tokio::test]
     async fn test_send_range_data_closed_stream_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         channel.server.send.finish().ok();
 
-        let res =
-            super::send_range_data(&mut channel.server.send, Some((sample_conn(), 1, "s1"))).await;
+        let res = wait(
+            "super::send_range_data",
+            super::send_range_data(&mut channel.server.send, Some((sample_conn(), 1, "s1"))),
+        )
+        .await;
 
         assert!(matches!(res, Err(PublishError::WriteError(_))));
     }
 
     #[tokio::test]
     async fn test_send_raw_events_closed_stream_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         channel.server.send.finish().ok();
 
-        let res = super::send_raw_events(&mut channel.server.send, vec![]).await;
+        let res = wait(
+            "super::send_raw_events",
+            super::send_raw_events(&mut channel.server.send, vec![]),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::WriteError(_))));
     }
 
     #[tokio::test]
     async fn test_pcap_extract_response_err() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send invalid data that will fail deserialization to PcapFilter
-        frame::send_raw(&mut channel.server.send, b"invalid data")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"invalid data"),
+        )
+        .await
+        .unwrap();
 
-        let res = super::pcap_extract_response(channel.client.send, channel.client.recv).await;
+        let res = wait(
+            "super::pcap_extract_response",
+            super::pcap_extract_response(channel.client.send, channel.client.recv),
+        )
+        .await;
         assert!(matches!(
             res,
             Err(PublishError::PcapRequestFail(msg)) if msg.contains("Failed deserializing message")
@@ -992,9 +1425,12 @@ mod tests {
 
         // Verify server received the error response (via recv_ack_response)
         let mut ack_buf = Vec::new();
-        frame::recv_raw(&mut channel.server.recv, &mut ack_buf)
-            .await
-            .unwrap();
+        wait(
+            "frame::recv_raw",
+            frame::recv_raw(&mut channel.server.recv, &mut ack_buf),
+        )
+        .await
+        .unwrap();
         let resp = bincode::deserialize::<Result<(), String>>(&ack_buf).unwrap();
         assert!(matches!(
             resp,
@@ -1004,102 +1440,127 @@ mod tests {
 
     #[tokio::test]
     async fn test_receive_time_series_generator_stream_start_message_invalid_data() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send non-numeric string
-        frame::send_raw(&mut channel.server.send, b"not a number")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"not a number"),
+        )
+        .await
+        .unwrap();
 
-        let res =
-            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
-                .await;
+        let res = wait(
+            "super::receive_time_series_generator_stream_start_message",
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::InvalidMessageData)));
 
         // Send invalid UTF-8
-        frame::send_raw(&mut channel.server.send, &[0xFF, 0xFE, 0xFD])
-            .await
-            .unwrap();
-        let res =
-            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
-                .await;
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, &[0xFF, 0xFE, 0xFD]),
+        )
+        .await
+        .unwrap();
+        let res = wait(
+            "super::receive_time_series_generator_stream_start_message",
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::InvalidMessageData)));
     }
 
     #[tokio::test]
     async fn test_receive_semi_supervised_stream_start_message_invalid_type() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send invalid enum variant (e.g. u32::MAX)
-        frame::send_bytes(&mut channel.server.send, &u32::MAX.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "frame::send_bytes",
+            frame::send_bytes(&mut channel.server.send, &u32::MAX.to_le_bytes()),
+        )
+        .await
+        .unwrap();
 
-        let res =
-            super::receive_semi_supervised_stream_start_message(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_semi_supervised_stream_start_message",
+            super::receive_semi_supervised_stream_start_message(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::InvalidMessageType)));
     }
 
     #[tokio::test]
     async fn test_receive_range_data_request_invalid_type() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send invalid enum variant
-        frame::send_bytes(&mut channel.server.send, &u32::MAX.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "frame::send_bytes",
+            frame::send_bytes(&mut channel.server.send, &u32::MAX.to_le_bytes()),
+        )
+        .await
+        .unwrap();
 
-        let res = super::receive_range_data_request(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::InvalidMessageType)));
     }
 
     #[tokio::test]
     async fn test_receive_range_data_request_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&u32::to_le_bytes(123)[..2])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&u32::to_le_bytes(123)[..2]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res = super::receive_range_data_request(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_receive_range_data_request_body_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let msg_code: u32 = super::range::MessageCode::ReqRange.into();
-        channel
-            .server
-            .send
-            .write_all(&msg_code.to_le_bytes())
-            .await
-            .unwrap();
-        channel
-            .server
-            .send
-            .write_all(&10u32.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&msg_code.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&10u32.to_le_bytes()),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res = super::receive_range_data_request(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_truncated_bincode_payload() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Create a valid payload, serialize it, then truncate
@@ -1111,11 +1572,18 @@ mod tests {
 
         // Truncate to half the size
         let truncated = &serialized[..serialized.len() / 2];
-        frame::send_raw(&mut channel.server.send, truncated)
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, truncated),
+        )
+        .await
+        .unwrap();
 
-        let res = super::receive_stream_request(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_stream_request",
+            super::receive_stream_request(&mut channel.client.recv),
+        )
+        .await;
         assert!(
             matches!(res, Err(PublishError::SerialDeserialFailure(_))),
             "Expected SerialDeserialFailure for truncated payload, got {res:?}"
@@ -1124,14 +1592,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_receive_stream_request_malformed_payload() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        frame::send_raw(&mut channel.server.send, b"not valid bincode")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"not valid bincode"),
+        )
+        .await
+        .unwrap();
 
-        let res = super::receive_stream_request(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_stream_request",
+            super::receive_stream_request(&mut channel.client.recv),
+        )
+        .await;
         assert!(
             matches!(res, Err(PublishError::SerialDeserialFailure(_))),
             "Expected SerialDeserialFailure for malformed payload, got {res:?}"
@@ -1140,241 +1614,307 @@ mod tests {
 
     #[tokio::test]
     async fn test_receive_range_data_deserialization_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        frame::send_raw(&mut channel.server.send, b"not valid bincode")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"not valid bincode"),
+        )
+        .await
+        .unwrap();
 
-        let res =
-            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
-                .await;
+        let res = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
     }
 
     #[tokio::test]
     async fn test_receive_raw_events_deserialization_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        frame::send_raw(&mut channel.server.send, b"not valid bincode")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"not valid bincode"),
+        )
+        .await
+        .unwrap();
 
-        let res = super::receive_raw_events(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_raw_events",
+            super::receive_raw_events(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::SerialDeserialFailure(_))));
     }
 
     #[tokio::test]
     async fn test_receive_range_data_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&10u32.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&10u32.to_le_bytes()),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res =
-            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
-                .await;
+        let res = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_receive_raw_events_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&10u32.to_le_bytes())
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&10u32.to_le_bytes()),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res = super::receive_raw_events(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_raw_events",
+            super::receive_raw_events(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
     #[tokio::test]
     async fn test_receive_time_series_generator_data_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&1234_i64.to_le_bytes()[..4])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&1234_i64.to_le_bytes()[..4]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res = super::receive_time_series_generator_data(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_time_series_generator_data",
+            super::receive_time_series_generator_data(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_receive_stream_request_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&10u32.to_le_bytes())
-            .await
-            .unwrap();
-        channel
-            .server
-            .send
-            .write_all(&[1, 2, 3, 4, 5])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&10u32.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&[1, 2, 3, 4, 5]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res = super::receive_stream_request(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_stream_request",
+            super::receive_stream_request(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_receive_time_series_generator_stream_start_message_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&4u32.to_le_bytes())
-            .await
-            .unwrap();
-        channel.server.send.write_all(b"12").await.unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&4u32.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(b"12"),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res =
-            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv)
-                .await;
+        let res = wait(
+            "super::receive_time_series_generator_stream_start_message",
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_receive_semi_supervised_data_short_read_returns_error() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
-        channel
-            .server
-            .send
-            .write_all(&1234_i64.to_le_bytes())
-            .await
-            .unwrap();
-        channel
-            .server
-            .send
-            .write_all(&u32::to_le_bytes(10)[..2])
-            .await
-            .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&1234_i64.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "channel.server.send.write_all",
+            channel.server.send.write_all(&u32::to_le_bytes(10)[..2]),
+        )
+        .await
+        .unwrap();
         channel.server.send.finish().ok();
 
-        let res = super::receive_semi_supervised_data(&mut channel.client.recv).await;
+        let res = wait(
+            "super::receive_semi_supervised_data",
+            super::receive_semi_supervised_data(&mut channel.client.recv),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
     }
 
     #[tokio::test]
     async fn test_pcap_extract_request_ack_err() {
-        let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let server_conn = channel.server.conn.clone();
 
         let handle = tokio::spawn(async move {
-            let (mut send, mut recv) = server_conn.accept_bi().await.unwrap();
-            let mut buf = Vec::new();
-            frame::recv::<super::PcapFilter>(&mut recv, &mut buf)
+            let (mut send, mut recv) = wait("server_conn.accept_bi", server_conn.accept_bi())
                 .await
                 .unwrap();
-            super::send_err(&mut send, &mut buf, "boom").await.unwrap();
+            let mut buf = Vec::new();
+            wait(
+                "frame::recv",
+                frame::recv::<super::PcapFilter>(&mut recv, &mut buf),
+            )
+            .await
+            .unwrap();
+            wait(
+                "super::send_err",
+                super::send_err(&mut send, &mut buf, "boom"),
+            )
+            .await
+            .unwrap();
         });
 
-        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        let res = wait(
+            "super::pcap_extract_request",
+            super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()),
+        )
+        .await;
         assert!(matches!(
             res,
             Err(PublishError::PcapRequestFail(msg)) if msg.contains("boom")
         ));
 
-        handle.await.unwrap();
+        wait("joining task handle", handle).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_pcap_extract_request_connection_closed_returns_error() {
-        let _lock = TOKEN.lock().await;
         let channel = channel().await;
 
         channel.client.conn.close(0u32.into(), b"closed");
 
-        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        let res = wait(
+            "super::pcap_extract_request",
+            super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionLost(_))));
     }
 
     #[tokio::test]
     async fn test_pcap_extract_request_ack_read_error_returns_error() {
-        let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let server_conn = channel.server.conn.clone();
 
         let handle = tokio::spawn(async move {
-            let (_send, mut recv) = server_conn.accept_bi().await.unwrap();
-            let mut buf = Vec::new();
-            frame::recv::<super::PcapFilter>(&mut recv, &mut buf)
+            let (_send, mut recv) = wait("server_conn.accept_bi", server_conn.accept_bi())
                 .await
                 .unwrap();
+            let mut buf = Vec::new();
+            wait(
+                "frame::recv",
+                frame::recv::<super::PcapFilter>(&mut recv, &mut buf),
+            )
+            .await
+            .unwrap();
             server_conn.close(0u32.into(), b"no-ack");
         });
 
-        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        let res = wait(
+            "super::pcap_extract_request",
+            super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ReadError(_))));
 
-        handle.await.unwrap();
+        wait("joining task handle", handle).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_pcap_extract_request_close_stream_returns_error() {
-        let _lock = TOKEN.lock().await;
         let channel = channel().await;
         let server_conn = channel.server.conn.clone();
 
         let handle = tokio::spawn(async move {
-            let (_send, mut recv) = server_conn.accept_bi().await.unwrap();
+            let (_send, mut recv) = wait("server_conn.accept_bi", server_conn.accept_bi())
+                .await
+                .unwrap();
             let _ = recv.stop(0u32.into());
         });
 
-        let res = super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()).await;
+        let res = wait(
+            "super::pcap_extract_request",
+            super::pcap_extract_request(&channel.client.conn, &sample_pcap_filter()),
+        )
+        .await;
         assert!(matches!(res, Err(PublishError::ConnectionClosed)));
 
-        handle.await.unwrap();
+        wait("joining task handle", handle).await.unwrap();
     }
 
     /// Tests that corrupted bincode for range data returns appropriate error.
     #[tokio::test]
     async fn test_malformed_range_data_payload_deserialize_fails() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send valid message code, followed by garbage payload
         let msg_code: u32 = super::range::MessageCode::ReqRange.into();
-        frame::send_bytes(&mut channel.server.send, &msg_code.to_le_bytes())
-            .await
-            .unwrap();
-        frame::send_raw(&mut channel.server.send, b"garbage data not valid bincode")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_bytes",
+            frame::send_bytes(&mut channel.server.send, &msg_code.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"garbage data not valid bincode"),
+        )
+        .await
+        .unwrap();
 
-        let (code, data) = super::receive_range_data_request(&mut channel.client.recv)
-            .await
-            .unwrap();
+        let (code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(code, super::range::MessageCode::ReqRange);
 
         // Attempting to deserialize should fail
@@ -1385,21 +1925,26 @@ mod tests {
     /// Tests range requests with boundary values (zero, negative, max values).
     #[tokio::test]
     async fn test_range_boundary_values() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Test with zero values
         let zero_range = RequestRangeBuilder::new().start(0).end(0).count(0).build();
-        super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            zero_range.clone(),
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                zero_range.clone(),
+            ),
         )
         .await
         .unwrap();
-        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (_, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
         assert_eq!(received.start, 0);
         assert_eq!(received.end, 0);
@@ -1411,16 +1956,22 @@ mod tests {
             .end(-1)
             .count(10)
             .build();
-        super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            negative_range.clone(),
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                negative_range.clone(),
+            ),
         )
         .await
         .unwrap();
-        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (_, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
         assert_eq!(received.start, -1000);
         assert_eq!(received.end, -1);
@@ -1431,16 +1982,22 @@ mod tests {
             .end(i64::MAX)
             .count(usize::MAX)
             .build();
-        super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            max_range.clone(),
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                max_range.clone(),
+            ),
         )
         .await
         .unwrap();
-        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (_, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
         assert_eq!(received.start, i64::MIN);
         assert_eq!(received.end, i64::MAX);
@@ -1450,7 +2007,6 @@ mod tests {
     /// Tests range requests where start > end (inverted range).
     #[tokio::test]
     async fn test_inverted_range() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Inverted range (start > end) - the protocol should still
@@ -1460,16 +2016,22 @@ mod tests {
             .end(100)
             .count(50)
             .build();
-        super::send_range_data_request(
-            &mut channel.client.send,
-            super::range::MessageCode::ReqRange,
-            inverted_range.clone(),
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                super::range::MessageCode::ReqRange,
+                inverted_range.clone(),
+            ),
         )
         .await
         .unwrap();
-        let (_, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (_, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         let received: super::range::RequestRange = bincode::deserialize(&data).unwrap();
         assert_eq!(received.start, 1000);
         assert_eq!(received.end, 100);
@@ -1484,7 +2046,6 @@ mod tests {
     async fn test_empty_raw_data_input() {
         use super::range::{MessageCode, RequestRawData};
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Empty input list
@@ -1492,16 +2053,22 @@ mod tests {
             kind: "conn".to_string(),
             input: vec![],
         };
-        super::send_range_data_request(
-            &mut channel.client.send,
-            MessageCode::RawData,
-            empty_request.clone(),
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(
+                &mut channel.client.send,
+                MessageCode::RawData,
+                empty_request.clone(),
+            ),
         )
         .await
         .unwrap();
-        let (code, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        let (code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(code, MessageCode::RawData);
         let received: RequestRawData = bincode::deserialize(&data).unwrap();
         assert_eq!(
@@ -1515,7 +2082,6 @@ mod tests {
     async fn test_raw_data_empty_timestamps() {
         use super::range::{MessageCode, RequestRawData};
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Sensor with empty timestamp list
@@ -1526,12 +2092,18 @@ mod tests {
                 ("sensor2".to_string(), vec![1, 2, 3]),
             ],
         };
-        super::send_range_data_request(&mut channel.client.send, MessageCode::RawData, request)
-            .await
-            .unwrap();
-        let (code, data) = super::receive_range_data_request(&mut channel.server.recv)
-            .await
-            .unwrap();
+        wait(
+            "super::send_range_data_request",
+            super::send_range_data_request(&mut channel.client.send, MessageCode::RawData, request),
+        )
+        .await
+        .unwrap();
+        let (code, data) = wait(
+            "super::receive_range_data_request",
+            super::receive_range_data_request(&mut channel.server.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(code, MessageCode::RawData);
         let received: RequestRawData = bincode::deserialize(&data).unwrap();
         assert_eq!(received.input.len(), 2);
@@ -1545,19 +2117,23 @@ mod tests {
     async fn test_send_range_data_none_response_done() {
         use super::range::ResponseRangeData;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send None, which triggers the response_done() path
-        super::send_range_data::<Conn>(&mut channel.server.send, None)
-            .await
-            .unwrap();
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<Conn>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
 
         // Receive and verify it matches the response_done() format
-        let received =
-            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv)
-                .await
-                .unwrap();
+        let received = wait(
+            "super::receive_range_data",
+            super::receive_range_data::<Option<(i64, String, Vec<u8>)>>(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
 
         // response_done() serializes None, so received should be None
         assert!(
@@ -1566,14 +2142,20 @@ mod tests {
         );
 
         // Also verify that the raw bytes match the response_done() output
-        super::send_range_data::<Conn>(&mut channel.server.send, None)
-            .await
-            .unwrap();
+        wait(
+            "super::send_range_data",
+            super::send_range_data::<Conn>(&mut channel.server.send, None),
+        )
+        .await
+        .unwrap();
 
         let mut raw_buf = Vec::new();
-        frame::recv_raw(&mut channel.client.recv, &mut raw_buf)
-            .await
-            .unwrap();
+        wait(
+            "frame::recv_raw",
+            frame::recv_raw(&mut channel.client.recv, &mut raw_buf),
+        )
+        .await
+        .unwrap();
 
         let expected_done = Conn::response_done().unwrap();
         assert_eq!(
@@ -1587,21 +2169,26 @@ mod tests {
     async fn test_send_range_data_some_raw_bytes() {
         use super::range::ResponseRangeData;
 
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let conn = sample_conn();
-        super::send_range_data(
-            &mut channel.server.send,
-            Some((conn.clone(), 33333, "world")),
+        wait(
+            "super::send_range_data",
+            super::send_range_data(
+                &mut channel.server.send,
+                Some((conn.clone(), 33333, "world")),
+            ),
         )
         .await
         .unwrap();
 
         let mut raw_buf = Vec::new();
-        frame::recv_raw(&mut channel.client.recv, &mut raw_buf)
-            .await
-            .unwrap();
+        wait(
+            "frame::recv_raw",
+            frame::recv_raw(&mut channel.client.recv, &mut raw_buf),
+        )
+        .await
+        .unwrap();
 
         let expected = conn.response_data(33333, "world").unwrap();
         assert_eq!(
@@ -1613,17 +2200,22 @@ mod tests {
     /// Tests sending and receiving empty raw events list.
     #[tokio::test]
     async fn test_send_recv_empty_raw_events() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         let empty_events: Vec<(i64, String, Vec<u8>)> = vec![];
-        super::send_raw_events(&mut channel.server.send, empty_events)
-            .await
-            .unwrap();
+        wait(
+            "super::send_raw_events",
+            super::send_raw_events(&mut channel.server.send, empty_events),
+        )
+        .await
+        .unwrap();
 
-        let received = super::receive_raw_events(&mut channel.client.recv)
-            .await
-            .unwrap();
+        let received = wait(
+            "super::receive_raw_events",
+            super::receive_raw_events(&mut channel.client.recv),
+        )
+        .await
+        .unwrap();
         assert_eq!(
             received,
             [] as [(i64, std::string::String, std::vec::Vec<u8>); 0]
@@ -1633,15 +2225,21 @@ mod tests {
     /// Tests `recv_ack_response` with malformed response.
     #[tokio::test]
     async fn test_recv_ack_response_malformed() {
-        let _lock = TOKEN.lock().await;
         let mut channel = channel().await;
 
         // Send malformed data that cannot be deserialized as Result<(), &str>
-        frame::send_raw(&mut channel.server.send, b"not valid bincode")
-            .await
-            .unwrap();
+        wait(
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"not valid bincode"),
+        )
+        .await
+        .unwrap();
 
-        let res = recv_ack_response(&mut channel.client.recv).await;
+        let res = wait(
+            "recv_ack_response",
+            recv_ack_response(&mut channel.client.recv),
+        )
+        .await;
         assert!(
             matches!(res, Err(PublishError::SerialDeserialFailure(_))),
             "Expected SerialDeserialFailure for malformed ack, got {res:?}"
