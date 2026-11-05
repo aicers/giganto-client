@@ -24,7 +24,34 @@ pub struct ArpMessage {
     pub target_ip: IpAddr,
 }
 
+impl Display for ArpMessage {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        let mac = |bytes: &[u8; 6]| {
+            format!(
+                "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]
+            )
+        };
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            convert_time_format(self.timestamp),
+            mac(&self.eth_src_mac),
+            mac(&self.eth_dst_mac),
+            mac(&self.sender_mac),
+            self.sender_ip,
+            mac(&self.target_mac),
+            self.target_ip,
+        )
+    }
+}
+
 /// An ARP transaction, including whichever request and response were observed.
+///
+/// Text output follows declaration order, flattening each message into seven
+/// columns. MAC addresses use lowercase, colon-separated, two-digit hex octets.
+/// Missing VLAN IDs and each column of a missing message are represented by `-`.
+/// Start and message timestamps use the canonical range-data RFC 3339 format.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Arp {
     pub vlan_id: Option<u16>,
@@ -36,6 +63,37 @@ pub struct Arp {
     pub resp_l2_bytes: u64,
     pub request: Option<ArpMessage>,
     pub response: Option<ArpMessage>,
+}
+
+impl Display for Arp {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            crate::ingest::to_string_or_empty(self.vlan_id),
+            convert_time_format(self.start_time),
+            self.duration,
+            self.orig_pkts,
+            self.resp_pkts,
+            self.orig_l2_bytes,
+            self.resp_l2_bytes,
+        )?;
+        for message in [&self.request, &self.response] {
+            match message {
+                Some(message) => write!(f, "\t{message}")?,
+                None => write!(f, "\t-\t-\t-\t-\t-\t-\t-")?,
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ResponseRangeData for Arp {
+    fn response_data(&self, timestamp: i64, sensor: &str) -> Result<Vec<u8>, bincode::Error> {
+        let arp_csv = format!("{}\t{sensor}\t{self}", convert_time_format(timestamp));
+
+        bincode::serialize(&Some((timestamp, sensor, &arp_csv.as_bytes())))
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1455,11 +1513,11 @@ impl ResponseRangeData for Icmp {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn arp_transaction_round_trips() {
+    fn arp_transaction_round_trip_display_and_response() {
         use super::{Arp, ArpMessage};
 
         let request = ArpMessage {
-            timestamp: 100,
+            timestamp: -1,
             eth_src_mac: [1, 2, 3, 4, 5, 6],
             eth_dst_mac: [255; 6],
             sender_mac: [6, 5, 4, 3, 2, 1],
@@ -1468,7 +1526,7 @@ mod tests {
             target_ip: [192, 0, 2, 2].into(),
         };
         let response = ArpMessage {
-            timestamp: 101,
+            timestamp: 1_000_000_000,
             eth_src_mac: [7; 6],
             eth_dst_mac: request.eth_src_mac,
             sender_mac: [8; 6],
@@ -1476,27 +1534,79 @@ mod tests {
             target_mac: request.sender_mac,
             target_ip: request.sender_ip,
         };
+        let request_fields = [
+            "1969-12-31T23:59:59.999999999+00:00",
+            "01:02:03:04:05:06",
+            "ff:ff:ff:ff:ff:ff",
+            "06:05:04:03:02:01",
+            "192.0.2.1",
+            "00:00:00:00:00:00",
+            "192.0.2.2",
+        ];
+        let response_fields_expected = [
+            "1970-01-01T00:00:01+00:00",
+            "07:07:07:07:07:07",
+            "01:02:03:04:05:06",
+            "08:08:08:08:08:08",
+            "192.0.2.2",
+            "06:05:04:03:02:01",
+            "192.0.2.1",
+        ];
         for (request, response) in [
             (Some(request.clone()), Some(response.clone())),
             (Some(request), None),
             (None, Some(response)),
+            (None, None),
         ] {
-            let event = Arp {
-                vlan_id: Some(42),
-                start_time: 100,
-                duration: 1,
-                orig_pkts: 1,
-                resp_pkts: u64::from(response.is_some()),
-                orig_l2_bytes: 60,
-                resp_l2_bytes: 60,
-                request,
-                response,
-            };
-            let encoded = bincode::serialize(&event).unwrap();
-            let decoded: Arp = bincode::deserialize(&encoded).unwrap();
-            assert_eq!(decoded, event);
+            for vlan_id in [Some(42), None] {
+                let event = Arp {
+                    vlan_id,
+                    start_time: 100,
+                    duration: 1,
+                    orig_pkts: 2,
+                    resp_pkts: 3,
+                    orig_l2_bytes: 60,
+                    resp_l2_bytes: 120,
+                    request: request.clone(),
+                    response: response.clone(),
+                };
+                let encoded = bincode::serialize(&event).unwrap();
+                let decoded: Arp = bincode::deserialize(&encoded).unwrap();
+                assert_eq!(decoded, event);
+
+                let mut expected = vec![
+                    if vlan_id.is_some() { "42" } else { "-" },
+                    "1970-01-01T00:00:00.0000001+00:00",
+                    "1",
+                    "2",
+                    "3",
+                    "60",
+                    "120",
+                ];
+                expected.extend(if request.is_some() {
+                    request_fields
+                } else {
+                    ["-"; 7]
+                });
+                expected.extend(if response.is_some() {
+                    response_fields_expected
+                } else {
+                    ["-"; 7]
+                });
+                let fields = display_fields(&event);
+                assert_eq!(fields.len(), 21);
+                assert_eq!(fields, expected);
+
+                let fields = response_fields(&event, 2_000_000_001, "arp-sensor");
+                assert_eq!(fields.len(), 23);
+                let mut expected_response =
+                    vec!["1970-01-01T00:00:02.000000001+00:00", "arp-sensor"];
+                expected_response.extend(expected);
+                assert_eq!(fields, expected_response);
+            }
         }
     }
+
     use std::fmt::Display;
 
     use super::*;
