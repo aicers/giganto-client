@@ -536,6 +536,17 @@ mod tests {
             resp_pkts: 511,
             orig_l2_bytes: 21515,
             resp_l2_bytes: 27889,
+            orig_flags: 18,
+            resp_flags: 16,
+            missed_bytes: 42,
+            icmp_type: None,
+            icmp_code: None,
+            syn_ttl: Some(64),
+            syn_window_size: Some(64240),
+            syn_window_scale: Some(7),
+            syn_mss: Some(1460),
+            syn_options_order: vec![2, 4, 8, 1, 3],
+            syn_df: Some(true),
         }
     }
 

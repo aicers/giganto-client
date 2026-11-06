@@ -11,6 +11,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Added an ARP transaction event for asset information collection, including
   optional request and response messages and stream-record support.
 
+### Changed
+
+- Expanded the public `Conn` event with TCP flags, missed bytes, ICMP metadata,
+  and raw TCP SYN fingerprint fields. Its serialized representation and range-data
+  TSV output have changed; producers and consumers must use the matching schema.
+
 ## [0.28.0] - 2026-06-16
 
 ### Changed
@@ -444,7 +450,7 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - Move from giganto
 
-[Unreleased]: https://github.com/aicers/giganto-client/compare/0.28.0...assets
+[Unreleased]: https://github.com/aicers/giganto-client/compare/0.28.0...main
 [0.28.0]: https://github.com/aicers/giganto-client/compare/0.27.0...0.28.0
 [0.27.0]: https://github.com/aicers/giganto-client/compare/0.26.0...0.27.0
 [0.26.0]: https://github.com/aicers/giganto-client/compare/0.25.0...0.26.0

@@ -8,7 +8,9 @@ use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ingest::{as_str_or_default, convert_time_format, vec_to_string_or_default},
+    ingest::{
+        as_str_or_default, convert_time_format, to_string_or_empty, vec_to_string_or_default,
+    },
     publish::range::ResponseRangeData,
 };
 
@@ -113,13 +115,24 @@ pub struct Conn {
     pub resp_pkts: u64,
     pub orig_l2_bytes: u64,
     pub resp_l2_bytes: u64,
+    pub orig_flags: u8,
+    pub resp_flags: u8,
+    pub missed_bytes: u64,
+    pub icmp_type: Option<u8>,
+    pub icmp_code: Option<u8>,
+    pub syn_ttl: Option<u8>,
+    pub syn_window_size: Option<u16>,
+    pub syn_window_scale: Option<u8>,
+    pub syn_mss: Option<u16>,
+    pub syn_options_order: Vec<u8>,
+    pub syn_df: Option<bool>,
 }
 
 impl Display for Conn {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -134,7 +147,18 @@ impl Display for Conn {
             self.orig_pkts,
             self.resp_pkts,
             self.orig_l2_bytes,
-            self.resp_l2_bytes
+            self.resp_l2_bytes,
+            self.orig_flags,
+            self.resp_flags,
+            self.missed_bytes,
+            to_string_or_empty(self.icmp_type),
+            to_string_or_empty(self.icmp_code),
+            to_string_or_empty(self.syn_ttl),
+            to_string_or_empty(self.syn_window_size),
+            to_string_or_empty(self.syn_window_scale),
+            to_string_or_empty(self.syn_mss),
+            vec_to_string_or_default(&self.syn_options_order),
+            to_string_or_empty(self.syn_df)
         )
     }
 }
@@ -1711,6 +1735,17 @@ mod tests {
                 resp_pkts: 511,
                 orig_l2_bytes: 21_515,
                 resp_l2_bytes: 27_889,
+                orig_flags: 18,
+                resp_flags: 16,
+                missed_bytes: 42,
+                icmp_type: Some(8),
+                icmp_code: Some(0),
+                syn_ttl: Some(64),
+                syn_window_size: Some(64240),
+                syn_window_scale: Some(7),
+                syn_mss: Some(1460),
+                syn_options_order: vec![2, 4, 8, 1, 3],
+                syn_df: Some(true),
             }
         }
 
@@ -2196,7 +2231,7 @@ mod tests {
         let conn = fixtures::conn();
 
         let fields = display_fields(&conn);
-        assert_eq!(fields.len(), 15);
+        assert_eq!(fields.len(), 26);
         assert_field_values(
             &fields,
             &[
@@ -2205,9 +2240,37 @@ mod tests {
                 (5, "SF"),
                 (8, "http"),
                 (14, "27889"),
+                (15, "18"),
+                (16, "16"),
+                (17, "42"),
+                (18, "8"),
+                (19, "0"),
+                (20, "64"),
+                (21, "64240"),
+                (22, "7"),
+                (23, "1460"),
+                (24, "2,4,8,1,3"),
+                (25, "true"),
             ],
         );
         assert_eq!(fields[6], fmt_time(conn.start_time));
+    }
+
+    #[test]
+    fn test_conn_display_missing_optional_fields() {
+        let mut conn = fixtures::conn();
+        conn.icmp_type = None;
+        conn.icmp_code = None;
+        conn.syn_ttl = None;
+        conn.syn_window_size = None;
+        conn.syn_window_scale = None;
+        conn.syn_mss = None;
+        conn.syn_options_order.clear();
+        conn.syn_df = None;
+        let fields = display_fields(&conn);
+        assert_placeholder_fields(&fields, &[18, 19, 20, 21, 22, 23, 24, 25]);
+        conn.syn_df = Some(false);
+        assert_eq!(display_fields(&conn)[25], "false");
     }
 
     #[test]
@@ -2215,7 +2278,7 @@ mod tests {
         let conn = fixtures::conn();
 
         let fields = response_fields(&conn, 1_234_567_890, "conn-sensor");
-        assert_eq!(fields.len(), 17);
+        assert_eq!(fields.len(), 28);
         assert_field_values(
             &fields,
             &[
@@ -2224,6 +2287,8 @@ mod tests {
                 (7, "SF"),
                 (10, "http"),
                 (16, "27889"),
+                (26, "2,4,8,1,3"),
+                (27, "true"),
             ],
         );
         assert_eq!(fields[0], fmt_time(1_234_567_890));
