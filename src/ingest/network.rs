@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ingest::{
-        as_str_or_default, convert_time_format, to_string_or_empty, vec_to_string_or_default,
+        as_str_or_default, convert_time_format, sanitize_csv_field, to_string_or_empty,
+        vec_to_string_or_default,
     },
     publish::range::ResponseRangeData,
 };
@@ -242,6 +243,95 @@ pub struct DnsQuestion {
     pub qclass: u16,
 }
 
+impl Display for ResourceData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::A(address) => write!(f, "A: {address}"),
+            Self::AAAA(address) => write!(f, "AAAA: {address}"),
+            Self::CNAME(name) => write!(f, "CNAME: {}", sanitize_csv_field(name)),
+            Self::MX {
+                preference,
+                exchange,
+            } => {
+                write!(f, "MX: {preference},{}", sanitize_csv_field(exchange))
+            }
+            Self::NS(name) => write!(f, "NS: {}", sanitize_csv_field(name)),
+            Self::PTR(name) => write!(f, "PTR: {}", sanitize_csv_field(name)),
+            Self::TXT(values) => write!(
+                f,
+                "TXT: {}",
+                vec_to_string_or_default(
+                    &values
+                        .iter()
+                        .map(|value| sanitize_csv_field(value))
+                        .collect::<Vec<_>>()
+                )
+            ),
+            Self::SOA {
+                mname,
+                rname,
+                serial,
+                refresh,
+                retry,
+                expire,
+                minimum,
+            } => write!(
+                f,
+                "SOA: {},{},{serial},{refresh},{retry},{expire},{minimum}",
+                sanitize_csv_field(mname),
+                sanitize_csv_field(rname),
+            ),
+            Self::SRV {
+                priority,
+                weight,
+                port,
+                target,
+            } => {
+                write!(
+                    f,
+                    "SRV: {priority},{weight},{port},{}",
+                    sanitize_csv_field(target)
+                )
+            }
+            Self::OPT {
+                payload_size,
+                ext_rcode,
+                version,
+                flags,
+            } => {
+                write!(f, "OPT: {payload_size},{ext_rcode},{version},{flags}")
+            }
+            Self::Unknown(values) => write!(f, "Unknown: {}", vec_to_string_or_default(values)),
+        }
+    }
+}
+
+impl Display for ResourceRecord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({},{},{},{},{})",
+            sanitize_csv_field(&self.name),
+            self.rtype,
+            self.rclass,
+            self.ttl,
+            self.data,
+        )
+    }
+}
+
+impl Display for DnsQuestion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({},{},{})",
+            sanitize_csv_field(&self.name),
+            self.qtype,
+            self.qclass
+        )
+    }
+}
+
 /// A DNS or mDNS transaction, including the available request and reply data.
 ///
 /// Sections with no available content are empty. Header fields describe the
@@ -261,9 +351,9 @@ pub struct Dns {
     pub resp_port: u16,
     /// IP protocol number.
     pub proto: u8,
-    /// Session start time in microseconds.
+    /// Session start time in nanoseconds.
     pub start_time: i64,
-    /// Session duration in microseconds.
+    /// Session duration in nanoseconds.
     pub duration: i64,
     /// Origin-to-responder packet count.
     pub orig_pkts: u64,
@@ -402,15 +492,6 @@ impl Display for Qtype {
 
 impl Display for Dns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        // Debug formatting escapes control characters in names and preserves
-        // record types and values within each tab-separated section column.
-        fn section<T: std::fmt::Debug>(values: &[T]) -> String {
-            if values.is_empty() {
-                "-".to_string()
-            } else {
-                format!("{values:?}")
-            }
-        }
         write!(
             f,
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
@@ -419,12 +500,7 @@ impl Display for Dns {
             self.resp_addr,
             self.resp_port,
             self.proto,
-            jiff::Timestamp::from_microsecond(self.start_time).map_or_else(
-                |_| format!("INVALID_TIMESTAMP({})", self.start_time),
-                |ts| ts
-                    .strftime(crate::ingest::RFC3339_RANGE_DATA_FORMAT)
-                    .to_string(),
-            ),
+            convert_time_format(self.start_time),
             self.duration,
             self.orig_pkts,
             self.resp_pkts,
@@ -439,10 +515,10 @@ impl Display for Dns {
             self.ra_flag,
             self.ad_flag,
             self.cd_flag,
-            section(&self.queries),
-            section(&self.answers),
-            section(&self.authorities),
-            section(&self.additionals),
+            vec_to_string_or_default(&self.queries),
+            vec_to_string_or_default(&self.answers),
+            vec_to_string_or_default(&self.authorities),
+            vec_to_string_or_default(&self.additionals),
         )
     }
 }
@@ -2427,9 +2503,9 @@ mod tests {
         let dns = fixtures::dns();
         let fields = display_fields(&dns);
         assert_eq!(fields.len(), 24);
-        assert_eq!(fields[5], "1970-01-01T00:00:00.001+00:00");
-        assert!(fields[20].contains("example.com"));
-        assert!(fields[21].contains("1.2.3.4"));
+        assert_eq!(fields[5], "1970-01-01T00:00:00.000001+00:00");
+        assert_eq!(fields[20], "(example.com,1,1)");
+        assert_eq!(fields[21], "(example.com,1,1,3600,A: 1.2.3.4)");
         assert_field_values(&fields, &[(22, "-"), (23, "-")]);
         let response = response_fields(&dns, 1000, "dns-sensor");
         assert_eq!(response.len(), 26);
@@ -2483,6 +2559,22 @@ mod tests {
             },
             ResourceData::Unknown(vec![0, 1, 127, 255]),
         ];
+        let expected = [
+            "A: 192.0.2.1",
+            "AAAA: 2001:db8::1",
+            "CNAME: alias.example",
+            "MX: 65535,mail.example",
+            "NS: ns.example",
+            "PTR: ptr.example",
+            "TXT: first,second",
+            "SOA: ns.example,host.example,4294967295,-1,-2,-3,4294967295",
+            "SRV: 1,2,65535,service.example",
+            "OPT: 4096,255,1,32768",
+            "Unknown: 0,1,127,255",
+        ];
+        for (value, expected) in data.iter().zip(expected) {
+            assert_eq!(value.to_string(), expected);
+        }
         let records: Vec<_> = data
             .into_iter()
             .enumerate()
@@ -2499,6 +2591,131 @@ mod tests {
         dns.additionals = records[8..].to_vec();
         let bytes = bincode::serialize(&dns).unwrap();
         assert_eq!(bincode::deserialize::<Dns>(&bytes).unwrap(), dns);
+        let expected_records: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .map(|(i, data)| format!("(record{i}.example,{i},255,-1,{data})"))
+            .collect();
+        for (record, expected) in records.iter().zip(&expected_records) {
+            assert_eq!(record.to_string(), *expected);
+        }
+        let fields = display_fields(&dns);
+        assert_eq!(fields.len(), 24);
+        assert_eq!(fields[21], expected_records[..4].join(","));
+        assert_eq!(fields[22], expected_records[4..8].join(","));
+        assert_eq!(fields[23], expected_records[8..].join(","));
+        let response = response_fields(&dns, 1000, "dns-sensor");
+        assert_eq!(response.len(), 26);
+        assert_eq!(&response[2..], fields);
+    }
+
+    #[test]
+    fn test_dns_empty_values_and_control_characters() {
+        let text = "a\t\nb\rc";
+        let clean = "a  b c";
+        let values = [
+            (ResourceData::CNAME(text.into()), format!("CNAME: {clean}")),
+            (ResourceData::NS(text.into()), format!("NS: {clean}")),
+            (ResourceData::PTR(text.into()), format!("PTR: {clean}")),
+            (
+                ResourceData::MX {
+                    preference: 10,
+                    exchange: text.into(),
+                },
+                format!("MX: 10,{clean}"),
+            ),
+            (
+                ResourceData::TXT(vec![text.into(), "rp=ipp/print".into()]),
+                format!("TXT: {clean},rp=ipp/print"),
+            ),
+            (
+                ResourceData::SOA {
+                    mname: text.into(),
+                    rname: text.into(),
+                    serial: 1,
+                    refresh: 2,
+                    retry: 3,
+                    expire: 4,
+                    minimum: 5,
+                },
+                format!("SOA: {clean},{clean},1,2,3,4,5"),
+            ),
+            (
+                ResourceData::SRV {
+                    priority: 1,
+                    weight: 2,
+                    port: 3,
+                    target: text.into(),
+                },
+                format!("SRV: 1,2,3,{clean}"),
+            ),
+            (ResourceData::TXT(vec![]), "TXT: -".into()),
+            (ResourceData::Unknown(vec![]), "Unknown: -".into()),
+            (ResourceData::CNAME(String::new()), "CNAME: -".into()),
+            (ResourceData::TXT(vec![String::new()]), "TXT: -".into()),
+        ];
+        let mut dns = fixtures::dns();
+        dns.queries = vec![
+            DnsQuestion {
+                name: text.into(),
+                qtype: 1,
+                qclass: 1,
+            },
+            DnsQuestion {
+                name: String::new(),
+                qtype: 28,
+                qclass: 255,
+            },
+        ];
+        assert_eq!(dns.queries[0].to_string(), "(a  b c,1,1)");
+        assert_eq!(dns.queries[1].to_string(), "(-,28,255)");
+        for (data, expected) in values {
+            assert_eq!(data.to_string(), expected);
+            let record = ResourceRecord {
+                name: text.into(),
+                rtype: 255,
+                rclass: 1,
+                ttl: 0,
+                data,
+            };
+            let expected_record = format!("({clean},255,1,0,{expected})");
+            assert_eq!(record.to_string(), expected_record);
+            dns.answers = vec![record.clone(), record.clone()];
+            dns.authorities = vec![record.clone(), record.clone()];
+            dns.additionals = vec![record.clone(), record];
+            let fields = display_fields(&dns);
+            assert_eq!(fields.len(), 24);
+            assert_eq!(fields[20], "(a  b c,1,1),(-,28,255)");
+            for field in &fields[21..] {
+                assert_eq!(*field, format!("{expected_record},{expected_record}"));
+            }
+            let csv = assert_response_envelope(&dns, 1000, "dns-sensor");
+            assert_eq!(csv.split('\t').count(), 26);
+            assert!(!csv.contains(['\n', '\r']));
+            assert_eq!(
+                csv,
+                format!("1970-01-01T00:00:00.000001+00:00\tdns-sensor\t{dns}")
+            );
+        }
+        dns.queries.clear();
+        dns.answers.clear();
+        dns.authorities.clear();
+        dns.additionals.clear();
+        assert_eq!(&display_fields(&dns)[20..], ["-"; 4]);
+        assert_eq!(&response_fields(&dns, 1000, "dns-sensor")[22..], ["-"; 4]);
+    }
+
+    #[test]
+    fn test_dns_start_time_nanoseconds() {
+        let mut dns = fixtures::dns();
+        for (timestamp, expected) in [
+            (-1, "1969-12-31T23:59:59.999999999+00:00"),
+            (1_000_000_001, "1970-01-01T00:00:01.000000001+00:00"),
+        ] {
+            dns.start_time = timestamp;
+            assert_eq!(display_fields(&dns)[5], expected);
+            assert_eq!(response_fields(&dns, timestamp, "dns-sensor")[7], expected);
+        }
     }
 
     #[test]
