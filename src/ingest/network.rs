@@ -1526,8 +1526,8 @@ impl Display for Bootp {
             to_string_or_empty(self.siaddr),
             to_string_or_empty(self.giaddr),
             vec_to_string_or_default(&self.chaddr),
-            as_str_or_default(&self.sname),
-            as_str_or_default(&self.file),
+            sanitize_csv_field(&self.sname),
+            sanitize_csv_field(&self.file),
         )
     }
 }
