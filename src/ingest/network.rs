@@ -326,8 +326,8 @@ impl Display for DnsQuestion {
             f,
             "({},{},{})",
             sanitize_csv_field(&self.name),
-            self.qtype,
-            self.qclass
+            Qtype::from(self.qtype),
+            Qclass::from(self.qclass)
         )
     }
 }
@@ -2504,7 +2504,7 @@ mod tests {
         let fields = display_fields(&dns);
         assert_eq!(fields.len(), 24);
         assert_eq!(fields[5], "1970-01-01T00:00:00.000001+00:00");
-        assert_eq!(fields[20], "(example.com,1,1)");
+        assert_eq!(fields[20], "(example.com,A,C_INTERNET)");
         assert_eq!(fields[21], "(example.com,1,1,3600,A: 1.2.3.4)");
         assert_field_values(&fields, &[(22, "-"), (23, "-")]);
         let response = response_fields(&dns, 1000, "dns-sensor");
@@ -2667,8 +2667,13 @@ mod tests {
                 qclass: 255,
             },
         ];
-        assert_eq!(dns.queries[0].to_string(), "(a  b c,1,1)");
-        assert_eq!(dns.queries[1].to_string(), "(-,28,255)");
+        assert_eq!(dns.queries[0].to_string(), "(a  b c,A,C_INTERNET)");
+        assert_eq!(dns.queries[1].to_string(), "(-,AAAA,UNKNOWN)");
+        let unknown = DnsQuestion {
+            qtype: u16::MAX,
+            ..dns.queries[1].clone()
+        };
+        assert_eq!(unknown.to_string(), "(-,UNKNOWN,UNKNOWN)");
         for (data, expected) in values {
             assert_eq!(data.to_string(), expected);
             let record = ResourceRecord {
@@ -2685,7 +2690,7 @@ mod tests {
             dns.additionals = vec![record.clone(), record];
             let fields = display_fields(&dns);
             assert_eq!(fields.len(), 24);
-            assert_eq!(fields[20], "(a  b c,1,1),(-,28,255)");
+            assert_eq!(fields[20], "(a  b c,A,C_INTERNET),(-,AAAA,UNKNOWN)");
             for field in &fields[21..] {
                 assert_eq!(*field, format!("{expected_record},{expected_record}"));
             }
