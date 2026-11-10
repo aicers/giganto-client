@@ -191,6 +191,17 @@ mod tests {
             resp_pkts: 511,
             orig_l2_bytes: 21515,
             resp_l2_bytes: 27889,
+            orig_flags: 18,
+            resp_flags: 16,
+            missed_bytes: 42,
+            icmp_type: Some(8),
+            icmp_code: Some(0),
+            syn_ttl: Some(64),
+            syn_window_size: Some(64240),
+            syn_window_scale: Some(7),
+            syn_mss: Some(1460),
+            syn_options_order: vec![2, 4, 8, 1, 3],
+            syn_df: Some(true),
         };
         super::send_event(&mut channel.client.send, 9999, conn.clone())
             .await
@@ -200,6 +211,10 @@ mod tests {
             .unwrap();
         assert_eq!(timestamp, 9999);
         assert_eq!(data, bincode::serialize(&conn).unwrap());
+        assert_eq!(
+            bincode::deserialize::<super::network::Conn>(&data).unwrap(),
+            conn
+        );
 
         // recv ack timestamp
         crate::frame::send_bytes(&mut channel.client.send, &8888_i64.to_be_bytes())
