@@ -1,6 +1,6 @@
 use std::{
     fmt::{Display, Formatter},
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
 use anyhow::Result;
@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ingest::{
-        as_str_or_default, convert_time_format, to_string_or_empty, vec_to_string_or_default,
+        as_str_or_default, convert_time_format, sanitize_csv_field, to_string_or_empty,
+        vec_to_string_or_default,
     },
     publish::range::ResponseRangeData,
 };
@@ -171,32 +172,223 @@ impl ResponseRangeData for Conn {
     }
 }
 
+/// Data carried by a DNS resource record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum ResourceData {
+    /// IPv4 address.
+    A(Ipv4Addr),
+    /// IPv6 address.
+    AAAA(Ipv6Addr),
+    /// Canonical name.
+    CNAME(String),
+    /// Mail exchanger preference and host.
+    MX { preference: u16, exchange: String },
+    /// Authoritative name server.
+    NS(String),
+    /// Pointer domain name.
+    PTR(String),
+    /// Text strings in their original order.
+    TXT(Vec<String>),
+    /// Start of authority record.
+    SOA {
+        mname: String,
+        rname: String,
+        serial: u32,
+        refresh: i32,
+        retry: i32,
+        expire: i32,
+        minimum: u32,
+    },
+    /// Service location record.
+    SRV {
+        priority: u16,
+        weight: u16,
+        port: u16,
+        target: String,
+    },
+    /// EDNS parameters.
+    OPT {
+        payload_size: u16,
+        ext_rcode: u8,
+        version: u8,
+        flags: u16,
+    },
+    /// Uninterpreted resource data bytes.
+    Unknown(Vec<u8>),
+}
+
+/// A DNS resource record in an answer, authority, or additional section.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ResourceRecord {
+    /// Owner name.
+    pub name: String,
+    /// Numeric record type.
+    pub rtype: u16,
+    /// Numeric record class.
+    pub rclass: u16,
+    /// Time to live.
+    pub ttl: i32,
+    /// Type-specific record data.
+    pub data: ResourceData,
+}
+
+/// A question in the DNS query section.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct DnsQuestion {
+    /// Queried name.
+    pub name: String,
+    /// Numeric query type.
+    pub qtype: u16,
+    /// Numeric query class.
+    pub qclass: u16,
+}
+
+impl Display for ResourceData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::A(address) => write!(f, "A: {address}"),
+            Self::AAAA(address) => write!(f, "AAAA: {address}"),
+            Self::CNAME(name) => write!(f, "CNAME: {}", sanitize_csv_field(name)),
+            Self::MX {
+                preference,
+                exchange,
+            } => {
+                write!(f, "MX: {preference},{}", sanitize_csv_field(exchange))
+            }
+            Self::NS(name) => write!(f, "NS: {}", sanitize_csv_field(name)),
+            Self::PTR(name) => write!(f, "PTR: {}", sanitize_csv_field(name)),
+            Self::TXT(values) => write!(
+                f,
+                "TXT: {}",
+                vec_to_string_or_default(
+                    &values
+                        .iter()
+                        .map(|value| sanitize_csv_field(value))
+                        .collect::<Vec<_>>()
+                )
+            ),
+            Self::SOA {
+                mname,
+                rname,
+                serial,
+                refresh,
+                retry,
+                expire,
+                minimum,
+            } => write!(
+                f,
+                "SOA: {},{},{serial},{refresh},{retry},{expire},{minimum}",
+                sanitize_csv_field(mname),
+                sanitize_csv_field(rname),
+            ),
+            Self::SRV {
+                priority,
+                weight,
+                port,
+                target,
+            } => {
+                write!(
+                    f,
+                    "SRV: {priority},{weight},{port},{}",
+                    sanitize_csv_field(target)
+                )
+            }
+            Self::OPT {
+                payload_size,
+                ext_rcode,
+                version,
+                flags,
+            } => {
+                write!(f, "OPT: {payload_size},{ext_rcode},{version},{flags}")
+            }
+            Self::Unknown(values) => write!(f, "Unknown: {}", vec_to_string_or_default(values)),
+        }
+    }
+}
+
+impl Display for ResourceRecord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({},{},{},{},{})",
+            sanitize_csv_field(&self.name),
+            self.rtype,
+            self.rclass,
+            self.ttl,
+            self.data,
+        )
+    }
+}
+
+impl Display for DnsQuestion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "({},{},{})",
+            sanitize_csv_field(&self.name),
+            Qtype::from(self.qtype),
+            Qclass::from(self.qclass)
+        )
+    }
+}
+
+/// A DNS or mDNS transaction, including the available request and reply data.
+///
+/// Sections with no available content are empty. Header fields describe the
+/// available transaction; empty sections do not independently prove that a
+/// request or reply was absent. This schema is incompatible with the legacy
+/// `Dns` API and its serialized representation.
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Dns {
+    /// Origin IP address.
     pub orig_addr: IpAddr,
+    /// Origin port, or zero when the protocol has no port.
     pub orig_port: u16,
+    /// Responder IP address.
     pub resp_addr: IpAddr,
+    /// Responder port.
     pub resp_port: u16,
+    /// IP protocol number.
     pub proto: u8,
+    /// Session start time in nanoseconds.
     pub start_time: i64,
+    /// Session duration in nanoseconds.
     pub duration: i64,
+    /// Origin-to-responder packet count.
     pub orig_pkts: u64,
+    /// Responder-to-origin packet count.
     pub resp_pkts: u64,
+    /// Origin-to-responder L2 byte count, including Ethernet frames.
     pub orig_l2_bytes: u64,
+    /// Responder-to-origin L2 byte count.
     pub resp_l2_bytes: u64,
-    pub query: String,
-    pub answer: Vec<String>,
+    /// DNS transaction ID; mDNS can use zero.
     pub trans_id: u16,
-    pub rtt: i64,
-    pub qclass: u16,
-    pub qtype: u16,
+    /// DNS response code.
     pub rcode: u16,
+    /// DNS operation code.
+    pub opcode: u8,
+    /// Authoritative answer flag.
     pub aa_flag: bool,
+    /// Truncation flag.
     pub tc_flag: bool,
+    /// Recursion desired flag.
     pub rd_flag: bool,
+    /// Recursion available flag.
     pub ra_flag: bool,
-    pub ttl: Vec<i32>,
+    /// Authenticated data flag.
+    pub ad_flag: bool,
+    /// Checking disabled flag.
+    pub cd_flag: bool,
+    /// Questions available for the transaction.
+    pub queries: Vec<DnsQuestion>,
+    /// Answer records available for the transaction.
+    pub answers: Vec<ResourceRecord>,
+    /// Authority records available for the transaction.
+    pub authorities: Vec<ResourceRecord>,
+    /// Additional records available for the transaction.
+    pub additionals: Vec<ResourceRecord>,
 }
 
 #[derive(Debug, FromPrimitive)]
@@ -302,7 +494,7 @@ impl Display for Dns {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -314,18 +506,19 @@ impl Display for Dns {
             self.resp_pkts,
             self.orig_l2_bytes,
             self.resp_l2_bytes,
-            self.query,
-            vec_to_string_or_default(&self.answer),
             self.trans_id,
-            self.rtt,
-            Qclass::from(self.qclass),
-            Qtype::from(self.qtype),
             self.rcode,
+            self.opcode,
             self.aa_flag,
             self.tc_flag,
             self.rd_flag,
             self.ra_flag,
-            vec_to_string_or_default(&self.ttl),
+            self.ad_flag,
+            self.cd_flag,
+            vec_to_string_or_default(&self.queries),
+            vec_to_string_or_default(&self.answers),
+            vec_to_string_or_default(&self.authorities),
+            vec_to_string_or_default(&self.additionals),
         )
     }
 }
@@ -1762,18 +1955,29 @@ mod tests {
                 resp_pkts: 1,
                 orig_l2_bytes: 100,
                 resp_l2_bytes: 100,
-                query: "example.com".to_string(),
-                answer: vec!["1.2.3.4".to_string()],
                 trans_id: 1,
-                rtt: 10,
-                qclass: 1,
-                qtype: 1,
                 rcode: 0,
+                opcode: 0,
                 aa_flag: true,
                 tc_flag: false,
                 rd_flag: true,
                 ra_flag: true,
-                ttl: vec![3600],
+                ad_flag: false,
+                cd_flag: false,
+                queries: vec![DnsQuestion {
+                    name: "example.com".into(),
+                    qtype: 1,
+                    qclass: 1,
+                }],
+                answers: vec![ResourceRecord {
+                    name: "example.com".into(),
+                    rtype: 1,
+                    rclass: 1,
+                    ttl: 3600,
+                    data: ResourceData::A("1.2.3.4".parse().unwrap()),
+                }],
+                authorities: vec![],
+                additionals: vec![],
             }
         }
 
@@ -2295,66 +2499,247 @@ mod tests {
     }
 
     #[test]
-    fn test_dns_display_formats_query_and_answer_fields() {
+    fn test_dns_display_and_response_data() {
         let dns = fixtures::dns();
-
         let fields = display_fields(&dns);
-        assert_eq!(fields.len(), 23);
-        assert_field_values(
-            &fields,
-            &[
-                (11, "example.com"),
-                (12, "1.2.3.4"),
-                (15, "C_INTERNET"),
-                (16, "A"),
-                (22, "3600"),
-            ],
-        );
+        assert_eq!(fields.len(), 24);
+        assert_eq!(fields[5], "1970-01-01T00:00:00.000001+00:00");
+        assert_eq!(fields[20], "(example.com,A,C_INTERNET)");
+        assert_eq!(fields[21], "(example.com,1,1,3600,A: 1.2.3.4)");
+        assert_field_values(&fields, &[(22, "-"), (23, "-")]);
+        let response = response_fields(&dns, 1000, "dns-sensor");
+        assert_eq!(response.len(), 26);
+        assert_eq!(response[1], "dns-sensor");
+        assert_eq!(&response[2..], fields);
     }
 
     #[test]
-    fn test_dns_display_formats_unknown_qclass_and_nsap_ptr_qtype() {
-        let dns = Dns {
-            qclass: 999,
-            qtype: 23,
-            ..fixtures::dns()
+    fn test_dns_round_trip_sections_and_metadata() {
+        let mut dns = fixtures::dns();
+        dns.trans_id = u16::MAX;
+        dns.rcode = 4095;
+        dns.opcode = 15;
+        dns.aa_flag = true;
+        dns.tc_flag = true;
+        dns.rd_flag = false;
+        dns.ra_flag = true;
+        dns.ad_flag = true;
+        dns.cd_flag = true;
+        let data = vec![
+            ResourceData::A("192.0.2.1".parse().unwrap()),
+            ResourceData::AAAA("2001:db8::1".parse().unwrap()),
+            ResourceData::CNAME("alias.example".into()),
+            ResourceData::MX {
+                preference: 65535,
+                exchange: "mail.example".into(),
+            },
+            ResourceData::NS("ns.example".into()),
+            ResourceData::PTR("ptr.example".into()),
+            ResourceData::TXT(vec!["first".into(), "second".into()]),
+            ResourceData::SOA {
+                mname: "ns.example".into(),
+                rname: "host.example".into(),
+                serial: u32::MAX,
+                refresh: -1,
+                retry: -2,
+                expire: -3,
+                minimum: u32::MAX,
+            },
+            ResourceData::SRV {
+                priority: 1,
+                weight: 2,
+                port: 65535,
+                target: "service.example".into(),
+            },
+            ResourceData::OPT {
+                payload_size: 4096,
+                ext_rcode: 255,
+                version: 1,
+                flags: 32768,
+            },
+            ResourceData::Unknown(vec![0, 1, 127, 255]),
+        ];
+        let expected = [
+            "A: 192.0.2.1",
+            "AAAA: 2001:db8::1",
+            "CNAME: alias.example",
+            "MX: 65535,mail.example",
+            "NS: ns.example",
+            "PTR: ptr.example",
+            "TXT: first,second",
+            "SOA: ns.example,host.example,4294967295,-1,-2,-3,4294967295",
+            "SRV: 1,2,65535,service.example",
+            "OPT: 4096,255,1,32768",
+            "Unknown: 0,1,127,255",
+        ];
+        for (value, expected) in data.iter().zip(expected) {
+            assert_eq!(value.to_string(), expected);
+        }
+        let records: Vec<_> = data
+            .into_iter()
+            .enumerate()
+            .map(|(i, data)| ResourceRecord {
+                name: format!("record{i}.example"),
+                rtype: u16::try_from(i).unwrap(),
+                rclass: 255,
+                ttl: -1,
+                data,
+            })
+            .collect();
+        dns.answers = records[..4].to_vec();
+        dns.authorities = records[4..8].to_vec();
+        dns.additionals = records[8..].to_vec();
+        let bytes = bincode::serialize(&dns).unwrap();
+        assert_eq!(bincode::deserialize::<Dns>(&bytes).unwrap(), dns);
+        let expected_records: Vec<_> = expected
+            .iter()
+            .enumerate()
+            .map(|(i, data)| format!("(record{i}.example,{i},255,-1,{data})"))
+            .collect();
+        for (record, expected) in records.iter().zip(&expected_records) {
+            assert_eq!(record.to_string(), *expected);
+        }
+        let fields = display_fields(&dns);
+        assert_eq!(fields.len(), 24);
+        assert_eq!(fields[21], expected_records[..4].join(","));
+        assert_eq!(fields[22], expected_records[4..8].join(","));
+        assert_eq!(fields[23], expected_records[8..].join(","));
+        let response = response_fields(&dns, 1000, "dns-sensor");
+        assert_eq!(response.len(), 26);
+        assert_eq!(&response[2..], fields);
+    }
+
+    #[test]
+    fn test_dns_empty_values_and_control_characters() {
+        let text = "a\t\nb\rc";
+        let clean = "a  b c";
+        let values = [
+            (ResourceData::CNAME(text.into()), format!("CNAME: {clean}")),
+            (ResourceData::NS(text.into()), format!("NS: {clean}")),
+            (ResourceData::PTR(text.into()), format!("PTR: {clean}")),
+            (
+                ResourceData::MX {
+                    preference: 10,
+                    exchange: text.into(),
+                },
+                format!("MX: 10,{clean}"),
+            ),
+            (
+                ResourceData::TXT(vec![text.into(), "rp=ipp/print".into()]),
+                format!("TXT: {clean},rp=ipp/print"),
+            ),
+            (
+                ResourceData::SOA {
+                    mname: text.into(),
+                    rname: text.into(),
+                    serial: 1,
+                    refresh: 2,
+                    retry: 3,
+                    expire: 4,
+                    minimum: 5,
+                },
+                format!("SOA: {clean},{clean},1,2,3,4,5"),
+            ),
+            (
+                ResourceData::SRV {
+                    priority: 1,
+                    weight: 2,
+                    port: 3,
+                    target: text.into(),
+                },
+                format!("SRV: 1,2,3,{clean}"),
+            ),
+            (ResourceData::TXT(vec![]), "TXT: -".into()),
+            (ResourceData::Unknown(vec![]), "Unknown: -".into()),
+            (ResourceData::CNAME(String::new()), "CNAME: -".into()),
+            (ResourceData::TXT(vec![String::new()]), "TXT: -".into()),
+        ];
+        let mut dns = fixtures::dns();
+        dns.queries = vec![
+            DnsQuestion {
+                name: text.into(),
+                qtype: 1,
+                qclass: 1,
+            },
+            DnsQuestion {
+                name: String::new(),
+                qtype: 28,
+                qclass: 255,
+            },
+        ];
+        assert_eq!(dns.queries[0].to_string(), "(a  b c,A,C_INTERNET)");
+        assert_eq!(dns.queries[1].to_string(), "(-,AAAA,UNKNOWN)");
+        let unknown = DnsQuestion {
+            qtype: u16::MAX,
+            ..dns.queries[1].clone()
         };
-
-        let fields = display_fields(&dns);
-        assert_field_values(&fields, &[(15, "UNKNOWN"), (16, "NSAP-PTR")]);
+        assert_eq!(unknown.to_string(), "(-,UNKNOWN,UNKNOWN)");
+        for (data, expected) in values {
+            assert_eq!(data.to_string(), expected);
+            let record = ResourceRecord {
+                name: text.into(),
+                rtype: 255,
+                rclass: 1,
+                ttl: 0,
+                data,
+            };
+            let expected_record = format!("({clean},255,1,0,{expected})");
+            assert_eq!(record.to_string(), expected_record);
+            dns.answers = vec![record.clone(), record.clone()];
+            dns.authorities = vec![record.clone(), record.clone()];
+            dns.additionals = vec![record.clone(), record];
+            let fields = display_fields(&dns);
+            assert_eq!(fields.len(), 24);
+            assert_eq!(fields[20], "(a  b c,A,C_INTERNET),(-,AAAA,UNKNOWN)");
+            for field in &fields[21..] {
+                assert_eq!(*field, format!("{expected_record},{expected_record}"));
+            }
+            let csv = assert_response_envelope(&dns, 1000, "dns-sensor");
+            assert_eq!(csv.split('\t').count(), 26);
+            assert!(!csv.contains(['\n', '\r']));
+            assert_eq!(
+                csv,
+                format!("1970-01-01T00:00:00.000001+00:00\tdns-sensor\t{dns}")
+            );
+        }
+        dns.queries.clear();
+        dns.answers.clear();
+        dns.authorities.clear();
+        dns.additionals.clear();
+        assert_eq!(&display_fields(&dns)[20..], ["-"; 4]);
+        assert_eq!(&response_fields(&dns, 1000, "dns-sensor")[22..], ["-"; 4]);
     }
 
     #[test]
-    fn test_dns_response_data_envelope() {
-        let dns = fixtures::dns();
+    fn test_dns_start_time_nanoseconds() {
+        let mut dns = fixtures::dns();
+        for (timestamp, expected) in [
+            (-1, "1969-12-31T23:59:59.999999999+00:00"),
+            (1_000_000_001, "1970-01-01T00:00:01.000000001+00:00"),
+        ] {
+            dns.start_time = timestamp;
+            assert_eq!(display_fields(&dns)[5], expected);
+            assert_eq!(response_fields(&dns, timestamp, "dns-sensor")[7], expected);
+        }
+    }
 
-        let fields = response_fields(&dns, 1000, "dns-sensor");
-        assert_eq!(fields.len(), 25);
-        assert_field_values(
-            &fields,
-            &[
-                (1, "dns-sensor"),
-                (13, "example.com"),
-                (14, "1.2.3.4"),
-                (17, "C_INTERNET"),
-                (18, "A"),
-                (24, "3600"),
-            ],
+    #[test]
+    fn test_dns_missing_sides_round_trip() {
+        let mut request = fixtures::dns();
+        request.answers.clear();
+        let request: Dns = bincode::deserialize(&bincode::serialize(&request).unwrap()).unwrap();
+        assert_eq!(request.queries, fixtures::dns().queries);
+        assert!(
+            request.answers.is_empty()
+                && request.authorities.is_empty()
+                && request.additionals.is_empty()
         );
-        assert_eq!(fields[0], fmt_time(1_000));
-    }
-
-    #[test]
-    fn test_dns_display_uses_dash_for_empty_answer_and_ttl_vectors() {
-        let dns = Dns {
-            answer: vec![],
-            ttl: vec![],
-            ..fixtures::dns()
-        };
-
-        let fields = display_fields(&dns);
-        assert_eq!(fields.len(), 23);
-        assert_field_values(&fields, &[(12, "-"), (22, "-")]);
+        let mut reply = fixtures::dns();
+        reply.queries.clear();
+        let reply: Dns = bincode::deserialize(&bincode::serialize(&reply).unwrap()).unwrap();
+        assert_eq!(reply.queries, []);
+        assert_eq!(reply.answers, fixtures::dns().answers);
+        assert_eq!(display_fields(&reply)[20], "-");
     }
 
     #[test]

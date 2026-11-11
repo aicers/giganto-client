@@ -16,6 +16,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - Expanded the public `Conn` event with TCP flags, missed bytes, ICMP metadata,
   and raw TCP SYN fingerprint fields. Its serialized representation and range-data
   TSV output have changed; producers and consumers must use the matching schema.
+- **Breaking:** Replaced the public `Dns` query/answer fields with DNS/mDNS
+  transaction headers and typed question, answer, authority, and additional
+  sections. Empty sections represent unavailable content. This changes the Rust
+  API, serde/bincode wire schema, and range-data display columns; producers and
+  consumers must update together. This change is scoped to `assets`; integration
+  into `main` is deferred to a separate issue.
 
 ## [0.28.0] - 2026-06-16
 
