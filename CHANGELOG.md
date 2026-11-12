@@ -22,6 +22,14 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   API, serde/bincode wire schema, and range-data display columns; producers and
   consumers must update together. This change is scoped to `assets`; integration
   into `main` is deferred to a separate issue.
+- Redesigned `Bootp` and `Dhcp` events for asset collection with transaction
+  states, optional fields, and typed DHCP messages. This is a breaking change
+  to the public structs, bincode layout, and tab-separated output.
+
+### Fixed
+
+- Replaced tabs, newlines, and carriage returns in BOOTP `sname` and `file`
+  text output with spaces to preserve field and record boundaries.
 
 ## [0.28.0] - 2026-06-16
 
