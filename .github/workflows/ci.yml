@@ -21,6 +21,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && '-dispatch' || (github.run_attempt != '1' && format('-rerun-{0}', github.run_id) || '') }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -28,100 +32,59 @@ jobs:
   changes:
     name: Change Filter
     runs-on: ubuntu-latest
-    # Scoped to this job alone. `pull-requests: read` is what
-    # dorny/paths-filter needs to list a pull request's files; without it the
-    # job dies with "Resource not accessible by integration". Declaring the
-    # block here rather than at workflow level leaves every other job's token
-    # exactly as it is.
+    # Scoped to this job alone. The filter only reads the checked-out
+    # history, so `contents: read` is all it needs. Declaring the block here
+    # rather than at workflow level leaves every other job's token exactly
+    # as it is.
     permissions:
       contents: read
-      pull-requests: read
     outputs:
-      docs_only: ${{ steps.decide.outputs.docs_only }}
+      docs_only: ${{ steps.scope.outputs.docs-only }}
     steps:
+      # The full history, because the action diffs locally and does not
+      # fetch: a pull request against its merge-base with the base branch,
+      # a push to `main` against `github.event.before`, and a dispatched
+      # branch against its merge-base with `main`.
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0 # a push diffs against its base commit locally
+          fetch-depth: 0
 
-      # A push carries its base in `github.event.before`. That sha is all-zeros
-      # on a branch's first push and can name a commit a force-push discarded,
-      # so establish that it is real and reachable before diffing. Leaving
-      # `sha` empty skips the filter below, which lands on docs_only=false.
-      - name: Resolve the push base
-        id: base
-        if: github.event_name != 'pull_request'
-        env:
-          BEFORE: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          if [ -n "${BEFORE}" ] \
-            && [ "${BEFORE}" != '0000000000000000000000000000000000000000' ] \
-            && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null
-          then
-            echo "sha=${BEFORE}" >> "$GITHUB_OUTPUT"
-          else
-            echo "Push base missing or unreachable; running the full suite."
-          fi
-
-      # On `pull_request` the action reads the file list from the API and
-      # ignores `base`; on `push` it diffs against the sha resolved above.
-      #
-      # `docs` is the allowlist of inert files this repository holds: the
-      # Markdown files, the license, the markdownlint configuration and the
-      # shared-instructions pin, which changes no build or test (the
-      # ungated drift step checks it). `code` is everything a build, a lint
+      # `docs-paths` is the allowlist of inert files this repository holds,
+      # on top of the action's built-in list (`*.md`, `LICENSE`,
+      # `.agent-instructions.toml`, `.markdownlint*`): the Markdown files,
+      # the license, the markdownlint configuration and the
+      # shared-instructions pin, which changes no build or test (the ungated
+      # drift step checks it). `not-docs-paths` is everything a build, a lint
       # or a test reads: the crate's sources and manifest, the Clippy and
       # rustfmt configuration, Cargo's own configuration, and the workflows
-      # themselves. `all` matches every path, so the decision below can tell
-      # whether every changed path is docs.
-      - name: Filter Paths
-        id: filter
-        if: github.event_name == 'pull_request' || steps.base.outputs.sha != ''
-        uses: dorny/paths-filter@v4
+      # themselves. It wins over the allowlist.
+      #
+      # Docs-only requires every changed path to be on the allowlist and
+      # none on `not-docs-paths`, so a `.md` under `src/` is code. A path on
+      # neither list counts as code: a `.gitignore` edit next to a README
+      # edit runs the full suite. Anything the action cannot establish also
+      # lands on docs_only=false.
+      - id: scope
+        uses: aicers/agent-instructions/change-scope@main
         with:
-          base: ${{ steps.base.outputs.sha }}
-          filters: |
-            docs:
-              - "**/*.md"
-              - "LICENSE"
-              - ".markdownlint*"
-              - ".agent-instructions.toml"
-            code:
-              - "src/**"
-              - "tests/**"
-              - "benches/**"
-              - "examples/**"
-              - "build.rs"
-              - "Cargo.*"
-              - ".cargo/**"
-              - ".clippy.toml"
-              - "clippy.toml"
-              - "rustfmt.toml"
-              - ".rustfmt.toml"
-              - ".github/workflows/**"
-            all:
-              - "**"
-
-      # Docs-only requires every changed path to be on the `docs` list
-      # (`docs_count == all_count`) and none on the `code` list, so a `.md`
-      # under `src/` is code. A path on neither list counts as code: a
-      # `.clippy.toml` edit next to a README edit runs the full suite. A
-      # skipped or failed filter leaves the outputs empty, which lands on
-      # docs_only=false.
-      - name: Decide Docs-Only
-        id: decide
-        env:
-          DOCS: ${{ steps.filter.outputs.docs }}
-          CODE: ${{ steps.filter.outputs.code }}
-          DOCS_COUNT: ${{ steps.filter.outputs.docs_count }}
-          ALL_COUNT: ${{ steps.filter.outputs.all_count }}
-        run: |
-          if [ "${DOCS}" = "true" ] && [ "${CODE}" != "true" ] \
-            && [ -n "${ALL_COUNT}" ] && [ "${DOCS_COUNT}" = "${ALL_COUNT}" ]; then
-            echo "docs_only=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "docs_only=false" >> "$GITHUB_OUTPUT"
-          fi
+          docs-paths: |
+            **/*.md
+            LICENSE
+            .markdownlint*
+            .agent-instructions.toml
+          not-docs-paths: |
+            src/**
+            tests/**
+            benches/**
+            examples/**
+            build.rs
+            Cargo.*
+            .cargo/**
+            .clippy.toml
+            clippy.toml
+            rustfmt.toml
+            .rustfmt.toml
+            .github/workflows/**
 
   # Ungated, deliberately. The Markdown lint and the drift check used to be
   # the last steps of `check`, which is now gated on the path filter -- left
@@ -139,10 +102,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         id: checkout
+      # No `globs` input. The `globs` of the root `.markdownlint-cli2.yaml`
+      # are the one place that decides which files are linted, here and in
+      # a local bare `markdownlint-cli2` alike; the rules stay in
+      # `.markdownlint.yaml`. The action's default `*.{md,markdown}` is only
+      # added to the config's globs and changes nothing.
       - name: markdownlint
-        uses: DavidAnson/markdownlint-cli2-action@v24
-        with:
-          globs: "**/*.md"
+        uses: DavidAnson/markdownlint-cli2-action@v25
       # Fails when this repository's copy of the shared instruction blocks
       # stops matching the release `.agent-instructions.toml` pins --
       # because a generated region of AGENTS.md was edited here, or because
