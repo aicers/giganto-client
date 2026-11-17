@@ -424,6 +424,20 @@ mod tests {
     }
 
     #[test]
+    fn convert_time_format_extreme_values_exact_output() {
+        // Literals captured from the jiff 0.2 implementation; they must not
+        // change when the jiff dependency is upgraded.
+        assert_eq!(
+            super::convert_time_format(i64::MIN),
+            "1677-09-21T00:12:43.145224192+00:00"
+        );
+        assert_eq!(
+            super::convert_time_format(i64::MAX),
+            "2262-04-11T23:47:16.854775807+00:00"
+        );
+    }
+
+    #[test]
     fn convert_time_format_round_trip_chrono() {
         let cases: &[i64] = &[
             0,
