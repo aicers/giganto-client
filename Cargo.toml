@@ -8,7 +8,7 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0"
 bincode = "1"
-jiff = "0.2"
+jiff = "1"
 num_enum = "0.7"
 quinn = { version = "0.11", default-features = false }
 semver = "1"
