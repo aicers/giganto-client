@@ -63,13 +63,13 @@ jobs:
 
 
           def git(*args):
-              return subprocess.run(
-                  ["git", *args],
-                  check=True,
-                  capture_output=True,
-                  encoding="utf-8",
-                  errors="replace",
-              ).stdout
+              # Decoded from bytes rather than with `encoding=`, which turns
+              # on universal newlines and would rewrite a carriage return in
+              # a title to a line feed, hiding it from the title check.
+              return (
+                  subprocess.run(["git", *args], check=True, capture_output=True)
+                  .stdout.decode("utf-8", errors="replace")
+              )
 
 
           def quoted(text):
