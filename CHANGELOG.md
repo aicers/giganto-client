@@ -4,6 +4,19 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.2](https://github.com/aicers/giganto-client/compare/0.29.1...0.29.2) - 2026-11-20
+
+### Other
+
+- automate releases with release-plz ([#326](https://github.com/aicers/giganto-client/pull/326))
+- Upgrade jiff to 1
+- Pin range-data time output for extreme values
+- Keep the release notes scratch file out of /tmp
+- Standardize the CI workflow
+- Update shared instruction blocks to 0.5.0
+- Update shared instruction blocks to 0.4.3
+- Skip heavy CI jobs on docs-only changes
+
 ## [0.29.1] - 2026-11-01
 
 ### Changed
