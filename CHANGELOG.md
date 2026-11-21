@@ -4,6 +4,12 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.29.3](https://github.com/aicers/giganto-client/compare/0.29.2...0.29.3) - 2026-11-21
+
+### Other
+
+- drop the chrono round-trip test and dev-dependency ([#329](https://github.com/aicers/giganto-client/pull/329))
+
 ## [0.29.2](https://github.com/aicers/giganto-client/compare/0.29.1...0.29.2) - 2026-11-20
 
 ### Changed
