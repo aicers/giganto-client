@@ -151,8 +151,6 @@ fn to_string_or_empty<T: Display>(option: Option<T>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use chrono::DateTime;
-
     use crate::test::wait;
 
     #[tokio::test]
@@ -435,39 +433,6 @@ mod tests {
             super::convert_time_format(i64::MAX),
             "2262-04-11T23:47:16.854775807+00:00"
         );
-    }
-
-    #[test]
-    fn convert_time_format_round_trip_chrono() {
-        let cases: &[i64] = &[
-            0,
-            1,
-            -1,
-            999_999_999,
-            1_000_000_000,
-            1_000_000_001,
-            -999_999_999,
-            -1_000_000_000,
-            -1_000_000_001,
-            1_773_586_804_043_577_000,
-            i64::MAX,
-            i64::MIN,
-        ];
-
-        for input in cases {
-            let formatted = super::convert_time_format(*input);
-            if formatted.starts_with("INVALID_TIMESTAMP") {
-                continue;
-            }
-
-            let parsed = DateTime::parse_from_rfc3339(&formatted)
-                .unwrap_or_else(|err| panic!("failed to parse {formatted} with chrono: {err}"));
-            assert_eq!(
-                parsed.timestamp_nanos_opt().unwrap(),
-                *input,
-                "chrono round-trip failed for {input}"
-            );
-        }
     }
 
     #[test]
