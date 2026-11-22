@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter, EnumString};
 
-use crate::publish::PcapFilter;
+use crate::{RawEventKind, publish::PcapFilter};
 
 pub const STREAM_REQUEST_ALL_SENSOR: &str = "all";
 
@@ -59,6 +59,48 @@ impl RequestStreamRecord {
     #[must_use]
     pub fn all() -> Vec<RequestStreamRecord> {
         RequestStreamRecord::iter().collect()
+    }
+
+    /// Returns the [`RawEventKind`] describing the same raw event as this
+    /// record type.
+    ///
+    /// The two enums use different discriminants for the same events, so
+    /// this maps by meaning rather than by number: `FileCreate` (31) maps to
+    /// [`RawEventKind::FileCreate`] (41), and `FileDelete` (32) to
+    /// [`RawEventKind::FileDelete`] (53).
+    ///
+    /// Returns `None` for [`RequestStreamRecord::Pcap`], which has no raw
+    /// event counterpart.
+    #[must_use]
+    pub fn raw_event_kind(self) -> Option<RawEventKind> {
+        // No wildcard arm: a new variant must not compile until its mapping
+        // is written here.
+        match self {
+            RequestStreamRecord::Conn => Some(RawEventKind::Conn),
+            RequestStreamRecord::Dns => Some(RawEventKind::Dns),
+            RequestStreamRecord::Rdp => Some(RawEventKind::Rdp),
+            RequestStreamRecord::Http => Some(RawEventKind::Http),
+            RequestStreamRecord::Log => Some(RawEventKind::Log),
+            RequestStreamRecord::Smtp => Some(RawEventKind::Smtp),
+            RequestStreamRecord::Ntlm => Some(RawEventKind::Ntlm),
+            RequestStreamRecord::Kerberos => Some(RawEventKind::Kerberos),
+            RequestStreamRecord::Ssh => Some(RawEventKind::Ssh),
+            RequestStreamRecord::DceRpc => Some(RawEventKind::DceRpc),
+            RequestStreamRecord::Pcap => None,
+            RequestStreamRecord::Ftp => Some(RawEventKind::Ftp),
+            RequestStreamRecord::Mqtt => Some(RawEventKind::Mqtt),
+            RequestStreamRecord::Ldap => Some(RawEventKind::Ldap),
+            RequestStreamRecord::Tls => Some(RawEventKind::Tls),
+            RequestStreamRecord::Smb => Some(RawEventKind::Smb),
+            RequestStreamRecord::Nfs => Some(RawEventKind::Nfs),
+            RequestStreamRecord::Bootp => Some(RawEventKind::Bootp),
+            RequestStreamRecord::Dhcp => Some(RawEventKind::Dhcp),
+            RequestStreamRecord::Radius => Some(RawEventKind::Radius),
+            RequestStreamRecord::MalformedDns => Some(RawEventKind::MalformedDns),
+            RequestStreamRecord::Icmp => Some(RawEventKind::Icmp),
+            RequestStreamRecord::FileCreate => Some(RawEventKind::FileCreate),
+            RequestStreamRecord::FileDelete => Some(RawEventKind::FileDelete),
+        }
     }
 }
 
@@ -366,5 +408,65 @@ mod tests {
 
         let payload = StreamRequestPayload::new_pcap_extraction(vec![]);
         assert_eq!(payload.record_type(), None);
+    }
+
+    #[test]
+    fn test_raw_event_kind() {
+        let expected = [
+            (RequestStreamRecord::Conn, Some(RawEventKind::Conn)),
+            (RequestStreamRecord::Dns, Some(RawEventKind::Dns)),
+            (RequestStreamRecord::Rdp, Some(RawEventKind::Rdp)),
+            (RequestStreamRecord::Http, Some(RawEventKind::Http)),
+            (RequestStreamRecord::Log, Some(RawEventKind::Log)),
+            (RequestStreamRecord::Smtp, Some(RawEventKind::Smtp)),
+            (RequestStreamRecord::Ntlm, Some(RawEventKind::Ntlm)),
+            (RequestStreamRecord::Kerberos, Some(RawEventKind::Kerberos)),
+            (RequestStreamRecord::Ssh, Some(RawEventKind::Ssh)),
+            (RequestStreamRecord::DceRpc, Some(RawEventKind::DceRpc)),
+            (RequestStreamRecord::Pcap, None),
+            (RequestStreamRecord::Ftp, Some(RawEventKind::Ftp)),
+            (RequestStreamRecord::Mqtt, Some(RawEventKind::Mqtt)),
+            (RequestStreamRecord::Ldap, Some(RawEventKind::Ldap)),
+            (RequestStreamRecord::Tls, Some(RawEventKind::Tls)),
+            (RequestStreamRecord::Smb, Some(RawEventKind::Smb)),
+            (RequestStreamRecord::Nfs, Some(RawEventKind::Nfs)),
+            (RequestStreamRecord::Bootp, Some(RawEventKind::Bootp)),
+            (RequestStreamRecord::Dhcp, Some(RawEventKind::Dhcp)),
+            (RequestStreamRecord::Radius, Some(RawEventKind::Radius)),
+            (
+                RequestStreamRecord::MalformedDns,
+                Some(RawEventKind::MalformedDns),
+            ),
+            (RequestStreamRecord::Icmp, Some(RawEventKind::Icmp)),
+            (
+                RequestStreamRecord::FileCreate,
+                Some(RawEventKind::FileCreate),
+            ),
+            (
+                RequestStreamRecord::FileDelete,
+                Some(RawEventKind::FileDelete),
+            ),
+        ];
+
+        // Every variant must have exactly one expected entry, so a variant
+        // added later fails here until the table covers it.
+        let all = RequestStreamRecord::all();
+        assert_eq!(expected.len(), all.len());
+        for record in all {
+            let entries: Vec<_> = expected.iter().filter(|(r, _)| *r == record).collect();
+            assert_eq!(
+                entries.len(),
+                1,
+                "expected exactly one entry for {record:?}"
+            );
+            let (_, kind) = entries[0];
+            assert_eq!(record.raw_event_kind(), *kind, "mapping for {record:?}");
+        }
+
+        // The sysmon kinds map by meaning, not by discriminant.
+        assert_eq!(u32::from(RequestStreamRecord::FileCreate), 31);
+        assert_eq!(u32::from(RawEventKind::FileCreate), 41);
+        assert_eq!(u32::from(RequestStreamRecord::FileDelete), 32);
+        assert_eq!(u32::from(RawEventKind::FileDelete), 53);
     }
 }
