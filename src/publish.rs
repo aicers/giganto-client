@@ -1896,6 +1896,35 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_receive_time_series_generator_data_truncated_after_timestamp_returns_error() {
+        // The stream ends right after the timestamp, inside the length, and
+        // inside the record bytes; none of these is a replay-end frame.
+        let mut length_short = 1234_i64.to_le_bytes().to_vec();
+        length_short.extend_from_slice(&[0, 0]);
+        let mut record_short = 1234_i64.to_le_bytes().to_vec();
+        record_short.extend_from_slice(&10_u32.to_le_bytes());
+        record_short.extend_from_slice(&[1, 2, 3]);
+
+        for bytes in [1234_i64.to_le_bytes().to_vec(), length_short, record_short] {
+            let mut channel = channel().await;
+            wait(
+                "channel.server.send.write_all",
+                channel.server.send.write_all(&bytes),
+            )
+            .await
+            .unwrap();
+            channel.server.send.finish().ok();
+
+            let res = wait(
+                "super::receive_time_series_generator_data",
+                super::receive_time_series_generator_data(&mut channel.client.recv),
+            )
+            .await;
+            assert!(matches!(res, Err(PublishError::ConnectionClosed)));
+        }
+    }
+
+    #[tokio::test]
     async fn test_receive_stream_request_short_read_returns_error() {
         let mut channel = channel().await;
 
