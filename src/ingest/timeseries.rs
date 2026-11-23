@@ -5,8 +5,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::publish::range::ResponseRangeData;
 
+/// A periodic time series produced by a time-series-generation policy.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct PeriodicTimeSeries {
+    /// Series id: `<policy id>` for a policy that does not group, or
+    /// `<policy id>/<IP>` for a policy that groups by IP. Giganto stores the
+    /// series under this id.
     pub id: String,
     pub data: Vec<f64>,
 }

@@ -39,16 +39,33 @@ pub enum MessageCode {
     RawDataWithStatus = 5,
 }
 
+/// A range read over one source of one event kind, sent with
+/// [`MessageCode::ReqRange`].
+///
+/// For a time-series kind, the source carried in each returned frame is a
+/// series id: `<policy id>` for a time-series-generation policy that does not
+/// group, or `<policy id>/<IP>` for one that groups by IP. One policy can
+/// produce several series.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct RequestRange {
-    pub sensor: String, //network event: certification name, time_series: sampling policy id
+    /// Source to read: a sensor (certification) name for a network event
+    /// kind, or a time-series-generation-policy ID for a time-series kind.
+    pub sensor: String,
     pub kind: String,
     pub start: i64,
     pub end: i64,
     pub count: usize,
 }
 
+/// A re-read of given events, sent with [`MessageCode::RawData`] or
+/// [`MessageCode::RawDataWithStatus`].
+///
+/// `input` holds `(source, timestamps)` pairs. For a time-series kind, each
+/// source names an exact series id — `<policy id>` or `<policy id>/<IP>` —
+/// rather than a time-series-generation-policy ID, and the [`RangeStatus`] of
+/// a [`MessageCode::RawDataWithStatus`] response lists those requested series
+/// ids.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RequestRawData {
     pub kind: String,
@@ -76,13 +93,26 @@ pub struct RequestRawData {
 /// and then finishes the stream. A response that ends before its
 /// [`RangeStatus`] frame is incomplete, and the client treats it as a failure
 /// of the whole request.
+///
+/// # Time-series sources
+///
+/// For a time-series kind, each requested source is a
+/// time-series-generation-policy ID, and one policy can produce several
+/// series. The source carried in each event frame is the series id:
+/// `<policy id>` for a policy that does not group, or `<policy id>/<IP>` for a
+/// policy that groups by IP. The [`RangeStatus`] frame lists the requested
+/// policy IDs, not the series ids.
+///
+/// A re-read of a time-series kind ([`RequestRawData`], also with
+/// [`MessageCode::RawDataWithStatus`]) names exact series ids instead, and its
+/// [`RangeStatus`] lists those requested series ids.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct RequestMultiSourceRange {
     /// Event kind, spelled as in `RequestRange::kind`.
     pub kind: String,
     /// `(source, start)` pairs, non-empty, each source at most once. A
-    /// source is a sensor name, or a sampling-policy ID when `kind` is a
-    /// time-series kind. `start` is inclusive, in nanoseconds.
+    /// source is a sensor name, or a time-series-generation-policy ID when
+    /// `kind` is a time-series kind. `start` is inclusive, in nanoseconds.
     pub sources: Vec<(String, i64)>,
     /// Shared exclusive end, in nanoseconds.
     pub end: i64,
@@ -104,6 +134,10 @@ pub enum SourceStatus {
 /// Outcome of a multi-source range read or a re-read with status:
 /// `Ok` lists one `(source, status)` per distinct requested source, in
 /// request order; `Err` is a failure of the whole request, with its reason.
+///
+/// For a time-series kind, the sources listed are those requested: the
+/// time-series-generation-policy IDs of a multi-source range read, or the
+/// series ids of a re-read.
 ///
 /// It is the last frame of a response to [`MessageCode::MultiSourceRange`] or
 /// [`MessageCode::RawDataWithStatus`], sent after the terminator frame.

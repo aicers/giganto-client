@@ -76,6 +76,28 @@ pub struct PcapFilter {
     pub end_time: i64,
 }
 
+/// One data frame of a time series generator stream, as returned by
+/// [`receive_time_series_generator_data`].
+///
+/// A generator stream carries, in order: the stream start message, the raw
+/// events replayed from storage, exactly one replay-end frame, and then the
+/// realtime raw events.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TimeSeriesGeneratorData {
+    /// A raw event, replayed or realtime.
+    Event {
+        /// The bincode-serialized raw event; never empty.
+        record: Vec<u8>,
+        /// The event's timestamp, in nanoseconds.
+        timestamp: i64,
+    },
+    /// The end of the replayed events; realtime events follow.
+    ReplayEnd {
+        /// The `start` of the stream request, in nanoseconds.
+        timestamp: i64,
+    },
+}
+
 /// Sends the stream request to giganto's publish module.
 ///
 /// # Errors
@@ -104,6 +126,34 @@ pub async fn send_semi_supervised_stream_start_message(
 ) -> Result<(), PublishError> {
     let record: u32 = start_msg.into();
     send_bytes(send, &record.to_le_bytes()).await?;
+    Ok(())
+}
+
+/// Sends the replay-end frame of a time series generator stream from
+/// giganto's publish module.
+///
+/// A generator stream carries, in order: the stream start message, the raw
+/// events replayed from storage, exactly one replay-end frame, and then the
+/// realtime raw events. This frame is sent once per stream, after the
+/// replayed events and before the first realtime event, also when nothing was
+/// replayed.
+///
+/// The frame is the 8-byte little-endian `start` followed by a zero 4-byte
+/// little-endian length and no record bytes. `start` is the `start` of the
+/// stream request.
+///
+/// # Errors
+///
+/// * `PublishError::WriteError`: if the frame could not be written
+pub async fn send_time_series_generator_replay_end(
+    send: &mut SendStream,
+    start: i64,
+) -> Result<(), PublishError> {
+    let mut buf = [0; mem::size_of::<i64>() + mem::size_of::<u32>()];
+    let (ts, len) = buf.split_at_mut(mem::size_of::<i64>());
+    ts.copy_from_slice(&start.to_le_bytes());
+    len.copy_from_slice(&0_u32.to_le_bytes());
+    send_bytes(send, &buf).await?;
     Ok(())
 }
 
@@ -241,21 +291,44 @@ pub async fn receive_time_series_generator_stream_start_message(
     Ok(start_msg)
 }
 
-/// Receives the record data. (timestamp / record structure)
+/// Receives one data frame of a time series generator stream.
+///
+/// A generator stream carries, in order: the stream start message (read by
+/// [`receive_time_series_generator_stream_start_message`]), the raw events
+/// replayed from storage, exactly one replay-end frame, and then the realtime
+/// raw events. The replay-end frame is sent also when nothing was replayed.
+///
+/// Every data frame is an 8-byte little-endian `i64` timestamp followed by a
+/// 4-byte little-endian `u32` length and that many bytes of the
+/// bincode-serialized raw event. A raw event record is never empty, so a frame
+/// whose length is zero is the replay-end frame, and its timestamp is the
+/// `start` of the stream request.
+///
+/// This function keeps no state: it returns
+/// [`TimeSeriesGeneratorData::ReplayEnd`] for every zero-length frame, and
+/// what a second one means is for the caller to decide.
 ///
 /// # Errors
 ///
-/// * `PublishError::ReadError`: if the stream record data could not be read
+/// * `PublishError::ConnectionClosed`: if the stream ended before a whole
+///   frame was read
+/// * `PublishError::ReadError`: if the stream data could not be read
+/// * `PublishError::MessageTooLarge`: if the record length does not fit in
+///   memory
 pub async fn receive_time_series_generator_data(
     recv: &mut RecvStream,
-) -> Result<(Vec<u8>, i64), PublishError> {
-    let mut ts_buf = [0; std::mem::size_of::<u64>()];
+) -> Result<TimeSeriesGeneratorData, PublishError> {
+    let mut ts_buf = [0; mem::size_of::<i64>()];
     frame::recv_bytes(recv, &mut ts_buf).await?;
     let timestamp = i64::from_le_bytes(ts_buf);
 
-    let mut record_buf = Vec::new();
-    frame::recv_raw(recv, &mut record_buf).await?;
-    Ok((record_buf, timestamp))
+    let mut record = Vec::new();
+    frame::recv_raw(recv, &mut record).await?;
+    if record.is_empty() {
+        Ok(TimeSeriesGeneratorData::ReplayEnd { timestamp })
+    } else {
+        Ok(TimeSeriesGeneratorData::Event { record, timestamp })
+    }
 }
 
 /// Receives the timestamp/sensor/record data from giganto's publish module.
@@ -754,33 +827,146 @@ mod tests {
         assert_eq!(data, result_buf);
     }
 
+    async fn send_generator_event(send: &mut quinn::SendStream, timestamp: i64, conn: &Conn) {
+        wait(
+            "frame::send_bytes",
+            frame::send_bytes(send, &timestamp.to_le_bytes()),
+        )
+        .await
+        .unwrap();
+        let mut data_buf = Vec::new();
+        wait("frame::send", frame::send(send, &mut data_buf, conn))
+            .await
+            .unwrap();
+    }
+
+    async fn recv_generator_data(recv: &mut quinn::RecvStream) -> super::TimeSeriesGeneratorData {
+        wait(
+            "super::receive_time_series_generator_data",
+            super::receive_time_series_generator_data(recv),
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn send_generator_replay_end(send: &mut quinn::SendStream, start: i64) {
+        wait(
+            "super::send_time_series_generator_replay_end",
+            super::send_time_series_generator_replay_end(send, start),
+        )
+        .await
+        .unwrap();
+    }
+
     #[tokio::test]
     async fn test_receive_time_series_generator_data_roundtrip() {
         let mut channel = channel().await;
 
         // recv time series generator stream data
         let conn = sample_conn();
+        send_generator_event(&mut channel.server.send, 7777, &conn).await;
+        let data = recv_generator_data(&mut channel.client.recv).await;
+        assert_eq!(
+            data,
+            super::TimeSeriesGeneratorData::Event {
+                record: bincode::serialize(&conn).unwrap(),
+                timestamp: 7777,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_time_series_generator_event_replay_end_event_roundtrip() {
+        let mut channel = channel().await;
+
+        let replayed = sample_conn();
+        let mut realtime = sample_conn();
+        realtime.orig_port = 50000;
+        send_generator_event(&mut channel.server.send, 1000, &replayed).await;
+        send_generator_replay_end(&mut channel.server.send, 500).await;
+        send_generator_event(&mut channel.server.send, 2000, &realtime).await;
+
+        assert_eq!(
+            recv_generator_data(&mut channel.client.recv).await,
+            super::TimeSeriesGeneratorData::Event {
+                record: bincode::serialize(&replayed).unwrap(),
+                timestamp: 1000,
+            }
+        );
+        assert_eq!(
+            recv_generator_data(&mut channel.client.recv).await,
+            super::TimeSeriesGeneratorData::ReplayEnd { timestamp: 500 }
+        );
+        assert_eq!(
+            recv_generator_data(&mut channel.client.recv).await,
+            super::TimeSeriesGeneratorData::Event {
+                record: bincode::serialize(&realtime).unwrap(),
+                timestamp: 2000,
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_time_series_generator_replay_end_with_nothing_replayed() {
+        let mut channel = channel().await;
+
         wait(
-            "frame::send_bytes",
-            frame::send_bytes(&mut channel.server.send, &7777_i64.to_le_bytes()),
+            "frame::send_raw",
+            frame::send_raw(&mut channel.server.send, b"1"),
         )
         .await
         .unwrap();
-        let mut data_buf = Vec::new();
-        wait(
-            "frame::send",
-            frame::send(&mut channel.server.send, &mut data_buf, conn.clone()),
+        send_generator_replay_end(&mut channel.server.send, 3333).await;
+
+        let policy_id = wait(
+            "super::receive_time_series_generator_stream_start_message",
+            super::receive_time_series_generator_stream_start_message(&mut channel.client.recv),
         )
         .await
         .unwrap();
-        let (data, timestamp) = wait(
-            "super::receive_time_series_generator_data",
-            super::receive_time_series_generator_data(&mut channel.client.recv),
+        assert_eq!(policy_id, 1);
+        assert_eq!(
+            recv_generator_data(&mut channel.client.recv).await,
+            super::TimeSeriesGeneratorData::ReplayEnd { timestamp: 3333 }
+        );
+    }
+
+    #[tokio::test]
+    async fn test_send_time_series_generator_replay_end_wire_form() {
+        const START: i64 = -0x0102_0304_0506_0708;
+
+        let mut channel = channel().await;
+
+        send_generator_replay_end(&mut channel.server.send, START).await;
+        channel.server.send.finish().unwrap();
+
+        let bytes = wait(
+            "channel.client.recv.read_to_end",
+            channel.client.recv.read_to_end(64),
         )
         .await
         .unwrap();
-        assert_eq!(timestamp, 7777);
-        assert_eq!(data, bincode::serialize(&conn).unwrap());
+        let mut expected = START.to_le_bytes().to_vec();
+        expected.extend_from_slice(&[0, 0, 0, 0]);
+        assert_eq!(expected.len(), 12);
+        assert_eq!(bytes, expected);
+    }
+
+    #[tokio::test]
+    async fn test_receive_time_series_generator_data_second_replay_end() {
+        let mut channel = channel().await;
+
+        send_generator_replay_end(&mut channel.server.send, 100).await;
+        send_generator_replay_end(&mut channel.server.send, 200).await;
+
+        assert_eq!(
+            recv_generator_data(&mut channel.client.recv).await,
+            super::TimeSeriesGeneratorData::ReplayEnd { timestamp: 100 }
+        );
+        assert_eq!(
+            recv_generator_data(&mut channel.client.recv).await,
+            super::TimeSeriesGeneratorData::ReplayEnd { timestamp: 200 }
+        );
     }
 
     #[tokio::test]
