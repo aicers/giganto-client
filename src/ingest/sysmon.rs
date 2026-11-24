@@ -30,7 +30,7 @@ pub struct ProcessCreate {
     pub current_directory: String,
     pub user: String,
     pub logon_guid: String,
-    /// The logon ID, truncated to 32 bits.
+    /// The logon ID as a 32-bit value.
     ///
     /// For endpoint records, this holds the logon ID if it fits in `u32`,
     /// otherwise `u32::MAX`; `logon_id_full` holds the full value.
@@ -49,7 +49,7 @@ pub struct ProcessCreate {
     /// The full 64-bit logon ID.
     ///
     /// Endpoint records set this to the full value; other producers leave it
-    /// `None`. See `logon_id` for the truncated form.
+    /// `None`. See `logon_id` for the 32-bit form.
     pub logon_id_full: Option<u64>,
 }
 
