@@ -4,6 +4,13 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0](https://github.com/aicers/giganto-client/compare/0.29.3...0.30.0) - 2026-11-24
+
+### Added
+
+- [**breaking**] add identification fields to Dhcp and Kerberos ([#342](https://github.com/aicers/giganto-client/pull/342))
+- *(publish)* [**breaking**] add a replay-end frame to the time-series generator stream ([#340](https://github.com/aicers/giganto-client/pull/340))
+
 ## [0.29.3](https://github.com/aicers/giganto-client/compare/0.29.2...0.29.3) - 2026-11-22
 
 ### Added
