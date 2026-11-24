@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ingest::{
-        bytes_to_hex, convert_time_format,
+        bytes_to_hex_or_default, convert_time_format,
         endpoint::{EndpointHeader, endpoint_columns},
-        replace_csv_separators, sanitize_csv_field, to_string_or_empty,
+        sanitize_csv_field, to_string_or_empty,
     },
     publish::range::ResponseRangeData,
 };
@@ -167,49 +167,47 @@ pub enum LogValue {
 }
 
 impl Display for LogValue {
-    /// Writes the text, or the bytes as lowercase hexadecimal.
+    /// Writes the text, or the bytes as lowercase hexadecimal; `-` when the
+    /// value is empty.
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::Text(text) => f.write_str(&replace_csv_separators(text)),
-            Self::Bytes(bytes) => f.write_str(&bytes_to_hex(bytes)),
+            Self::Text(text) => f.write_str(&sanitize_csv_field(text)),
+            Self::Bytes(bytes) => f.write_str(&bytes_to_hex_or_default(bytes)),
         }
     }
 }
 
 impl Display for LogField {
-    /// Writes `name=value`.
+    /// Writes `name=value`, with `-` for an empty name or value.
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}={}", replace_csv_separators(&self.name), self.value)
+        write!(f, "{}={}", sanitize_csv_field(&self.name), self.value)
     }
 }
 
 impl Display for EventData {
-    /// Writes `name=value`, or `=value` when the element has no name.
+    /// Writes `name=value`, or `=value` when the element has no name, with
+    /// `-` for an empty name or value.
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}={}",
-            replace_csv_separators(self.name.as_deref().unwrap_or_default()),
-            replace_csv_separators(&self.value)
-        )
+        let name = self.name.as_deref().map_or_default(sanitize_csv_field);
+        write!(f, "{name}={}", sanitize_csv_field(&self.value))
     }
 }
 
 impl Display for AuditRecord {
-    /// Writes `record_type:` followed by the fields, separated by spaces.
+    /// Writes `record_type:` followed by the fields, separated by spaces, with
+    /// `-` for an empty record type or no fields.
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "{}:{}",
-            replace_csv_separators(&self.record_type),
-            join_or_default(&self.fields, " ")
-        )
+        let fields = if self.fields.is_empty() {
+            "-".to_string()
+        } else {
+            join(&self.fields, " ")
+        };
+        write!(f, "{}:{fields}", sanitize_csv_field(&self.record_type))
     }
 }
 
-/// Joins the elements' `Display` with `separator`, giving an empty string for
-/// no elements.
-fn join_or_default<T: Display>(items: &[T], separator: &str) -> String {
+/// Joins the elements' `Display` with `separator`.
+fn join<T: Display>(items: &[T], separator: &str) -> String {
     items
         .iter()
         .map(ToString::to_string)
@@ -221,7 +219,7 @@ fn join_or_default<T: Display>(items: &[T], separator: &str) -> String {
 /// is absent or empty.
 fn log_list_or_default<T: Display>(items: Option<&[T]>) -> String {
     match items {
-        Some(items) if !items.is_empty() => join_or_default(items, LOG_LIST_SEPARATOR),
+        Some(items) if !items.is_empty() => join(items, LOG_LIST_SEPARATOR),
         _ => "-".to_string(),
     }
 }
@@ -540,7 +538,70 @@ mod tests {
             LogValue::Bytes(vec![0x00, 0x0a, 0xab, 0xff]).to_string(),
             "000aabff"
         );
-        assert_eq!(LogValue::Bytes(Vec::new()).to_string(), "");
+        assert_eq!(LogValue::Text(String::new()).to_string(), "-");
+        assert_eq!(LogValue::Bytes(Vec::new()).to_string(), "-");
+    }
+
+    #[test]
+    fn test_log_elements_display_empty_values_as_dash() {
+        assert_eq!(text("KEY", "").to_string(), "KEY=-");
+        assert_eq!(
+            LogField {
+                name: "KEY".to_string(),
+                value: LogValue::Bytes(Vec::new()),
+            }
+            .to_string(),
+            "KEY=-"
+        );
+        assert_eq!(text("", "v").to_string(), "-=v");
+        assert_eq!(
+            EventData {
+                name: Some("Empty".to_string()),
+                value: String::new(),
+            }
+            .to_string(),
+            "Empty=-"
+        );
+        assert_eq!(
+            EventData {
+                name: None,
+                value: "unnamed".to_string(),
+            }
+            .to_string(),
+            "=unnamed"
+        );
+        assert_eq!(
+            EventData {
+                name: None,
+                value: String::new(),
+            }
+            .to_string(),
+            "=-"
+        );
+        assert_eq!(
+            EventData {
+                name: Some(String::new()),
+                value: "v".to_string(),
+            }
+            .to_string(),
+            "-=v"
+        );
+        assert_eq!(
+            AuditRecord {
+                record_type: String::new(),
+                fields: vec![text("a", "")],
+            }
+            .to_string(),
+            "-:a=-"
+        );
+        assert_eq!(
+            AuditRecord {
+                record_type: "EOE".to_string(),
+                fields: Vec::new(),
+            }
+            .to_string(),
+            "EOE:-"
+        );
     }
 
     #[test]
@@ -578,7 +639,7 @@ mod tests {
             &windows_event_log().to_string(),
             "Security\tMicrosoft-Windows-Security-Auditing\t4624\t2\t0\t12544\t0\
              \t9232379236109516800\t123456\thost-01\tS-1-5-18\
-             \tSubjectUserName=SYSTEM;=unnamed;Empty=\t<UserData>   <x/> </UserData>",
+             \tSubjectUserName=SYSTEM;=unnamed;Empty=-\t<UserData>   <x/> </UserData>",
         );
         assert_fields_then_header(
             &empty_windows_event_log().to_string(),
@@ -615,7 +676,7 @@ mod tests {
     fn test_auditd_display() {
         assert_fields_then_header(
             &auditd().to_string(),
-            "8731\tSYSCALL:arch=c000003e syscall=59;EXECVE:argc=1 a0=6c73;EOE:",
+            "8731\tSYSCALL:arch=c000003e syscall=59;EXECVE:argc=1 a0=6c73;EOE:-",
         );
         assert_fields_then_header(
             &Auditd {

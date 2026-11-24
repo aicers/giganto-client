@@ -143,12 +143,6 @@ where
     }
 }
 
-/// Replaces the characters that would break a tab-separated row (tab, line
-/// feed, carriage return) with spaces, leaving an empty string empty.
-fn replace_csv_separators(s: &str) -> String {
-    s.replace(['\t', '\n', '\r'], " ")
-}
-
 /// Formats bytes as lowercase hexadecimal.
 fn bytes_to_hex(bytes: &[u8]) -> String {
     use std::fmt::Write;
@@ -671,12 +665,6 @@ mod tests {
         assert_eq!(super::bytes_to_hex(&[0x00, 0x0f, 0xab, 0xff]), "000fabff");
         assert_eq!(super::bytes_to_hex_or_default(&[]), "-");
         assert_eq!(super::bytes_to_hex_or_default(&[0xde, 0xad]), "dead");
-    }
-
-    #[test]
-    fn replace_csv_separators_keeps_empty_string() {
-        assert_eq!(super::replace_csv_separators(""), "");
-        assert_eq!(super::replace_csv_separators("a\tb\nc\rd"), "a b c d");
     }
 
     /// Table-driven tests for `to_string_or_empty` with various types and edge cases
