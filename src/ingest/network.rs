@@ -8,7 +8,9 @@ use num_enum::FromPrimitive;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ingest::{convert_time_format, sanitize_csv_field, vec_to_string_or_default},
+    ingest::{
+        convert_time_format, sanitize_csv_field, to_string_or_empty, vec_to_string_or_default,
+    },
     publish::range::ResponseRangeData,
 };
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -556,13 +558,54 @@ pub struct Kerberos {
     pub realm: String,
     pub sname_type: u8,
     pub sname: Vec<String>,
+    /// The Kerberos message type: 10 AS-REQ, 11 AS-REP, 12 TGS-REQ,
+    /// 13 TGS-REP, 30 KRB-ERROR.
+    ///
+    /// Unknown value: `0`.
+    pub msg_type: u8,
+    /// The pre-authentication state: 0 unknown, 1 none, 2
+    /// pre-authentication data sent.
+    ///
+    /// On an AS-REQ, 2 means the client sent pre-authentication data. On an
+    /// AS-REP, 2 means only that an AS-REP was observed for a request that
+    /// sent pre-authentication data; it does **not** mean the KDC verified
+    /// that data. TGS-REQ, TGS-REP and KRB-ERROR carry 0.
+    ///
+    /// Unknown value: `0`.
+    pub preauth: u8,
+    /// The encryption types listed in the request (KDC-REQ-BODY `etype`), in
+    /// request order.
+    ///
+    /// Values follow the IANA "Kerberos Encryption Type Numbers" registry
+    /// (e.g. 17 aes128-cts-hmac-sha1-96, 18 aes256-cts-hmac-sha1-96,
+    /// 23 rc4-hmac); negative values are vendor-specific. Filled only for
+    /// requests (AS-REQ, TGS-REQ).
+    ///
+    /// Unknown value: empty.
+    pub req_etypes: Vec<i32>,
+    /// The encryption type of the reply's `enc-part` (KDC-REP).
+    ///
+    /// Values follow the IANA "Kerberos Encryption Type Numbers" registry;
+    /// negative values are vendor-specific. Filled only for replies (AS-REP,
+    /// TGS-REP).
+    ///
+    /// Unknown value: `None`.
+    pub enc_part_etype: Option<i32>,
+    /// The encryption type of the ticket's `enc-part` (KDC-REP).
+    ///
+    /// Values follow the IANA "Kerberos Encryption Type Numbers" registry;
+    /// negative values are vendor-specific. Filled only for replies (AS-REP,
+    /// TGS-REP).
+    ///
+    /// Unknown value: `None`.
+    pub ticket_etype: Option<i32>,
 }
 
 impl Display for Kerberos {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -583,6 +626,11 @@ impl Display for Kerberos {
             sanitize_csv_field(&self.realm),
             self.sname_type,
             vec_to_string_or_default(&self.sname),
+            self.msg_type,
+            self.preauth,
+            vec_to_string_or_default(&self.req_etypes),
+            to_string_or_empty(self.enc_part_etype),
+            to_string_or_empty(self.ticket_etype),
         )
     }
 }
@@ -1222,6 +1270,13 @@ fn display_dhcp_options(options: &[(u8, Vec<u8>)]) -> String {
     }
 }
 
+fn display_mac(mac: Option<&[u8; 6]>) -> String {
+    mac.map_or_else(
+        || "-".to_string(),
+        |[a, b, c, d, e, g]| format!("{a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{g:02x}"),
+    )
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Dhcp {
     pub orig_addr: IpAddr,
@@ -1254,13 +1309,32 @@ pub struct Dhcp {
     pub client_id_type: u8,
     pub client_id: Vec<u8>,
     pub options: Vec<(u8, Vec<u8>)>,
+    /// The BOOTP transaction id (RFC 2131 §2).
+    ///
+    /// Together with an empty `chaddr`, `0` marks the identification fields
+    /// as unknown; a real message with `xid` 0 and `hlen` 0 cannot be told
+    /// apart from that.
+    ///
+    /// Unknown value: `0`.
+    pub xid: u32,
+    /// The client hardware address: the first `hlen` bytes of the 16-byte
+    /// BOOTP `chaddr` field (the same value as `Bootp::chaddr`).
+    ///
+    /// Unknown value: empty.
+    pub chaddr: Vec<u8>,
+    /// The source MAC address of the Ethernet frame that carried this
+    /// message: the sender on the local segment, which is the server or the
+    /// last relay or router rather than necessarily the client.
+    ///
+    /// Unknown value: `None`, also used when no single frame determines it.
+    pub src_mac: Option<[u8; 6]>,
 }
 
 impl Display for Dhcp {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -1291,6 +1365,9 @@ impl Display for Dhcp {
             self.client_id_type,
             vec_to_string_or_default(&self.client_id),
             display_dhcp_options(&self.options),
+            self.xid,
+            vec_to_string_or_default(&self.chaddr),
+            display_mac(self.src_mac.as_ref()),
         )
     }
 }
@@ -1459,10 +1536,6 @@ mod tests {
         decoded_csv
     }
 
-    fn last_tab_field(output: &str) -> &str {
-        output.split('\t').next_back().unwrap()
-    }
-
     fn display_fields<T>(value: &T) -> Vec<String>
     where
         T: Display,
@@ -1594,6 +1667,9 @@ mod tests {
                 client_id_type: 1,
                 client_id: vec![0, 1, 2, 3, 4, 5],
                 options,
+                xid: 0x8765_4321,
+                chaddr: vec![0x00, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e],
+                src_mac: Some([0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEF]),
             }
         }
 
@@ -1736,6 +1812,11 @@ mod tests {
                 realm: "EXAMPLE.COM".to_string(),
                 sname_type: 2,
                 sname: vec!["krbtgt".to_string(), "EXAMPLE.COM".to_string()],
+                msg_type: 10,
+                preauth: 2,
+                req_etypes: vec![18, 17, 23],
+                enc_part_etype: None,
+                ticket_etype: None,
             }
         }
 
@@ -2303,7 +2384,7 @@ mod tests {
         let kerberos = fixtures::kerberos();
 
         let fields = response_fields(&kerberos, 5_000, "kerberos-sensor");
-        assert_eq!(fields.len(), 22);
+        assert_eq!(fields.len(), 27);
         assert_field_values(
             &fields,
             &[
@@ -2328,8 +2409,190 @@ mod tests {
         };
 
         let fields = display_fields(&kerberos);
-        assert_eq!(fields.len(), 20);
+        assert_eq!(fields.len(), 25);
         assert_field_values(&fields, &[(14, "-"), (16, "-"), (17, "-"), (19, "-")]);
+    }
+
+    /// The `Kerberos` field set before the identification fields were
+    /// appended, used to pin bincode 1 compatibility in both directions.
+    #[derive(Debug, Deserialize, PartialEq, Serialize)]
+    struct KerberosOldShape {
+        orig_addr: IpAddr,
+        orig_port: u16,
+        resp_addr: IpAddr,
+        resp_port: u16,
+        proto: u8,
+        start_time: i64,
+        duration: i64,
+        orig_pkts: u64,
+        resp_pkts: u64,
+        orig_l2_bytes: u64,
+        resp_l2_bytes: u64,
+        client_time: i64,
+        server_time: i64,
+        error_code: u32,
+        client_realm: String,
+        cname_type: u8,
+        cname: Vec<String>,
+        realm: String,
+        sname_type: u8,
+        sname: Vec<String>,
+    }
+
+    impl From<&Kerberos> for KerberosOldShape {
+        fn from(k: &Kerberos) -> Self {
+            Self {
+                orig_addr: k.orig_addr,
+                orig_port: k.orig_port,
+                resp_addr: k.resp_addr,
+                resp_port: k.resp_port,
+                proto: k.proto,
+                start_time: k.start_time,
+                duration: k.duration,
+                orig_pkts: k.orig_pkts,
+                resp_pkts: k.resp_pkts,
+                orig_l2_bytes: k.orig_l2_bytes,
+                resp_l2_bytes: k.resp_l2_bytes,
+                client_time: k.client_time,
+                server_time: k.server_time,
+                error_code: k.error_code,
+                client_realm: k.client_realm.clone(),
+                cname_type: k.cname_type,
+                cname: k.cname.clone(),
+                realm: k.realm.clone(),
+                sname_type: k.sname_type,
+                sname: k.sname.clone(),
+            }
+        }
+    }
+
+    fn kerberos_with_identification_filled() -> Kerberos {
+        Kerberos {
+            msg_type: 11,
+            preauth: 2,
+            req_etypes: vec![18, 17, 23, -128],
+            enc_part_etype: Some(-135),
+            ticket_etype: Some(18),
+            ..fixtures::kerberos()
+        }
+    }
+
+    fn kerberos_with_identification_unknown() -> Kerberos {
+        Kerberos {
+            msg_type: 0,
+            preauth: 0,
+            req_etypes: vec![],
+            enc_part_etype: None,
+            ticket_etype: None,
+            ..fixtures::kerberos()
+        }
+    }
+
+    #[test]
+    fn test_kerberos_bincode_round_trip_with_identification_filled() {
+        let kerberos = kerberos_with_identification_filled();
+
+        let bytes = bincode::serialize(&kerberos).unwrap();
+        let decoded: Kerberos = bincode::deserialize(&bytes).unwrap();
+        assert_eq!(decoded, kerberos);
+        assert_eq!(decoded.msg_type, 11);
+        assert_eq!(decoded.preauth, 2);
+        assert_eq!(decoded.req_etypes, vec![18, 17, 23, -128]);
+        assert_eq!(decoded.enc_part_etype, Some(-135));
+        assert_eq!(decoded.ticket_etype, Some(18));
+    }
+
+    #[test]
+    fn test_kerberos_bincode_round_trip_with_identification_unknown() {
+        let kerberos = kerberos_with_identification_unknown();
+
+        let bytes = bincode::serialize(&kerberos).unwrap();
+        let decoded: Kerberos = bincode::deserialize(&bytes).unwrap();
+        assert_eq!(decoded, kerberos);
+    }
+
+    #[test]
+    fn test_kerberos_old_shape_reads_new_bytes() {
+        for kerberos in [
+            kerberos_with_identification_filled(),
+            kerberos_with_identification_unknown(),
+        ] {
+            let bytes = bincode::serialize(&kerberos).unwrap();
+            let old: KerberosOldShape = bincode::deserialize(&bytes).unwrap();
+            assert_eq!(old, KerberosOldShape::from(&kerberos));
+        }
+    }
+
+    #[test]
+    fn test_kerberos_fails_to_read_old_shape_bytes() {
+        let old = KerberosOldShape::from(&fixtures::kerberos());
+
+        let bytes = bincode::serialize(&old).unwrap();
+        assert!(bincode::deserialize::<Kerberos>(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_kerberos_display_appends_identification_columns() {
+        let kerberos = kerberos_with_identification_filled();
+
+        let fields = display_fields(&kerberos);
+        assert_eq!(fields.len(), 25);
+        let existing = [
+            "198.51.100.1".to_string(),
+            "88".to_string(),
+            "198.51.100.2".to_string(),
+            "88".to_string(),
+            "6".to_string(),
+            fmt_time(5_000),
+            "70".to_string(),
+            "6".to_string(),
+            "7".to_string(),
+            "600".to_string(),
+            "700".to_string(),
+            fmt_time(1_000),
+            fmt_time(2_000),
+            "0".to_string(),
+            "EXAMPLE.COM".to_string(),
+            "1".to_string(),
+            "client".to_string(),
+            "EXAMPLE.COM".to_string(),
+            "2".to_string(),
+            "krbtgt,EXAMPLE.COM".to_string(),
+        ];
+        assert_eq!(fields[..20], existing);
+        assert_eq!(
+            fields[20..],
+            ["11", "2", "18,17,23,-128", "-135", "18"].map(str::to_owned)
+        );
+    }
+
+    #[test]
+    fn test_kerberos_display_uses_dash_for_unknown_identification_columns() {
+        let kerberos = kerberos_with_identification_unknown();
+
+        let fields = display_fields(&kerberos);
+        assert_eq!(fields.len(), 25);
+        assert_eq!(fields[20..], ["0", "0", "-", "-", "-"].map(str::to_owned));
+    }
+
+    #[test]
+    fn test_kerberos_response_data_appends_identification_columns() {
+        let kerberos = kerberos_with_identification_filled();
+
+        let fields = response_fields(&kerberos, 5_000, "kerberos-sensor");
+        assert_eq!(fields.len(), 27);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "kerberos-sensor"),
+                (21, "krbtgt,EXAMPLE.COM"),
+                (22, "11"),
+                (23, "2"),
+                (24, "18,17,23,-128"),
+                (25, "-135"),
+                (26, "18"),
+            ],
+        );
     }
 
     #[test]
@@ -2621,20 +2884,33 @@ mod tests {
         assert_eq!(fields[7], fmt_time(12_000));
     }
 
+    /// The column of `options` in the `Dhcp` `Display` output.
+    const DHCP_OPTIONS_DISPLAY_INDEX: usize = 29;
+    /// The column count of the `Dhcp` `Display` output.
+    const DHCP_DISPLAY_FIELD_COUNT: usize = 33;
+    /// The column of `options` in the `Dhcp` range response CSV, which
+    /// prefixes the timestamp and the sensor.
+    const DHCP_OPTIONS_RESPONSE_INDEX: usize = DHCP_OPTIONS_DISPLAY_INDEX + 2;
+
     #[test]
     fn test_dhcp_response_data_includes_formatted_options() {
         let dhcp = fixtures::dhcp(vec![(12, b"myhost".to_vec()), (51, vec![0, 1, 81, 128])]);
 
-        let csv = assert_response_envelope(&dhcp, 13_000, "dhcp-sensor");
-        assert_eq!(last_tab_field(&csv), "12:6d79686f7374,51:00015180");
+        let fields = response_fields(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT + 2);
+        assert_eq!(
+            fields[DHCP_OPTIONS_RESPONSE_INDEX],
+            "12:6d79686f7374,51:00015180"
+        );
     }
 
     #[test]
     fn test_dhcp_display_empty_options() {
         let dhcp = fixtures::dhcp(vec![]);
 
-        let output = format!("{dhcp}");
-        assert_eq!(last_tab_field(&output), "-");
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT);
+        assert_eq!(fields[DHCP_OPTIONS_DISPLAY_INDEX], "-");
     }
 
     #[test]
@@ -2645,24 +2921,254 @@ mod tests {
             (61, vec![0xde, 0xad, 0xbe, 0xef]),
         ]);
 
-        let output = format!("{dhcp}");
-        assert_eq!(last_tab_field(&output), "12:6d79686f7374,53:05,61:deadbeef");
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT);
+        assert_eq!(
+            fields[DHCP_OPTIONS_DISPLAY_INDEX],
+            "12:6d79686f7374,53:05,61:deadbeef"
+        );
     }
 
     #[test]
     fn test_dhcp_display_supports_empty_option_values() {
         let dhcp = fixtures::dhcp(vec![(0, vec![]), (255, vec![])]);
 
-        let output = format!("{dhcp}");
-        assert_eq!(last_tab_field(&output), "0:,255:");
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT);
+        assert_eq!(fields[DHCP_OPTIONS_DISPLAY_INDEX], "0:,255:");
     }
 
     #[test]
     fn test_dhcp_response_data_with_empty_options_uses_dash_placeholder() {
         let dhcp = fixtures::dhcp(vec![]);
 
-        let csv = assert_response_envelope(&dhcp, 13_000, "dhcp-sensor");
-        assert_eq!(last_tab_field(&csv), "-");
+        let fields = response_fields(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT + 2);
+        assert_eq!(fields[DHCP_OPTIONS_RESPONSE_INDEX], "-");
+    }
+
+    /// The `Dhcp` field set before the identification fields were appended,
+    /// used to pin bincode 1 compatibility in both directions.
+    #[derive(Debug, Deserialize, PartialEq, Serialize)]
+    struct DhcpOldShape {
+        orig_addr: IpAddr,
+        orig_port: u16,
+        resp_addr: IpAddr,
+        resp_port: u16,
+        proto: u8,
+        start_time: i64,
+        duration: i64,
+        orig_pkts: u64,
+        resp_pkts: u64,
+        orig_l2_bytes: u64,
+        resp_l2_bytes: u64,
+        msg_type: u8,
+        ciaddr: IpAddr,
+        yiaddr: IpAddr,
+        siaddr: IpAddr,
+        giaddr: IpAddr,
+        subnet_mask: IpAddr,
+        router: Vec<IpAddr>,
+        domain_name_server: Vec<IpAddr>,
+        req_ip_addr: IpAddr,
+        lease_time: u32,
+        server_id: IpAddr,
+        param_req_list: Vec<u8>,
+        message: String,
+        renewal_time: u32,
+        rebinding_time: u32,
+        class_id: Vec<u8>,
+        client_id_type: u8,
+        client_id: Vec<u8>,
+        options: Vec<(u8, Vec<u8>)>,
+    }
+
+    impl From<&Dhcp> for DhcpOldShape {
+        fn from(d: &Dhcp) -> Self {
+            Self {
+                orig_addr: d.orig_addr,
+                orig_port: d.orig_port,
+                resp_addr: d.resp_addr,
+                resp_port: d.resp_port,
+                proto: d.proto,
+                start_time: d.start_time,
+                duration: d.duration,
+                orig_pkts: d.orig_pkts,
+                resp_pkts: d.resp_pkts,
+                orig_l2_bytes: d.orig_l2_bytes,
+                resp_l2_bytes: d.resp_l2_bytes,
+                msg_type: d.msg_type,
+                ciaddr: d.ciaddr,
+                yiaddr: d.yiaddr,
+                siaddr: d.siaddr,
+                giaddr: d.giaddr,
+                subnet_mask: d.subnet_mask,
+                router: d.router.clone(),
+                domain_name_server: d.domain_name_server.clone(),
+                req_ip_addr: d.req_ip_addr,
+                lease_time: d.lease_time,
+                server_id: d.server_id,
+                param_req_list: d.param_req_list.clone(),
+                message: d.message.clone(),
+                renewal_time: d.renewal_time,
+                rebinding_time: d.rebinding_time,
+                class_id: d.class_id.clone(),
+                client_id_type: d.client_id_type,
+                client_id: d.client_id.clone(),
+                options: d.options.clone(),
+            }
+        }
+    }
+
+    fn dhcp_with_identification_filled() -> Dhcp {
+        Dhcp {
+            xid: 0x8765_4321,
+            chaddr: vec![0x00, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e],
+            src_mac: Some([0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEF]),
+            ..fixtures::dhcp(vec![(53, vec![5])])
+        }
+    }
+
+    fn dhcp_with_identification_unknown() -> Dhcp {
+        Dhcp {
+            xid: 0,
+            chaddr: vec![],
+            src_mac: None,
+            ..fixtures::dhcp(vec![(53, vec![5])])
+        }
+    }
+
+    #[test]
+    fn test_dhcp_bincode_round_trip_with_identification_filled() {
+        let dhcp = dhcp_with_identification_filled();
+        assert!(dhcp.xid > 1 << 31);
+
+        let bytes = bincode::serialize(&dhcp).unwrap();
+        let decoded: Dhcp = bincode::deserialize(&bytes).unwrap();
+        assert_eq!(decoded, dhcp);
+        assert_eq!(decoded.xid, 0x8765_4321);
+        assert_eq!(decoded.chaddr, vec![0x00, 0x1a, 0x2b, 0x3c, 0x4d, 0x5e]);
+        assert_eq!(decoded.src_mac, Some([0x00, 0xAA, 0xBB, 0xCC, 0xDD, 0xEF]));
+    }
+
+    #[test]
+    fn test_dhcp_bincode_round_trip_with_identification_unknown() {
+        let dhcp = dhcp_with_identification_unknown();
+
+        let bytes = bincode::serialize(&dhcp).unwrap();
+        let decoded: Dhcp = bincode::deserialize(&bytes).unwrap();
+        assert_eq!(decoded, dhcp);
+    }
+
+    #[test]
+    fn test_dhcp_old_shape_reads_new_bytes() {
+        for dhcp in [
+            dhcp_with_identification_filled(),
+            dhcp_with_identification_unknown(),
+        ] {
+            let bytes = bincode::serialize(&dhcp).unwrap();
+            let old: DhcpOldShape = bincode::deserialize(&bytes).unwrap();
+            assert_eq!(old, DhcpOldShape::from(&dhcp));
+        }
+    }
+
+    #[test]
+    fn test_dhcp_fails_to_read_old_shape_bytes() {
+        let old = DhcpOldShape::from(&fixtures::dhcp(vec![(53, vec![5])]));
+
+        let bytes = bincode::serialize(&old).unwrap();
+        assert!(bincode::deserialize::<Dhcp>(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_dhcp_display_appends_identification_columns() {
+        let dhcp = dhcp_with_identification_filled();
+
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT);
+        let existing = [
+            "192.0.2.60".to_string(),
+            "68".to_string(),
+            "192.0.2.61".to_string(),
+            "67".to_string(),
+            "17".to_string(),
+            fmt_time(13_000),
+            "95".to_string(),
+            "21".to_string(),
+            "22".to_string(),
+            "2100".to_string(),
+            "2200".to_string(),
+            "5".to_string(),
+            "0.0.0.0".to_string(),
+            "192.0.2.70".to_string(),
+            "192.0.2.1".to_string(),
+            "0.0.0.0".to_string(),
+            "255.255.255.0".to_string(),
+            "192.0.2.1".to_string(),
+            "192.0.2.2".to_string(),
+            "192.0.2.80".to_string(),
+            "86400".to_string(),
+            "192.0.2.1".to_string(),
+            "1,3,6".to_string(),
+            "dhcp offer".to_string(),
+            "43200".to_string(),
+            "64800".to_string(),
+            "1,2,3".to_string(),
+            "1".to_string(),
+            "0,1,2,3,4,5".to_string(),
+            "53:05".to_string(),
+        ];
+        assert_eq!(fields[..=DHCP_OPTIONS_DISPLAY_INDEX], existing);
+        assert_eq!(
+            fields[DHCP_OPTIONS_DISPLAY_INDEX + 1..],
+            ["2271560481", "0,26,43,60,77,94", "00:aa:bb:cc:dd:ef"].map(str::to_owned)
+        );
+    }
+
+    #[test]
+    fn test_dhcp_display_uses_dash_for_unknown_identification_columns() {
+        let dhcp = dhcp_with_identification_unknown();
+
+        let fields = display_fields(&dhcp);
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT);
+        assert_eq!(
+            fields[DHCP_OPTIONS_DISPLAY_INDEX + 1..],
+            ["0", "-", "-"].map(str::to_owned)
+        );
+    }
+
+    #[test]
+    fn test_dhcp_chaddr_display_matches_bootp_chaddr() {
+        let dhcp = dhcp_with_identification_filled();
+        let bootp = Bootp {
+            chaddr: dhcp.chaddr.clone(),
+            ..fixtures::bootp()
+        };
+
+        let dhcp_fields = display_fields(&dhcp);
+        let bootp_fields = display_fields(&bootp);
+        assert_eq!(
+            dhcp_fields[DHCP_OPTIONS_DISPLAY_INDEX + 2],
+            bootp_fields[19]
+        );
+    }
+
+    #[test]
+    fn test_dhcp_response_data_appends_identification_columns() {
+        let dhcp = dhcp_with_identification_filled();
+
+        let fields = response_fields(&dhcp, 13_000, "dhcp-sensor");
+        assert_eq!(fields.len(), DHCP_DISPLAY_FIELD_COUNT + 2);
+        assert_field_values(
+            &fields,
+            &[
+                (1, "dhcp-sensor"),
+                (DHCP_OPTIONS_RESPONSE_INDEX, "53:05"),
+                (DHCP_OPTIONS_RESPONSE_INDEX + 1, "2271560481"),
+                (DHCP_OPTIONS_RESPONSE_INDEX + 2, "0,26,43,60,77,94"),
+                (DHCP_OPTIONS_RESPONSE_INDEX + 3, "00:aa:bb:cc:dd:ef"),
+            ],
+        );
     }
 
     #[test]
