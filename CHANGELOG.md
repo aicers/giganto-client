@@ -4,6 +4,16 @@ This file documents recent notable changes to this project. The format of this
 file is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.32.0](https://github.com/aicers/giganto-client/compare/0.31.0...0.32.0) - 2026-11-26
+
+### Added
+
+- [**breaking**] add HTTP request header fields to Http ([#352](https://github.com/aicers/giganto-client/pull/352))
+
+### Other
+
+- [**breaking**] stop parsing "timeseries" as PeriodicTimeSeries ([#348](https://github.com/aicers/giganto-client/pull/348))
+
 ## [0.31.0](https://github.com/aicers/giganto-client/compare/0.30.0...0.31.0) - 2026-11-24
 
 ### Added
