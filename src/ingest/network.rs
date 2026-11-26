@@ -331,13 +331,56 @@ pub struct Http {
     pub mime_types: Vec<String>,
     pub body: Vec<u8>,
     pub state: String,
+    /// The request header names in the order they were received, in their
+    /// original case, with duplicates kept.
+    ///
+    /// At most 64 names, each at most 64 bytes. The producer enforces these
+    /// limits; giganto-client neither truncates nor validates the names.
+    ///
+    /// Unknown value: empty.
+    pub request_header_names: Vec<String>,
+    /// The value of the request's `Accept` header.
+    ///
+    /// At most 256 bytes. The producer enforces this limit; giganto-client
+    /// neither truncates nor validates the value.
+    ///
+    /// Unknown value: empty.
+    pub accept: String,
+    /// The value of the request's `Connection` header.
+    ///
+    /// At most 256 bytes. The producer enforces this limit; giganto-client
+    /// neither truncates nor validates the value.
+    ///
+    /// Unknown value: empty.
+    pub connection: String,
+    /// The value of the request's `Accept-Encoding` header.
+    ///
+    /// At most 256 bytes. The producer enforces this limit; giganto-client
+    /// neither truncates nor validates the value.
+    ///
+    /// Unknown value: empty.
+    pub accept_encoding: String,
+    /// The value of the request's `Accept-Language` header.
+    ///
+    /// At most 256 bytes. The producer enforces this limit; giganto-client
+    /// neither truncates nor validates the value.
+    ///
+    /// Unknown value: empty.
+    pub accept_language: String,
+    /// The value of the request's `Pragma` header.
+    ///
+    /// At most 256 bytes. The producer enforces this limit; giganto-client
+    /// neither truncates nor validates the value.
+    ///
+    /// Unknown value: empty.
+    pub pragma: String,
 }
 
 impl Display for Http {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.orig_addr,
             self.orig_port,
             self.resp_addr,
@@ -369,6 +412,12 @@ impl Display for Http {
             vec_to_string_or_default(&self.mime_types),
             crate::ingest::sanitize_csv_field_bytes(&self.body),
             sanitize_csv_field(&self.state),
+            vec_to_string_or_default(&self.request_header_names),
+            sanitize_csv_field(&self.accept),
+            sanitize_csv_field(&self.connection),
+            sanitize_csv_field(&self.accept_encoding),
+            sanitize_csv_field(&self.accept_language),
+            sanitize_csv_field(&self.pragma),
         )
     }
 }
@@ -1706,6 +1755,12 @@ mod tests {
                 mime_types: vec![],
                 body: vec![],
                 state: String::new(),
+                request_header_names: vec![],
+                accept: String::new(),
+                connection: String::new(),
+                accept_encoding: String::new(),
+                accept_language: String::new(),
+                pragma: String::new(),
             }
         }
 
@@ -2260,7 +2315,7 @@ mod tests {
         let csv_output = format!("{http}");
         let fields: Vec<&str> = csv_output.split('\t').collect();
 
-        assert_eq!(fields.len(), 31);
+        assert_eq!(fields.len(), 37);
         assert_eq!(fields[16], "Mozilla/5.0 (Windows NT 10.0; Win64)");
         assert!(!fields[16].contains('\n'));
         assert!(!fields[16].contains('\r'));
@@ -2283,7 +2338,7 @@ mod tests {
         let csv_output = format!("{http}");
         let fields: Vec<&str> = csv_output.split('\t').collect();
 
-        assert_eq!(fields.len(), 31);
+        assert_eq!(fields.len(), 37);
         assert_eq!(fields[16], "-");
         assert_eq!(fields[29], "-");
     }
@@ -2304,7 +2359,7 @@ mod tests {
         };
 
         let fields = response_fields(&http, 1000, "http-sensor");
-        assert_eq!(fields.len(), 33);
+        assert_eq!(fields.len(), 39);
         assert_eq!(fields[0], fmt_time(1_000));
         assert_eq!(fields[1], "http-sensor");
         assert_eq!(fields[2], "127.0.0.1");
@@ -2312,6 +2367,226 @@ mod tests {
         assert_eq!(fields[15], "/");
         assert_eq!(fields[20], "100");
         assert_eq!(fields[31], "-");
+        assert_eq!(fields[32], "-");
+        assert_placeholder_fields(&fields, &[33, 34, 35, 36, 37, 38]);
+    }
+
+    fn http_with_request_headers() -> Http {
+        Http {
+            request_header_names: vec![
+                "Host".to_string(),
+                "User-Agent".to_string(),
+                "Accept".to_string(),
+                "Cookie".to_string(),
+                "accept".to_string(),
+                "Cookie".to_string(),
+            ],
+            accept: "text/html,application/xhtml+xml;q=0.9".to_string(),
+            connection: "keep-alive".to_string(),
+            accept_encoding: "gzip, deflate, br".to_string(),
+            accept_language: "en-US,en;q=0.5".to_string(),
+            pragma: "no-cache".to_string(),
+            ..fixtures::http()
+        }
+    }
+
+    #[test]
+    fn test_http_display_request_header_fields() {
+        let http = http_with_request_headers();
+
+        let fields = display_fields(&http);
+        assert_eq!(fields.len(), 37);
+        assert_field_values(
+            &fields,
+            &[
+                (31, "Host,User-Agent,Accept,Cookie,accept,Cookie"),
+                (32, "text/html,application/xhtml+xml;q=0.9"),
+                (33, "keep-alive"),
+                (34, "gzip, deflate, br"),
+                (35, "en-US,en;q=0.5"),
+                (36, "no-cache"),
+            ],
+        );
+
+        // The existing columns keep their positions and values.
+        let base = display_fields(&fixtures::http());
+        assert_eq!(fields[..31], base[..31]);
+    }
+
+    #[test]
+    fn test_http_display_uses_dash_for_empty_request_header_fields() {
+        let http = Http {
+            request_header_names: vec![],
+            accept: String::new(),
+            connection: String::new(),
+            accept_encoding: String::new(),
+            accept_language: String::new(),
+            pragma: String::new(),
+            ..http_with_request_headers()
+        };
+
+        let fields = display_fields(&http);
+        assert_eq!(fields.len(), 37);
+        assert_placeholder_fields(&fields, &[31, 32, 33, 34, 35, 36]);
+    }
+
+    #[test]
+    fn test_http_display_sanitizes_request_header_fields() {
+        let http = Http {
+            request_header_names: vec!["X-A\tb".to_string(), "X-C\r\nd".to_string()],
+            accept: "a\tb".to_string(),
+            connection: "c\rd".to_string(),
+            accept_encoding: "e\nf".to_string(),
+            accept_language: "g\r\nh".to_string(),
+            pragma: "\ti\n".to_string(),
+            ..fixtures::http()
+        };
+
+        let fields = display_fields(&http);
+        assert_eq!(fields.len(), 37);
+        assert_field_values(
+            &fields,
+            &[
+                (31, "X-A b,X-C  d"),
+                (32, "a b"),
+                (33, "c d"),
+                (34, "e f"),
+                (35, "g  h"),
+                (36, " i "),
+            ],
+        );
+        for field in &fields[31..] {
+            assert!(!field.contains(['\t', '\r', '\n']));
+        }
+    }
+
+    #[test]
+    fn test_http_response_data_includes_request_header_fields() {
+        let http = http_with_request_headers();
+
+        let fields = response_fields(&http, 1_000, "http-sensor");
+        assert_eq!(fields.len(), 39);
+        assert_eq!(fields[0], fmt_time(1_000));
+        assert_eq!(fields[1], "http-sensor");
+        assert_field_values(
+            &fields,
+            &[
+                (33, "Host,User-Agent,Accept,Cookie,accept,Cookie"),
+                (34, "text/html,application/xhtml+xml;q=0.9"),
+                (35, "keep-alive"),
+                (36, "gzip, deflate, br"),
+                (37, "en-US,en;q=0.5"),
+                (38, "no-cache"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_http_bincode_round_trip() {
+        let http = Http {
+            referer: "https://example.com/".to_string(),
+            filenames: vec!["a.txt".to_string()],
+            mime_types: vec!["text/plain".to_string()],
+            body: b"body".to_vec(),
+            state: "done".to_string(),
+            ..http_with_request_headers()
+        };
+
+        let encoded = bincode::serialize(&http).unwrap();
+        let decoded: Http = bincode::deserialize(&encoded).unwrap();
+        assert_eq!(decoded, http);
+    }
+
+    #[test]
+    fn test_http_bincode_starts_with_previous_layout() {
+        /// The 31-field layout of `Http` before the request header fields
+        /// were appended.
+        #[derive(Serialize)]
+        struct HttpPrevious {
+            orig_addr: IpAddr,
+            orig_port: u16,
+            resp_addr: IpAddr,
+            resp_port: u16,
+            proto: u8,
+            start_time: i64,
+            duration: i64,
+            orig_pkts: u64,
+            resp_pkts: u64,
+            orig_l2_bytes: u64,
+            resp_l2_bytes: u64,
+            method: String,
+            host: String,
+            uri: String,
+            referer: String,
+            version: String,
+            user_agent: String,
+            request_len: usize,
+            response_len: usize,
+            status_code: u16,
+            status_msg: String,
+            username: String,
+            password: String,
+            cookie: String,
+            content_encoding: String,
+            content_type: String,
+            cache_control: String,
+            filenames: Vec<String>,
+            mime_types: Vec<String>,
+            body: Vec<u8>,
+            state: String,
+        }
+
+        let http = Http {
+            referer: "https://example.com/".to_string(),
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            cookie: "a=b".to_string(),
+            content_encoding: "gzip".to_string(),
+            cache_control: "no-store".to_string(),
+            filenames: vec!["a.txt".to_string()],
+            mime_types: vec!["text/plain".to_string()],
+            body: b"body".to_vec(),
+            state: "done".to_string(),
+            ..http_with_request_headers()
+        };
+        let previous = HttpPrevious {
+            orig_addr: http.orig_addr,
+            orig_port: http.orig_port,
+            resp_addr: http.resp_addr,
+            resp_port: http.resp_port,
+            proto: http.proto,
+            start_time: http.start_time,
+            duration: http.duration,
+            orig_pkts: http.orig_pkts,
+            resp_pkts: http.resp_pkts,
+            orig_l2_bytes: http.orig_l2_bytes,
+            resp_l2_bytes: http.resp_l2_bytes,
+            method: http.method.clone(),
+            host: http.host.clone(),
+            uri: http.uri.clone(),
+            referer: http.referer.clone(),
+            version: http.version.clone(),
+            user_agent: http.user_agent.clone(),
+            request_len: http.request_len,
+            response_len: http.response_len,
+            status_code: http.status_code,
+            status_msg: http.status_msg.clone(),
+            username: http.username.clone(),
+            password: http.password.clone(),
+            cookie: http.cookie.clone(),
+            content_encoding: http.content_encoding.clone(),
+            content_type: http.content_type.clone(),
+            cache_control: http.cache_control.clone(),
+            filenames: http.filenames.clone(),
+            mime_types: http.mime_types.clone(),
+            body: http.body.clone(),
+            state: http.state.clone(),
+        };
+
+        let encoded = bincode::serialize(&http).unwrap();
+        let previous_encoded = bincode::serialize(&previous).unwrap();
+        assert!(encoded.len() > previous_encoded.len());
+        assert_eq!(encoded[..previous_encoded.len()], previous_encoded[..]);
     }
 
     #[test]
