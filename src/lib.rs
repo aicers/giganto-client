@@ -39,7 +39,6 @@ pub enum RawEventKind {
     Log = 2,
     Http = 3,
     Rdp = 4,
-    #[strum(serialize = "periodic_time_series", serialize = "timeseries")]
     PeriodicTimeSeries = 5,
     Smtp = 6,
     Ntlm = 7,
@@ -127,10 +126,7 @@ fn test_record_type() {
         RawEventKind::from_str("periodic_time_series").unwrap(),
         RawEventKind::PeriodicTimeSeries
     );
-    assert_eq!(
-        RawEventKind::from_str("timeseries").unwrap(),
-        RawEventKind::PeriodicTimeSeries,
-    );
+    assert!(RawEventKind::from_str("timeseries").is_err());
 
     assert_eq!(
         RawEventKind::from_str("dns_query").unwrap(),
@@ -180,7 +176,7 @@ fn test_endpoint_record_kinds() {
         (
             RawEventKind::PeriodicTimeSeries,
             5,
-            &["periodic_time_series", "timeseries"],
+            &["periodic_time_series"],
         ),
         (RawEventKind::Smtp, 6, &["smtp"]),
         (RawEventKind::Ntlm, 7, &["ntlm"]),
